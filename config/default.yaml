@@ -1,0 +1,72 @@
+# ============================================================
+#  Aila — configuração padrão
+#  Sobrescreva via .env (prefixo AILA_) ou config/local.yaml
+# ============================================================
+
+app:
+  name: "Aila"
+  persona: >
+    Você é a Aila, uma assistente de IA local rodando no computador do usuário.
+    É objetiva, prestativa e técnica. Você tem acesso a ferramentas (agentes)
+    para manipular arquivos, escrever código, controlar o computador, analisar
+    imagens e binários. Sempre explique o que vai fazer antes de executar ações
+    que alteram o sistema. Responda no idioma do usuário.
+
+host: "127.0.0.1"
+port: 8770
+log_level: "INFO"
+
+llm:
+  backend: "ollama"           # ollama | llamacpp
+  base_url: "http://127.0.0.1:11434"
+  model: "qwen2.5:7b-instruct"      # modelo de conversa padrão
+  code_model: "deepseek-coder:6.7b" # usado pelo Code Agent
+  vision_model: "llava:7b"          # usado pelo Vision Agent
+  temperature: 0.7
+  max_tokens: 2048
+  # keep_alive: tempo que o Ollama mantém o modelo na VRAM
+  keep_alive: "10m"
+  timeout_seconds: 120
+
+context:
+  max_turns: 20               # janela de conversa mantida em memória
+  summarize_after: 40         # resume histórico antigo após N turnos
+
+security:
+  read_only: true             # bloqueia toda escrita/execução até liberar
+  confirm_destructive: true   # pede confirmação para ações perigosas
+  sandbox_root: "./workspace" # raiz permitida para o File Agent
+  # Ações classificadas como perigosas (exigem confirmação):
+  destructive_actions:
+    - "file.delete"
+    - "file.overwrite"
+    - "computer.run_command"
+    - "computer.keyboard"
+    - "computer.mouse"
+    - "code.execute"
+  audit_log: "./logs/audit.jsonl"
+
+agents:
+  enabled:
+    - file
+    - code
+  # Agentes desabilitados por padrão (fases futuras / exigem extras):
+  disabled:
+    - computer
+    - vision
+    - binary
+
+voice:
+  enabled: false
+  stt:
+    engine: "faster-whisper"
+    model: "base"             # tiny | base | small | medium
+    language: "pt"
+  tts:
+    engine: "piper"           # piper | xtts
+    voice: "pt_BR-faber-medium"
+
+avatar:
+  enabled: false
+  transport: "websocket"      # canal para enviar AvatarState à engine 3D
+  default_emotion: "neutral"

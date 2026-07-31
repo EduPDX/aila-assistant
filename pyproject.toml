@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aila-assistant"
+version = "0.1.0"
+description = "Assistente de IA local multimodal para Windows (NVIDIA RTX / CUDA)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "EduPDX" }]
+keywords = ["ai", "assistant", "local-llm", "ollama", "agents", "multimodal"]
+
+dependencies = [
+    # --- Core / API ---
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    "loguru>=0.7",
+    "websockets>=12.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+# Instale por fase, para não pesar o ambiente base.
+computer = ["pyautogui>=0.9.54", "pygetwindow>=0.0.9", "pywin32>=306"]
+voice = ["faster-whisper>=1.0", "sounddevice>=0.4.6", "numpy>=1.26"]
+vision = ["pillow>=10.2", "mss>=9.0"]
+dev = ["ruff>=0.4", "pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+aila = "aila.main:run"
+
+[tool.setuptools.packages.find]
+include = ["aila*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]

@@ -1,0 +1,45 @@
+# ============================================================
+#  Catálogo de modelos recomendados para RTX 4060 8GB VRAM
+# ============================================================
+# Regra prática:
+#   - 8 GB de VRAM => modelos 7B–8B em Q4_K_M cabem 100% na GPU.
+#   - 14B rodam em modo híbrido (parte na CPU) => mais lento.
+#   - Deixe ~1 GB de VRAM livre para o SO/monitor.
+#
+# Baixe com: ollama pull <tag>
+
+conversation:
+  # Melhor equilíbrio geral (multilíngue, bom em PT-BR):
+  - tag: "qwen2.5:7b-instruct"
+    ram_vram: "~5.5 GB VRAM"
+    use: "chat geral, raciocínio, uso de ferramentas"
+    recommended: true
+  - tag: "llama3.1:8b-instruct-q4_K_M"
+    ram_vram: "~5.8 GB VRAM"
+    use: "chat geral, forte em inglês"
+  - tag: "mistral:7b-instruct"
+    ram_vram: "~5.0 GB VRAM"
+    use: "rápido, respostas curtas"
+
+code:
+  - tag: "deepseek-coder:6.7b"
+    ram_vram: "~5.0 GB VRAM"
+    use: "geração e correção de código"
+    recommended: true
+  - tag: "qwen2.5-coder:7b"
+    ram_vram: "~5.5 GB VRAM"
+    use: "código multilíngue, bom em explicação"
+
+vision:
+  - tag: "llava:7b"
+    ram_vram: "~6.0 GB VRAM"
+    use: "análise de imagem e screenshots"
+    recommended: true
+  - tag: "qwen2.5vl:7b"
+    ram_vram: "~6.5 GB VRAM"
+    use: "interpretação de interface / OCR visual"
+
+embeddings:
+  - tag: "nomic-embed-text"
+    ram_vram: "~0.5 GB VRAM"
+    use: "memória de longo prazo / RAG (fase futura)"

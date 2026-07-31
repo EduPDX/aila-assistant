@@ -1,0 +1,54 @@
+# Roadmap
+
+A Aila é entregue em fases. Cada fase é utilizável por conta própria — nada de
+"big bang". O que está marcado ✅ já funciona neste repositório.
+
+## Fase 1 — Fundação (ENTREGUE ✅)
+
+- ✅ Estrutura profissional do projeto (pacote `aila`, config, docs)
+- ✅ Configuração em camadas (YAML + `.env`, tipada com Pydantic)
+- ✅ Barramento de eventos assíncrono
+- ✅ Contexto de conversa com janela deslizante
+- ✅ Backend de LLM (Ollama) com streaming + tool-calling
+- ✅ Sistema de agentes: **File Agent** e **Code Agent** funcionais
+- ✅ Segurança: permissões, sandbox de caminhos, auditoria, modo somente-leitura
+- ✅ API REST + WebSocket
+- ✅ UI web (chat streaming, status, modo agente, confirmação de permissão)
+- ✅ Protocolo do avatar (`AvatarState`) + Emotion Engine (heurístico)
+
+## Fase 1.5 — Refinos do núcleo
+
+- [ ] Roteamento automático chat↔agente (detectar quando usar ferramentas)
+- [ ] Persistência de histórico na UI (usa `database/store.py`)
+- [ ] Memória de longo prazo com embeddings (`nomic-embed-text` + RAG)
+- [ ] Backend `llama.cpp` (servidor compatível com API OpenAI)
+- [ ] Testes automatizados (pytest) e CI
+
+## Fase 2 — Voz e controle do computador
+
+- [ ] **STT**: `faster-whisper` na GPU (interface em `voice/stt.py`)
+- [ ] **TTS**: Piper (offline) e depois XTTS (clonagem) — `voice/tts.py`
+- [ ] Loop de conversa por voz (push-to-talk + VAD)
+- [ ] **Computer Agent** completo: PyAutoGUI + Windows API + foco de janelas
+- [ ] Perfis de permissão por app / lista de apps confiáveis
+
+## Fase 3 — Multimodal e binários
+
+- [ ] **Vision Agent**: LLaVA / Qwen-VL via Ollama (imagem + screenshot)
+- [ ] Interpretação de UI (detecção de elementos, OCR) para o Computer Agent
+- [ ] **Binary Agent**: integração Ghidra headless (descompilação, chamadas)
+
+## Fase 4 — Avatar 3D
+
+- [ ] Projeto Unreal Engine 5 (ou Unity) em `Avatar/`
+- [ ] Cliente que consome `avatar.state` pela WebSocket
+- [ ] Blend shapes / morph targets para expressões faciais
+- [ ] Lip-sync por visemes vindos do TTS
+- [ ] Biblioteca de gestos e animações mapeada ao enum `Gesture`/`Animation`
+
+## Escolhas de modelo para a RTX 4060 8GB
+
+Veja [`config/models.yaml`](../config/models.yaml). Regra de bolso:
+- **7B–8B Q4_K_M** cabem 100% na VRAM (rápido).
+- **14B** rodam híbrido GPU+CPU (mais lento, mas viável com 32 GB de RAM).
+- Rode **um modelo por vez**; o Ollama descarrega da VRAM após `keep_alive`.

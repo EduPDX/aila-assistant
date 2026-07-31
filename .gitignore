@@ -1,0 +1,53 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Environment / secrets ---
+.env
+*.local
+
+# --- Modelos (pesos grandes, nunca versionar) ---
+models/
+*.gguf
+*.bin
+*.safetensors
+*.onnx
+*.pt
+*.pth
+
+# --- Dados / banco / logs ---
+data/
+*.db
+*.sqlite
+*.sqlite3
+logs/
+*.log
+audit/
+
+# --- Voz / TTS / STT cache ---
+voice_cache/
+tts_output/
+
+# --- Avatar / engine ---
+Avatar/Binaries/
+Avatar/Intermediate/
+Avatar/Saved/
+Avatar/DerivedDataCache/
+*.uasset.tmp
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
