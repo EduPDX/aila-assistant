@@ -41,6 +41,7 @@ security:
     - "file.delete"
     - "file.overwrite"
     - "computer.run_command"
+    - "computer.open_app"
     - "computer.keyboard"
     - "computer.mouse"
     - "code.execute"

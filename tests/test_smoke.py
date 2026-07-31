@@ -52,3 +52,26 @@ def test_emotion_engine():
     eng = EmotionEngine()
     assert eng.from_text("Encontrei um erro no traceback").emotion == Emotion.CONFUSED
     assert eng.from_text("Pronto, funcionou!").emotion == Emotion.HAPPY
+
+
+def test_computer_agent_gating(tmp_path: Path):
+    """Leitura liberada em read-only; atuação (teclado) bloqueada."""
+    pytest.importorskip("pyautogui")
+    from aila.agents.base import AgentDeps
+    from aila.agents.computer_agent import ComputerAgent
+
+    s = get_settings()
+    s.security.read_only = True
+    s.security.confirm_destructive = False
+    audit = AuditLog(tmp_path / "audit.jsonl")
+    pm = PermissionManager(s.security, audit)
+    deps = AgentDeps(settings=s, permissions=pm, sandbox=PathSandbox(tmp_path / "ws"), llm=None)
+    tools = {t.name: t for t in ComputerAgent(deps).tools()}
+
+    async def go():
+        r = await tools["computer.screen_info"].handler({})
+        assert r.ok  # leitura permitida
+        with pytest.raises(PermissionDenied):
+            await tools["computer.type"].handler({"text": "x"})  # atuação bloqueada
+
+    asyncio.run(go())

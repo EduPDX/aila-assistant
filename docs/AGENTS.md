@@ -27,17 +27,40 @@ Geração e manutenção de código com modelo especializado (deepseek-coder).
 
 > Não executa código. Execução chegará via Computer Agent + confirmação.
 
-## Computer Agent — `computer` 🚧 (Fase 2)
-Controle do SO. **Desabilitado por padrão.** Requer `pip install -e ".[computer]"`.
+## Computer Agent — `computer` ✅ (Fase 2)
+Controle do SO. **Desabilitado por padrão** (segurança). Requer
+`pip install -e ".[computer]"` e habilitar em `config → agents.enabled: [..., computer]`.
 
-| Tool | Descrição | Destrutiva |
-|------|-----------|:---------:|
-| `computer.run_command` | Executa comando PowerShell | ✔ |
+**Percepção (leitura — permitida mesmo em modo somente-leitura):**
+
+| Tool | Descrição |
+|------|-----------|
+| `computer.screen_info` | Resolução da tela |
+| `computer.list_windows` | Lista títulos das janelas abertas |
+| `computer.cursor_position` | Posição atual do mouse |
+| `computer.screenshot` | Captura a tela (via `mss`) para o workspace |
+
+**Atuação (escrita — bloqueada em somente-leitura; ✔ = exige confirmação):**
+
+| Tool | Descrição | Confirmação |
+|------|-----------|:-----------:|
+| `computer.focus_window` | Traz uma janela para frente | — (só read-only) |
+| `computer.move_mouse` | Move o cursor para (x,y) | ✔ |
+| `computer.click` | Clica (x,y opcional, left/right/middle, duplo) | ✔ |
+| `computer.type` | Digita texto | ✔ |
+| `computer.hotkey` | Atalho de teclado (ex.: `ctrl+c`) | ✔ |
 | `computer.open_app` | Abre um programa | ✔ |
-| `computer.type` | Digita via teclado virtual | ✔ |
+| `computer.run_command` | Executa comando PowerShell | ✔ |
 
-`pyautogui.FAILSAFE` está ligado: leve o mouse ao canto superior-esquerdo para
-abortar qualquer automação.
+`pyautogui.FAILSAFE` está ligado: leve o mouse ao **canto superior-esquerdo**
+para abortar qualquer automação em andamento.
+
+### Como habilitar (com segurança)
+1. `pip install -e ".[computer]"`
+2. Em `config/local.yaml` (ou `.env`), adicione `computer` a `agents.enabled`.
+3. Deixe `security.read_only: false` **apenas** quando quiser que ela atue.
+4. Mantenha `security.confirm_destructive: true` — cada clique/tecla/comando
+   pede sua confirmação na UI.
 
 ## Vision Agent — `vision` 🚧 (Fase 3)
 Análise visual via modelo multimodal (LLaVA/Qwen-VL) no Ollama.

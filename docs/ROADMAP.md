@@ -26,10 +26,12 @@ A Aila é entregue em fases. Cada fase é utilizável por conta própria — nad
 
 ## Fase 2 — Voz e controle do computador
 
+- ✅ **Computer Agent** completo: mouse, teclado, atalhos, janelas
+  (pygetwindow), captura de tela (mss), comandos PowerShell — com permissões,
+  confirmação e auditoria; leitura liberada, atuação gated
 - [ ] **STT**: `faster-whisper` na GPU (interface em `voice/stt.py`)
 - [ ] **TTS**: Piper (offline) e depois XTTS (clonagem) — `voice/tts.py`
 - [ ] Loop de conversa por voz (push-to-talk + VAD)
-- [ ] **Computer Agent** completo: PyAutoGUI + Windows API + foco de janelas
 - [ ] Perfis de permissão por app / lista de apps confiáveis
 
 ## Fase 3 — Multimodal e binários
