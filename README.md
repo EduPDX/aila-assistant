@@ -126,6 +126,7 @@ O projeto é entregue em fases. O que já funciona e o que vem a seguir está em
 | 1    | API REST/WebSocket + UI de chat     | ✅ funcional  |
 | 1.5  | Roteamento automático chat↔agente   | ✅ funcional  |
 | 1.5  | Histórico persistente (SQLite)      | ✅ funcional  |
+| 1.5  | Memória de longo prazo (RAG)        | ✅ funcional  |
 | 2    | Computer Agent (mouse/teclado/janelas/cmd) | ✅ funcional  |
 | 2    | Voice (Whisper + Piper)             | 🚧 interface  |
 | 3    | Vision (LLaVA/Qwen-VL)              | 🚧 interface  |

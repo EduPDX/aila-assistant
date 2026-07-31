@@ -20,7 +20,8 @@ A Aila é entregue em fases. Cada fase é utilizável por conta própria — nad
 
 - ✅ Roteamento automático chat↔agente (a IA decide, tudo em streaming)
 - ✅ Persistência de histórico (SQLite) + painel de conversas na UI
-- [ ] Memória de longo prazo com embeddings (`nomic-embed-text` + RAG)
+- ✅ Memória de longo prazo com embeddings (`nomic-embed-text` + RAG):
+  recuperação e gravação automáticas + MemoryAgent (save/search)
 - [ ] Backend `llama.cpp` (servidor compatível com API OpenAI)
 - [ ] Ampliar cobertura de testes automatizados e CI
 

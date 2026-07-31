@@ -25,6 +25,7 @@ from aila.core.context import ConversationContext, Message
 from aila.core.logging import get_logger
 from aila.database.store import ConversationStore
 from aila.llm.base import LLMBackend
+from aila.memory.store import MemoryStore
 
 log = get_logger("engine")
 
@@ -41,11 +42,13 @@ class AilaEngine:
         llm: LLMBackend,
         agents: AgentManager,
         store: "ConversationStore | None" = None,
+        memory: "MemoryStore | None" = None,
     ) -> None:
         self.settings = settings
         self.llm = llm
         self.agents = agents
         self.store = store
+        self.memory = memory
         self.session_id: int | None = None
         self.emotions = EmotionEngine()
         self.context = ConversationContext(
@@ -94,6 +97,45 @@ class AilaEngine:
         self.ensure_session(content[:40] if role == "user" else "Nova conversa")
         self.store.add_message(self.session_id, role, content)
 
+    # -------------------------- memória (RAG) -------------------------- #
+    async def _recall(self, query: str, emit: Emit) -> str | None:
+        """Recupera memórias relevantes e retorna um bloco de contexto (ou None)."""
+        if self.memory is None:
+            return None
+        cfg = self.settings.memory
+        try:
+            hits = await self.memory.search(query, top_k=cfg.top_k, min_score=cfg.min_score)
+        except Exception as exc:  # noqa: BLE001 - memória nunca deve quebrar o chat
+            log.warning(f"recuperação de memória falhou: {exc!r}")
+            return None
+        if not hits:
+            return None
+        await emit("memory.recalled", {"items": [{"text": h.text, "score": round(h.score, 2)} for h in hits]})
+        linhas = "\n".join(f"- {h.text}" for h in hits)
+        return f"Memórias relevantes de conversas anteriores:\n{linhas}"
+
+    async def _remember(self, user_text: str, answer: str) -> None:
+        """Grava a troca na memória de longo prazo (best-effort)."""
+        if self.memory is None or not self.settings.memory.store_conversations:
+            return
+        if len(user_text.strip()) < 8:  # ignora saudações triviais
+            return
+        try:
+            await self.memory.add(
+                f"Usuário: {user_text}\nAila: {answer}",
+                kind="chat",
+                session_id=self.session_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"gravação de memória falhou: {exc!r}")
+
+    def _messages_with_memory(self, mem_block: str | None) -> list[dict]:
+        msgs = self.context.build()
+        if mem_block:
+            # insere logo após o prompt de sistema principal
+            msgs.insert(1, {"role": "system", "content": mem_block})
+        return msgs
+
     # ------------------------------------------------------------------ #
     async def process(self, user_text: str, emit: Emit, mode: str = "auto") -> str:
         """Laço unificado, em streaming, com roteamento automático de ferramentas.
@@ -102,6 +144,10 @@ class AilaEngine:
         ``mode="chat"``: força conversa pura (sem ferramentas), menor latência.
         """
         await emit("avatar.state", self.emotions.thinking().to_event_payload())
+
+        # Recupera memórias relevantes ANTES de adicionar a mensagem ao contexto.
+        mem_block = await self._recall(user_text, emit)
+
         self.context.add_user(user_text)
         self._persist("user", user_text)
 
@@ -111,7 +157,9 @@ class AilaEngine:
         for _ in range(MAX_TOOL_ITERS):
             collected: list[str] = []
             tool_calls: list[dict] = []
-            async for chunk in self.llm.chat(self.context.build(), stream=True, tools=tools):
+            async for chunk in self.llm.chat(
+                self._messages_with_memory(mem_block), stream=True, tools=tools
+            ):
                 if chunk.content:
                     collected.append(chunk.content)
                     await emit("assistant.token", {"text": chunk.content})
@@ -149,6 +197,7 @@ class AilaEngine:
 
         self.context.add_assistant(final_text)
         self._persist("assistant", final_text)
+        await self._remember(user_text, final_text)
         await emit("assistant.message", {"text": final_text})
         await emit("avatar.state", self.emotions.from_text(final_text).to_event_payload())
         return final_text
@@ -165,9 +214,19 @@ def build_engine(settings: Settings, llm: LLMBackend) -> AilaEngine:
     sandbox = PathSandbox(settings.sandbox_path())
     store = ConversationStore()
 
-    deps = AgentDeps(settings=settings, permissions=permissions, sandbox=sandbox, llm=llm)
+    # Memória de longo prazo (RAG): embeddings via o próprio backend de LLM.
+    memory: MemoryStore | None = None
+    if settings.memory.enabled:
+        async def _embed(texts: list[str]) -> list[list[float]]:
+            return await llm.embed(texts, model=settings.memory.embed_model)
+
+        memory = MemoryStore(_resolve(settings.memory.db_path), _embed)
+
+    deps = AgentDeps(
+        settings=settings, permissions=permissions, sandbox=sandbox, llm=llm, memory=memory
+    )
     manager = AgentManager(deps)
-    engine = AilaEngine(settings, llm, manager, store=store)
+    engine = AilaEngine(settings, llm, manager, store=store, memory=memory)
     # guarda refs úteis para a API (confirmação de permissão, auditoria)
     engine.permissions = permissions  # type: ignore[attr-defined]
     engine.audit = audit  # type: ignore[attr-defined]

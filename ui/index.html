@@ -139,6 +139,7 @@
       <div class="status-row"><span>Modelo</span><span id="s-model" style="color:var(--muted)">—</span></div>
       <div class="status-row"><span>Somente-leitura</span><span id="s-ro" style="color:var(--muted)">—</span></div>
       <div class="status-row"><span>Agentes</span><span id="s-agents" style="color:var(--muted)">—</span></div>
+      <div class="status-row"><span>🧠 Memórias</span><span id="s-mem" style="color:var(--muted)">—</span></div>
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -215,6 +216,8 @@
         addBubble("ai", `↳ chamando ${m.tool}(${JSON.stringify(m.args)})`, "tool"); break;
       case "agent.result":
         addBubble("ai", `✓ ${m.tool}: ${m.content}`, "tool"); break;
+      case "memory.recalled":
+        addBubble("ai", `🧠 lembrei de ${m.items.length} memória(s) relevante(s)`, "tool"); break;
       case "avatar.state":
         document.getElementById("emotion").textContent = m.emotion;
         document.getElementById("anim").textContent = m.animation; break;
@@ -308,6 +311,7 @@
       document.getElementById("s-model").textContent = s.model;
       document.getElementById("s-ro").textContent = s.read_only ? "ativo" : "desligado";
       document.getElementById("s-agents").textContent = s.agents.join(", ") || "—";
+      document.getElementById("s-mem").textContent = s.memory_count ?? 0;
       const t = await (await fetch("/api/tools")).json();
       document.getElementById("tools").innerHTML = t.tools
         .map(x => `<div class="tool-item"><b>${x.name}</b><br>${x.description}</div>`).join("");

@@ -18,6 +18,7 @@ async def status(request: Request) -> dict:
         "model": engine.settings.llm.model,
         "read_only": engine.settings.security.read_only,
         "agents": list(engine.agents.agents.keys()),
+        "memory_count": engine.memory.count() if engine.memory else 0,
     }
 
 
@@ -58,3 +59,15 @@ async def session_messages(request: Request, session_id: int) -> dict:
     if engine.store is None:
         return {"messages": []}
     return {"messages": engine.store.get_messages(session_id)}
+
+
+@router.get("/memory")
+async def memory(request: Request, n: int = 20) -> dict:
+    engine = request.app.state.engine
+    if engine.memory is None:
+        return {"enabled": False, "count": 0, "recent": []}
+    return {
+        "enabled": True,
+        "count": engine.memory.count(),
+        "recent": engine.memory.recent(n),
+    }

@@ -51,6 +51,7 @@ agents:
   enabled:
     - file
     - code
+    - memory
   # Agentes desabilitados por padrão (fases futuras / exigem extras):
   disabled:
     - computer
@@ -71,3 +72,11 @@ avatar:
   enabled: false
   transport: "websocket"      # canal para enviar AvatarState à engine 3D
   default_emotion: "neutral"
+
+memory:
+  enabled: true               # memória de longo prazo (RAG)
+  embed_model: "nomic-embed-text"   # baixe com: ollama pull nomic-embed-text
+  top_k: 4                    # memórias recuperadas por turno
+  min_score: 0.55             # similaridade mínima (0-1) para injetar contexto
+  store_conversations: true   # grava cada troca automaticamente
+  db_path: "./data/memory.db"

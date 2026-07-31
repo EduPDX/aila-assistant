@@ -54,6 +54,32 @@ def test_emotion_engine():
     assert eng.from_text("Pronto, funcionou!").emotion == Emotion.HAPPY
 
 
+def test_memory_store_search(tmp_path: Path):
+    """Busca semântica retorna o item mais similar (embeddings falsos)."""
+    from aila.memory.store import MemoryStore
+
+    # embedding falso: bag-of-words sobre um vocabulário fixo -> vetores comparáveis
+    vocab = ["python", "gato", "carro", "azul", "aila", "erro"]
+
+    async def fake_embed(texts):
+        out = []
+        for t in texts:
+            tl = t.lower()
+            out.append([float(tl.count(w)) + 0.01 for w in vocab])
+        return out
+
+    async def go():
+        mem = MemoryStore(tmp_path / "mem.db", fake_embed)
+        await mem.add("gosto muito de python e programação")
+        await mem.add("meu gato é azul")
+        await mem.add("o carro quebrou com um erro")
+        assert mem.count() == 3
+        hits = await mem.search("qual linguagem python eu curto?", top_k=1)
+        assert hits and "python" in hits[0].text
+
+    asyncio.run(go())
+
+
 def test_computer_agent_gating(tmp_path: Path):
     """Leitura liberada em read-only; atuação (teclado) bloqueada."""
     pytest.importorskip("pyautogui")

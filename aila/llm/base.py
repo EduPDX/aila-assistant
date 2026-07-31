@@ -71,6 +71,16 @@ class LLMBackend(abc.ABC):
         text = await self.complete(messages, model=model, **kwargs)
         return {"role": "assistant", "content": text, "tool_calls": []}
 
+    async def embed(
+        self, texts: list[str], *, model: str | None = None
+    ) -> list[list[float]]:
+        """Gera embeddings para uma lista de textos.
+
+        Usado pela memória de longo prazo (RAG). Backends sem suporte a
+        embeddings devem levantar ``NotImplementedError``.
+        """
+        raise NotImplementedError
+
     @abc.abstractmethod
     async def list_models(self) -> list[str]:
         """Lista os modelos disponíveis no backend."""

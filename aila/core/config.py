@@ -76,6 +76,15 @@ class AvatarConfig(BaseModel):
     default_emotion: str = "neutral"
 
 
+class MemoryConfig(BaseModel):
+    enabled: bool = True
+    embed_model: str = "nomic-embed-text"
+    top_k: int = 4              # nº de memórias recuperadas por turno
+    min_score: float = 0.55     # similaridade mínima (0-1) para injetar
+    store_conversations: bool = True  # grava cada troca automaticamente
+    db_path: str = "./data/memory.db"
+
+
 # --------------------------------------------------------------------------- #
 #  Settings raiz
 # --------------------------------------------------------------------------- #
@@ -98,6 +107,7 @@ class Settings(BaseSettings):
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
 
     # ------------------------------------------------------------------ #
     def sandbox_path(self) -> Path:

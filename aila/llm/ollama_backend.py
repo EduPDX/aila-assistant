@@ -146,6 +146,16 @@ class OllamaBackend(LLMBackend):
                 return resp.json().get("message", {"role": "assistant", "content": ""})
             raise
 
+    async def embed(
+        self, texts: list[str], *, model: str | None = None
+    ) -> list[list[float]]:
+        resp = await self._client.post(
+            "/api/embed",
+            json={"model": model or "nomic-embed-text", "input": texts},
+        )
+        resp.raise_for_status()
+        return resp.json().get("embeddings", [])
+
     async def list_models(self) -> list[str]:
         try:
             resp = await self._client.get("/api/tags")

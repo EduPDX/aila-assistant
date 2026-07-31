@@ -13,11 +13,16 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass
 
+from typing import TYPE_CHECKING
+
 from aila.core.config import Settings
 from aila.llm.base import LLMBackend
 from aila.security.permissions import PermissionManager
 from aila.security.sandbox import PathSandbox
 from aila.tools.schema import Tool
+
+if TYPE_CHECKING:
+    from aila.memory.store import MemoryStore
 
 
 @dataclass(slots=True)
@@ -26,6 +31,7 @@ class AgentDeps:
     permissions: PermissionManager
     sandbox: PathSandbox
     llm: LLMBackend
+    memory: "MemoryStore | None" = None
 
 
 class BaseAgent(abc.ABC):

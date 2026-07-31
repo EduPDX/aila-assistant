@@ -27,6 +27,27 @@ Geração e manutenção de código com modelo especializado (deepseek-coder).
 
 > Não executa código. Execução chegará via Computer Agent + confirmação.
 
+## Memory Agent — `memory` ✅ (memória de longo prazo / RAG)
+Dá à IA controle explícito sobre a memória. Além disso, a engine **recupera e
+grava memórias automaticamente** a cada turno (ver abaixo).
+
+| Tool | Descrição |
+|------|-----------|
+| `memory.save` | Salva um fato/preferência importante para lembrar depois |
+| `memory.search` | Busca semântica no que já foi aprendido |
+
+**Como funciona (RAG):** cada memória é um texto + seu *embedding*
+(`nomic-embed-text` via Ollama), gravado em `data/memory.db` (SQLite). A busca é
+por similaridade de cosseno (numpy). A cada mensagem, a engine:
+1. **recupera** as `top_k` memórias mais relevantes (acima de `min_score`) e as
+   injeta no contexto como uma nota de sistema;
+2. após responder, **grava** a troca (se `store_conversations: true`).
+
+`memory.save` é estado interno da IA — não é bloqueado pelo modo somente-leitura,
+apenas auditado. Configuração em `config → memory`. Requer
+`ollama pull nomic-embed-text`; se o modelo/embeddings falharem, a memória se
+autodesativa sem quebrar o chat.
+
 ## Computer Agent — `computer` ✅ (Fase 2)
 Controle do SO. **Desabilitado por padrão** (segurança). Requer
 `pip install -e ".[computer]"` e habilitar em `config → agents.enabled: [..., computer]`.
