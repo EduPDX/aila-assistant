@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 Role = Literal["system", "user", "assistant", "tool"]
 
@@ -19,14 +19,18 @@ class Message:
     role: Role
     content: str
     name: str | None = None  # nome do agente/ferramenta, quando role="tool"
+    # tool_calls: presente no turno do assistente que solicita ferramentas
+    tool_calls: list[dict[str, Any]] | None = None
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
 
-    def to_llm(self) -> dict[str, str]:
-        msg = {"role": self.role, "content": self.content}
+    def to_llm(self) -> dict[str, Any]:
+        msg: dict[str, Any] = {"role": self.role, "content": self.content}
         if self.name:
             msg["name"] = self.name
+        if self.tool_calls:
+            msg["tool_calls"] = self.tool_calls
         return msg
 
 

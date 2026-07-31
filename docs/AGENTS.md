@@ -57,9 +57,12 @@ Triagem de binários e ponte para o Ghidra.
 
 Integração Ghidra headless (descompilação) planejada para a Fase 3.
 
-## Como a IA escolhe a ferramenta
+## Como a IA escolhe a ferramenta (roteamento automático)
 
-No **modo agente**, a engine envia os JSON Schemas de todas as tools ao modelo
-(`chat_message(tools=...)`). O modelo responde com `tool_calls`; a engine
-executa cada uma pelo `ToolRegistry`, respeitando permissões, e realimenta o
-resultado até o modelo produzir a resposta final. Ver [ARCHITECTURE.md](ARCHITECTURE.md).
+Por padrão (modo **Auto**), a engine envia os JSON Schemas de todas as tools ao
+modelo em **streaming**. A própria IA decide se responde direto (conversa) ou se
+emite `tool_calls`. Quando emite, a engine executa cada chamada pelo
+`ToolRegistry` — respeitando permissões — realimenta o resultado e deixa o
+modelo sintetizar a resposta final, que volta em streaming. O usuário pode forçar
+o modo **Chat** (sem ferramentas) para menor latência. Ver
+[ARCHITECTURE.md](ARCHITECTURE.md).

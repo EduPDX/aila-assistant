@@ -18,11 +18,11 @@ A Aila é entregue em fases. Cada fase é utilizável por conta própria — nad
 
 ## Fase 1.5 — Refinos do núcleo
 
-- [ ] Roteamento automático chat↔agente (detectar quando usar ferramentas)
-- [ ] Persistência de histórico na UI (usa `database/store.py`)
+- ✅ Roteamento automático chat↔agente (a IA decide, tudo em streaming)
+- ✅ Persistência de histórico (SQLite) + painel de conversas na UI
 - [ ] Memória de longo prazo com embeddings (`nomic-embed-text` + RAG)
 - [ ] Backend `llama.cpp` (servidor compatível com API OpenAI)
-- [ ] Testes automatizados (pytest) e CI
+- [ ] Ampliar cobertura de testes automatizados e CI
 
 ## Fase 2 — Voz e controle do computador
 

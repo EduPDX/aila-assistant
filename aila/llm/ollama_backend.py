@@ -40,6 +40,7 @@ class OllamaBackend(LLMBackend):
         temperature: float | None = None,
         max_tokens: int | None = None,
         stream: bool = True,
+        tools: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatChunk]:
         body: dict[str, Any] = {
@@ -49,6 +50,8 @@ class OllamaBackend(LLMBackend):
             "keep_alive": self.keep_alive,
             "options": {},
         }
+        if tools:
+            body["tools"] = tools
         if temperature is not None:
             body["options"]["temperature"] = temperature
         if max_tokens is not None:
@@ -59,13 +62,29 @@ class OllamaBackend(LLMBackend):
             resp = await self._client.post("/api/chat", json=body)
             resp.raise_for_status()
             data = resp.json()
+            msg = data.get("message", {})
             yield ChatChunk(
-                content=data.get("message", {}).get("content", ""),
+                content=msg.get("content", ""),
                 done=True,
+                tool_calls=msg.get("tool_calls") or None,
                 meta={k: data.get(k) for k in ("total_duration", "eval_count")},
             )
             return
 
+        try:
+            async for chunk in self._stream(body):
+                yield chunk
+        except httpx.HTTPStatusError as exc:
+            # Modelo sem suporte a tools em streaming: repete sem ferramentas.
+            if tools and exc.response.status_code in (400, 500):
+                log.warning("modelo sem suporte a tools no stream; repetindo sem elas")
+                body.pop("tools", None)
+                async for chunk in self._stream(body):
+                    yield chunk
+            else:
+                raise
+
+    async def _stream(self, body: dict[str, Any]) -> AsyncIterator[ChatChunk]:
         async with self._client.stream("POST", "/api/chat", json=body) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -76,12 +95,15 @@ class OllamaBackend(LLMBackend):
                 except json.JSONDecodeError:
                     log.warning(f"linha não-JSON do Ollama ignorada: {line[:80]}")
                     continue
-                content = data.get("message", {}).get("content", "")
+                msg = data.get("message", {})
+                content = msg.get("content", "")
+                tool_calls = msg.get("tool_calls") or None
                 done = bool(data.get("done"))
-                if content or done:
+                if content or done or tool_calls:
                     yield ChatChunk(
                         content=content,
                         done=done,
+                        tool_calls=tool_calls,
                         meta={"eval_count": data.get("eval_count")} if done else None,
                     )
 

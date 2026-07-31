@@ -89,6 +89,15 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             elif mtype == "permission.response":
                 session.resolve_permission(data.get("id", ""), bool(data.get("approved")))
 
+            elif mtype == "session.new":
+                engine.new_session()
+                await session.emit("session.changed", {"id": engine.session_id})
+
+            elif mtype == "session.load":
+                engine.load_session(int(data.get("id")))
+                msgs = engine.store.get_messages(engine.session_id) if engine.store else []
+                await session.emit("session.loaded", {"id": engine.session_id, "messages": msgs})
+
             else:
                 await session.emit("error", {"message": f"tipo desconhecido: {mtype}"})
 

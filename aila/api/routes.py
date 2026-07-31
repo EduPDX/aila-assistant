@@ -42,3 +42,19 @@ async def tools(request: Request) -> dict:
             for t in engine.agents.registry.all()
         ]
     }
+
+
+@router.get("/sessions")
+async def sessions(request: Request) -> dict:
+    engine = request.app.state.engine
+    if engine.store is None:
+        return {"sessions": []}
+    return {"sessions": engine.store.list_sessions(), "current": engine.session_id}
+
+
+@router.get("/sessions/{session_id}")
+async def session_messages(request: Request, session_id: int) -> dict:
+    engine = request.app.state.engine
+    if engine.store is None:
+        return {"messages": []}
+    return {"messages": engine.store.get_messages(session_id)}

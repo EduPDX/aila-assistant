@@ -54,6 +54,11 @@
   .tools { flex: 1; overflow-y: auto; font-size: 12px; }
   .tool-item { padding: 6px 8px; border-radius: 6px; color: var(--muted); }
   .tool-item b { color: var(--accent-2); }
+  .session-item { padding: 7px 9px; border-radius: 7px; color: var(--text);
+    cursor: pointer; border: 1px solid transparent; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .session-item:hover { background: var(--panel-2); }
+  .session-item.active { border-color: var(--accent); color: var(--accent); }
 
   /* --- Main --- */
   .main { flex: 1; display: flex; flex-direction: column; }
@@ -136,6 +141,13 @@
       <div class="status-row"><span>Agentes</span><span id="s-agents" style="color:var(--muted)">—</span></div>
     </div>
 
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="panel-title">Conversas</div>
+      <button class="icon-btn" style="width:24px;height:24px;font-size:14px;line-height:1"
+              title="Nova conversa" onclick="newSession()">+</button>
+    </div>
+    <div id="sessions" style="max-height:32vh;overflow-y:auto;font-size:12px"></div>
+
     <div class="panel-title">Ferramentas</div>
     <div class="tools" id="tools"></div>
   </aside>
@@ -147,9 +159,9 @@
         <span class="emotion-badge" id="emotion">neutral</span>
         <span id="anim" style="font-size:12px">idle</span>
       </div>
-      <div class="mode-toggle">
-        <button id="mode-chat" class="active" onclick="setMode('chat')">Chat</button>
-        <button id="mode-agent" onclick="setMode('agent')">Agente</button>
+      <div class="mode-toggle" title="Auto: a IA decide quando usar ferramentas">
+        <button id="mode-auto" class="active" onclick="setMode('auto')">Auto</button>
+        <button id="mode-chat" onclick="setMode('chat')">Chat</button>
       </div>
     </div>
 
@@ -181,7 +193,7 @@
   </div>
 
 <script>
-  let ws, mode = "chat", currentPermId = null, aiBubble = null;
+  let ws, mode = "auto", currentPermId = null, aiBubble = null, activeSession = null;
   const chat = document.getElementById("chat");
   const input = document.getElementById("input");
 
@@ -198,7 +210,7 @@
         aiBubble.textContent += m.text; scroll(); break;
       case "assistant.message":
         if (!aiBubble) addBubble("ai", m.text);
-        aiBubble = null; break;
+        aiBubble = null; loadSessions(); break;
       case "agent.invoked":
         addBubble("ai", `↳ chamando ${m.tool}(${JSON.stringify(m.args)})`, "tool"); break;
       case "agent.result":
@@ -208,6 +220,10 @@
         document.getElementById("anim").textContent = m.animation; break;
       case "permission.request":
         showPermission(m); break;
+      case "session.loaded":
+        renderMessages(m.messages); activeSession = m.id; loadSessions(); break;
+      case "session.changed":
+        clearChat(); activeSession = m.id; loadSessions(); break;
       case "error":
         addBubble("sys", "erro: " + m.message); aiBubble = null; break;
     }
@@ -235,9 +251,37 @@
 
   function setMode(m) {
     mode = m;
+    document.getElementById("mode-auto").classList.toggle("active", m === "auto");
     document.getElementById("mode-chat").classList.toggle("active", m === "chat");
-    document.getElementById("mode-agent").classList.toggle("active", m === "agent");
     document.getElementById("hint-mode").textContent = m;
+  }
+
+  function clearChat() { chat.innerHTML = ""; aiBubble = null; }
+
+  function renderMessages(msgs) {
+    clearChat();
+    (msgs || []).forEach(m => addBubble(m.role === "user" ? "user" : "ai", m.content));
+  }
+
+  function newSession() {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "session.new" }));
+    clearChat();
+  }
+
+  function openSession(id) {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "session.load", id }));
+  }
+
+  async function loadSessions() {
+    try {
+      const r = await (await fetch("/api/sessions")).json();
+      if (r.current != null) activeSession = r.current;
+      document.getElementById("sessions").innerHTML = (r.sessions || [])
+        .map(s => `<div class="session-item ${s.id === activeSession ? "active" : ""}"
+                    onclick="openSession(${s.id})" title="${(s.title||"").replace(/"/g,'')}">
+                    💬 ${s.title || "conversa " + s.id}</div>`).join("")
+        || '<div style="color:var(--muted);padding:6px">nenhuma ainda</div>';
+    } catch (e) {}
   }
 
   function showPermission(m) {
@@ -277,7 +321,7 @@
     input.style.height = "auto"; input.style.height = input.scrollHeight + "px";
   });
 
-  connect(); loadStatus(); setInterval(loadStatus, 8000);
+  connect(); loadStatus(); loadSessions(); setInterval(loadStatus, 8000);
 </script>
 </body>
 </html>

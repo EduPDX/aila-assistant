@@ -124,6 +124,8 @@ O projeto é entregue em fases. O que já funciona e o que vem a seguir está em
 | 1    | Sistema de agentes + File/Code      | ✅ funcional  |
 | 1    | Segurança (permissões + auditoria)  | ✅ funcional  |
 | 1    | API REST/WebSocket + UI de chat     | ✅ funcional  |
+| 1.5  | Roteamento automático chat↔agente   | ✅ funcional  |
+| 1.5  | Histórico persistente (SQLite)      | ✅ funcional  |
 | 2    | Computer Agent (PyAutoGUI/WinAPI)   | 🚧 interface  |
 | 2    | Voice (Whisper + Piper)             | 🚧 interface  |
 | 3    | Vision (LLaVA/Qwen-VL)              | 🚧 interface  |

@@ -17,6 +17,8 @@ class ChatChunk:
 
     content: str
     done: bool = False
+    # tool_calls aparecem quando o modelo decide usar ferramentas (mesmo em stream)
+    tool_calls: list[dict[str, Any]] | None = None
     # metadados opcionais no chunk final (tokens, duração etc.)
     meta: dict[str, Any] | None = None
 
@@ -33,9 +35,15 @@ class LLMBackend(abc.ABC):
         temperature: float | None = None,
         max_tokens: int | None = None,
         stream: bool = True,
+        tools: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[ChatChunk]:
-        """Gera uma resposta de chat. Deve ser um gerador assíncrono."""
+        """Gera uma resposta de chat. Deve ser um gerador assíncrono.
+
+        Se ``tools`` for informado e o modelo optar por usá-las, os chunks
+        podem conter ``tool_calls`` (o backend deve fazer fallback sem tools
+        caso o modelo não suporte).
+        """
         raise NotImplementedError
         yield  # pragma: no cover  (torna a assinatura um async generator)
 
