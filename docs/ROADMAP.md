@@ -46,13 +46,14 @@ A Aila é entregue em fases. Cada fase é utilizável por conta própria — nad
 - [ ] Coordenadas de elementos de UI (clicar exatamente onde a visão indicou)
 - [ ] **Binary Agent**: integração Ghidra headless (descompilação, chamadas)
 
-## Fase 4 — Avatar 3D
+## Fase 4 — Avatar
 
-- [ ] Projeto Unreal Engine 5 (ou Unity) em `Avatar/`
-- [ ] Cliente que consome `avatar.state` pela WebSocket
-- [ ] Blend shapes / morph targets para expressões faciais
-- [ ] Lip-sync por visemes vindos do TTS
-- [ ] Biblioteca de gestos e animações mapeada ao enum `Gesture`/`Animation`
+- ✅ **Avatar visual no navegador** (SVG): consome `avatar.state` em tempo real —
+  expressões faciais por emoção, gestos, blink/idle, e **lip-sync real** pela
+  amplitude do áudio TTS (WebAudio AnalyserNode). Embutido na UI, sem engine 3D.
+- [ ] Projeto Unreal Engine 5 (ou Unity) em `Avatar/` (avatar 3D dedicado)
+- [ ] Blend shapes / morph targets 3D + visemes finos do TTS
+- [ ] Biblioteca de gestos/animações 3D mapeada ao enum `Gesture`/`Animation`
 
 ## Escolhas de modelo para a RTX 4060 8GB
 

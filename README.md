@@ -131,7 +131,8 @@ O projeto é entregue em fases. O que já funciona e o que vem a seguir está em
 | 2    | Voz: STT (Whisper) + TTS (SAPI/Piper) + conversa | ✅ funcional  |
 | 3    | Vision Agent (LLaVA: imagem/OCR/tela) | ✅ funcional  |
 | 3    | Binary Agent (Ghidra)               | 🚧 interface  |
-| 4    | Avatar 3D (Unreal/Unity)            | 🧩 protocolo  |
+| 4    | Avatar visual no navegador (SVG + lip-sync) | ✅ funcional  |
+| 4    | Avatar 3D dedicado (Unreal/Unity)   | 🧩 protocolo  |
 
 ## Segurança
 

@@ -57,6 +57,24 @@ Definido em `aila/avatar/protocol.py`:
 | `speech_state=talking` | Ativa lip-sync; `listening` → pose de escuta |
 | `viseme` | Curva de blend shape de boca (lip-sync fino) |
 
+## Consumidor de referência: avatar no navegador (implementado ✅)
+
+A própria UI (`ui/index.html`) já inclui um **avatar SVG** que consome
+`avatar.state` em tempo real — serve como implementação de referência do
+protocolo, sem precisar de Unreal/Unity:
+
+- **emotion** → posição das sobrancelhas, olhos, curvatura da boca e cor do halo
+  (ex.: `happy` = sorriso largo + halo teal; `confused` = sobrancelhas
+  assimétricas + halo âmbar; `focused` = halo azul).
+- **gesture** → overlay rápido (👍/👋/🤷) e micro-animação da cabeça (`nod`).
+- **speech_state=talking** → boca anima; com áudio TTS tocando, o movimento é
+  dirigido pela **amplitude real do áudio** (WebAudio `AnalyserNode`) — lip-sync.
+- **speech_state=listening** → halo azul enquanto o microfone está ativo.
+- **intensity** → escala a força da expressão.
+- blink e respiração idle são automáticos.
+
+O avatar 3D dedicado (Unreal/Unity) da Fase 4 consumirá o **mesmo** protocolo.
+
 ## Exemplo de consumidor (pseudo)
 
 ```csharp

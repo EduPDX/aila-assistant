@@ -134,6 +134,40 @@
     background: var(--panel-2); color: var(--text); }
   .btn.deny { border-color: var(--border); }
   .btn.allow { background: var(--danger); color: #fff; border: none; }
+
+  /* --- Avatar panel --- */
+  .avatar-panel {
+    width: 300px; background: var(--panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 18px; gap: 14px;
+  }
+  @media (max-width: 1150px) { .avatar-panel { display: none; } }
+  .avatar-stage {
+    width: 240px; height: 260px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #ava { width: 100%; height: 100%; overflow: visible; }
+  #ava-body { transition: transform .4s cubic-bezier(.34,1.56,.64,1); transform-origin: 100px 200px; }
+  #ava-face path, #ava-face g { transition: transform .25s ease, d .18s ease; }
+  #brow-l, #brow-r { transition: transform .25s ease; }
+  .eye-lid { transition: transform .08s ease; transform-origin: center; }
+  #ava-gesture {
+    position: absolute; top: 6px; right: 8px; font-size: 40px; opacity: 0;
+    transition: opacity .2s ease, transform .3s ease; transform: translateY(6px) scale(.6);
+  }
+  #ava-gesture.show { opacity: 1; transform: translateY(0) scale(1); }
+  .avatar-name { font-size: 15px; letter-spacing: 2px; color: var(--text); }
+  .avatar-emotion {
+    font-size: 12px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px;
+  }
+  .avatar-caption {
+    font-size: 12px; color: var(--muted); text-align: center; min-height: 32px;
+    line-height: 1.4; max-width: 260px;
+  }
+  .avatar-mode-tag {
+    font-size: 10px; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 12px; padding: 2px 10px;
+  }
 </style>
 </head>
 <body>
@@ -197,6 +231,65 @@
     </div>
   </main>
 
+  <!-- Painel do Avatar -->
+  <aside class="avatar-panel">
+    <div class="avatar-name">A I L A</div>
+    <div class="avatar-stage">
+      <div id="ava-gesture">👋</div>
+      <svg id="ava" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="headGrad" cx="42%" cy="38%" r="70%">
+            <stop offset="0%" stop-color="#1a3a44"/>
+            <stop offset="70%" stop-color="#122730"/>
+            <stop offset="100%" stop-color="#0c1a20"/>
+          </radialGradient>
+          <filter id="glowF" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="7" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <g id="ava-body">
+          <!-- aura / glow ring -->
+          <ellipse id="ava-glow" cx="100" cy="108" rx="74" ry="80"
+                   fill="none" stroke="#35d0ba" stroke-width="2.5" opacity="0.55"
+                   filter="url(#glowF)"/>
+          <!-- ombros -->
+          <path d="M 34 240 Q 100 176 166 240 Z" fill="#132430" stroke="#1e3540" stroke-width="1"/>
+          <!-- cabeça -->
+          <rect x="40" y="34" width="120" height="148" rx="46" ry="50"
+                fill="url(#headGrad)" stroke="#2b4d58" stroke-width="1.5"/>
+          <g id="ava-face">
+            <!-- olho esquerdo -->
+            <g id="eye-l">
+              <ellipse cx="76" cy="104" rx="13" ry="15" fill="#0a1418"/>
+              <circle id="pup-l" cx="76" cy="104" r="7" fill="#35d0ba"/>
+              <circle cx="79" cy="101" r="2.4" fill="#bff6ec"/>
+              <rect class="eye-lid" id="lid-l" x="61" y="87" width="30" height="0" rx="4" fill="#122730"/>
+            </g>
+            <!-- olho direito -->
+            <g id="eye-r">
+              <ellipse cx="124" cy="104" rx="13" ry="15" fill="#0a1418"/>
+              <circle id="pup-r" cx="124" cy="104" r="7" fill="#35d0ba"/>
+              <circle cx="127" cy="101" r="2.4" fill="#bff6ec"/>
+              <rect class="eye-lid" id="lid-r" x="109" y="87" width="30" height="0" rx="4" fill="#122730"/>
+            </g>
+            <!-- sobrancelhas -->
+            <path id="brow-l" d="M 63 82 L 89 82" stroke="#35d0ba" stroke-width="3.5"
+                  stroke-linecap="round" style="transform-origin:76px 82px"/>
+            <path id="brow-r" d="M 111 82 L 137 82" stroke="#35d0ba" stroke-width="3.5"
+                  stroke-linecap="round" style="transform-origin:124px 82px"/>
+            <!-- boca -->
+            <path id="mouth" d="M 78 150 Q 100 162 122 150" fill="#0a1418"
+                  stroke="#35d0ba" stroke-width="3" stroke-linecap="round"/>
+          </g>
+        </g>
+      </svg>
+    </div>
+    <div class="avatar-emotion" id="ava-emotion">neutral</div>
+    <div class="avatar-caption" id="ava-caption">Pronta para ajudar.</div>
+    <div class="avatar-mode-tag" id="ava-state">idle</div>
+  </aside>
+
   <!-- Modal de permissão -->
   <div class="overlay" id="overlay">
     <div class="modal">
@@ -240,7 +333,8 @@
         addBubble("ai", `🧠 lembrei de ${m.items.length} memória(s) relevante(s)`, "tool"); break;
       case "avatar.state":
         document.getElementById("emotion").textContent = m.emotion;
-        document.getElementById("anim").textContent = m.animation; break;
+        document.getElementById("anim").textContent = m.animation;
+        applyAvatarState(m); break;
       case "permission.request":
         showPermission(m); break;
       case "session.loaded":
@@ -399,7 +493,7 @@
     }
     recording = true;
     document.getElementById("btn-mic").classList.add("rec");
-    setAnim("ouvindo…");
+    setAnim("ouvindo…"); avatarListening(true);
     audioChunks = [];
     mediaRec = new MediaRecorder(micStream);
     mediaRec.ondataavailable = (e) => { if (e.data.size) audioChunks.push(e.data); };
@@ -449,6 +543,7 @@
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     recording = false;
     document.getElementById("btn-mic").classList.remove("rec");
+    avatarListening(false);
     if (!audioChunks.length) { setAnim("idle"); return; }
     setAnim("transcrevendo…");
     const blob = new Blob(audioChunks, { type: "audio/webm" });
@@ -477,11 +572,16 @@
       if (!r.ok) throw new Error("HTTP " + r.status);
       const buf = await r.blob();
       ttsAudio = new Audio(URL.createObjectURL(buf));
+      avatarSpeaking(true);
+      startLipSync(ttsAudio);                 // boca sincroniza com o áudio real
       ttsAudio.onended = () => {
-        setAnim("idle");
+        stopLipSync(); avatarSpeaking(false); setAnim("idle");
         if (convoMode) startListening();      // conversa natural: volta a ouvir
       };
-      ttsAudio.onerror = () => { setAnim("idle"); if (convoMode) startListening(); };
+      ttsAudio.onerror = () => {
+        stopLipSync(); avatarSpeaking(false); setAnim("idle");
+        if (convoMode) startListening();
+      };
       await ttsAudio.play();
     } catch (e) {
       setAnim("idle");
@@ -507,6 +607,124 @@
   }
 
   connect(); loadStatus(); loadSessions(); loadVoiceStatus(); setInterval(loadStatus, 8000);
+
+  /* ===================== AVATAR ===================== */
+  const A = (id) => document.getElementById(id);
+  const mouth = A("mouth"), browL = A("brow-l"), browR = A("brow-r"),
+        pupL = A("pup-l"), pupR = A("pup-r"), lidL = A("lid-l"), lidR = A("lid-r"),
+        glow = A("ava-glow"), body = A("ava-body");
+
+  // emoção -> [rot sobrancelha L, R], desloc. olhos, curva boca, cor
+  const EMO = {
+    neutral:   { brow: [0, 0],   eyeY: 0,  curve: 0.35, glow: "#35d0ba" },
+    happy:     { brow: [-16, 16], eyeY: 0,  curve: 0.95, glow: "#35d0ba" },
+    confident: { brow: [-10, 4], eyeY: 0,  curve: 0.6,  glow: "#35d0ba" },
+    focused:   { brow: [14, -14], eyeY: 1,  curve: 0.08, glow: "#4a9eff" },
+    confused:  { brow: [20, -10], eyeY: 0,  curve: -0.25, glow: "#c8a24a" },
+    surprised: { brow: [-18, 18], eyeY: -2, curve: 0.0,  glow: "#4a9eff" },
+    sad:       { brow: [16, -16], eyeY: 1,  curve: -0.75, glow: "#6b7c93" },
+    thinking:  { brow: [-8, 12], eyeY: -3, curve: 0.12, glow: "#4a9eff" },
+  };
+  const GEST = { thumbs_up: "👍", wave: "👋", point: "👉", shrug: "🤷", hand_explain: "🖐️", nod: "" };
+
+  let curCurve = 0.35, avaTalking = false, lipActive = false;
+  let lipCtx = null, lipAnalyser = null, lipBuf = null, lipSmooth = 0, talkTimer = null;
+
+  function setMouth(curve, open) {
+    const cx = 100, y = 150, w = 22;
+    const cpy = y + curve * 20;
+    if (open < 0.05) {
+      mouth.setAttribute("d", `M ${cx - w} ${y} Q ${cx} ${cpy} ${cx + w} ${y}`);
+      mouth.setAttribute("fill", "none");
+    } else {
+      const o = 4 + open * 20;
+      mouth.setAttribute("d",
+        `M ${cx - w} ${y} Q ${cx} ${cpy} ${cx + w} ${y} Q ${cx} ${y + o} ${cx - w} ${y} Z`);
+      mouth.setAttribute("fill", "#0a1418");
+    }
+  }
+
+  function render() {
+    let open = 0;
+    if (lipActive && lipAnalyser) {
+      lipAnalyser.getByteTimeDomainData(lipBuf);
+      let sum = 0;
+      for (let i = 0; i < lipBuf.length; i++) { const x = (lipBuf[i] - 128) / 128; sum += x * x; }
+      const rms = Math.sqrt(sum / lipBuf.length);
+      lipSmooth = lipSmooth * 0.55 + Math.min(1, rms * 4.5) * 0.45;
+      open = lipSmooth;
+    } else if (avaTalking) {
+      open = 0.22 + 0.2 * Math.abs(Math.sin(Date.now() / 85));
+    }
+    setMouth(curCurve, open);
+    requestAnimationFrame(render);
+  }
+
+  function blink() {
+    lidL.setAttribute("height", "16"); lidR.setAttribute("height", "16");
+    setTimeout(() => { lidL.setAttribute("height", "0"); lidR.setAttribute("height", "0"); }, 110);
+    setTimeout(blink, 2400 + Math.random() * 3600);
+  }
+
+  function applyAvatarState(m) {
+    const e = EMO[m.emotion] || EMO.neutral;
+    const k = (m.intensity != null ? m.intensity : 0.6) * 1.3 + 0.3;
+    browL.style.transform = `rotate(${e.brow[0] * k * 0.06}rad)`;
+    browR.style.transform = `rotate(${e.brow[1] * k * 0.06}rad)`;
+    pupL.setAttribute("cy", 104 + (e.eyeY || 0) * 2);
+    pupR.setAttribute("cy", 104 + (e.eyeY || 0) * 2);
+    glow.setAttribute("stroke", e.glow);
+    browL.setAttribute("stroke", e.glow); browR.setAttribute("stroke", e.glow);
+    curCurve = e.curve;
+    A("ava-emotion").textContent = m.emotion || "neutral";
+    A("ava-state").textContent = m.animation || m.speech_state || "idle";
+    if (m.text) A("ava-caption").textContent = m.text;
+    if (m.gesture && m.gesture !== "none") showGesture(m.gesture);
+    if (m.speech_state === "listening") avatarListening(true);
+    else if (m.speech_state === "talking") avatarSpeaking(true);
+    else if (m.speech_state === "silent" && !lipActive) avatarSpeaking(false);
+  }
+
+  function showGesture(g) {
+    const el = A("ava-gesture");
+    if (g === "nod") {
+      body.style.transform = "translateY(7px)";
+      setTimeout(() => body.style.transform = "", 320);
+      return;
+    }
+    const emo = GEST[g]; if (!emo) return;
+    el.textContent = emo; el.classList.add("show");
+    if (g === "shrug") body.style.transform = "rotate(-4deg)";
+    setTimeout(() => { el.classList.remove("show"); body.style.transform = ""; }, 1600);
+  }
+
+  function avatarSpeaking(on) {
+    avaTalking = on;
+    if (on) A("ava-state").textContent = "falando";
+    clearTimeout(talkTimer);
+    if (on && !lipActive) talkTimer = setTimeout(() => { if (!lipActive) avaTalking = false; }, 2200);
+  }
+
+  function avatarListening(on) {
+    glow.setAttribute("stroke", on ? "#4a9eff" : (EMO[A("ava-emotion").textContent] || EMO.neutral).glow);
+    glow.style.opacity = on ? "0.95" : "0.55";
+    if (on) A("ava-state").textContent = "ouvindo";
+  }
+
+  function startLipSync(audio) {
+    try {
+      lipCtx = lipCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (lipCtx.state === "suspended") lipCtx.resume();
+      const src = lipCtx.createMediaElementSource(audio);
+      lipAnalyser = lipCtx.createAnalyser(); lipAnalyser.fftSize = 1024;
+      lipBuf = new Uint8Array(lipAnalyser.fftSize);
+      src.connect(lipAnalyser); lipAnalyser.connect(lipCtx.destination);
+      lipActive = true; avaTalking = true; clearTimeout(talkTimer);
+    } catch (e) { avatarSpeaking(true); }   // fallback: oscilação
+  }
+  function stopLipSync() { lipActive = false; lipAnalyser = null; lipSmooth = 0; }
+
+  setMouth(0.35, 0); render(); blink();
 </script>
 </body>
 </html>
