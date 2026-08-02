@@ -30,9 +30,12 @@ A Aila é entregue em fases. Cada fase é utilizável por conta própria — nad
 - ✅ **Computer Agent** completo: mouse, teclado, atalhos, janelas
   (pygetwindow), captura de tela (mss), comandos PowerShell — com permissões,
   confirmação e auditoria; leitura liberada, atuação gated
-- [ ] **STT**: `faster-whisper` na GPU (interface em `voice/stt.py`)
-- [ ] **TTS**: Piper (offline) e depois XTTS (clonagem) — `voice/tts.py`
-- [ ] Loop de conversa por voz (push-to-talk + VAD)
+- ✅ **STT**: `faster-whisper` (CUDA na RTX 4060, fallback CPU automático)
+- ✅ **TTS**: SAPI (Windows, pt-BR nativo, zero deps) + Piper opcional
+- ✅ Loop de conversa por voz na UI (microfone com detecção de silêncio +
+  modo conversa mãos-livres). Ver [VOICE.md](VOICE.md)
+- [ ] Síntese por frase durante o streaming (menor latência de fala)
+- [ ] XTTS (clonagem de voz) como engine premium
 - [ ] Perfis de permissão por app / lista de apps confiáveis
 
 ## Fase 3 — Multimodal e binários

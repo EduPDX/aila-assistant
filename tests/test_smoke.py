@@ -80,6 +80,18 @@ def test_memory_store_search(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_tts_sapi_synthesis(tmp_path: Path):
+    """No Windows, o TTS SAPI gera um WAV não-vazio (a Aila fala)."""
+    import sys
+
+    if sys.platform != "win32":
+        pytest.skip("SAPI só existe no Windows")
+    from aila.voice.tts import TextToSpeech
+
+    out = TextToSpeech(engine="sapi").synthesize("Teste de voz da Aila.", tmp_path / "v.wav")
+    assert out.exists() and out.stat().st_size > 1000
+
+
 def test_computer_agent_gating(tmp_path: Path):
     """Leitura liberada em read-only; atuação (teclado) bloqueada."""
     pytest.importorskip("pyautogui")

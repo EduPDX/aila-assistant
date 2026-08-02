@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from aila.api.routes import router as api_router
+from aila.api.voice import router as voice_router
 from aila.api.websocket import websocket_endpoint
 from aila.core.config import PROJECT_ROOT, get_settings
 from aila.core.engine import build_engine
@@ -45,6 +46,18 @@ async def lifespan(app: FastAPI):
     engine = build_engine(settings, llm)
     app.state.settings = settings
     app.state.engine = engine
+
+    # Sistema de voz (STT/TTS). Falha aqui não deve derrubar o app.
+    app.state.voice = None
+    if settings.voice.enabled:
+        try:
+            from aila.voice.system import VoiceSystem
+
+            app.state.voice = VoiceSystem(settings.voice)
+            log.info(f"Voz habilitada — TTS: {app.state.voice.tts.engine}")
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"Sistema de voz indisponível: {exc!r}")
+
     log.info(f"Aila pronta em http://{settings.host}:{settings.port}")
     log.info(f"Modo somente-leitura: {settings.security.read_only}")
 
@@ -56,6 +69,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="Aila", version="0.1.0", lifespan=lifespan)
     app.include_router(api_router)
+    app.include_router(voice_router)
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):  # noqa: ANN202

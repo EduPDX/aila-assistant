@@ -64,10 +64,24 @@ class AgentsConfig(BaseModel):
     disabled: list[str] = Field(default_factory=list)
 
 
+class STTConfig(BaseModel):
+    engine: str = "faster-whisper"
+    model: str = "base"          # tiny | base | small | medium
+    language: str = "pt"
+    device: str = "auto"         # auto | cuda | cpu
+
+
+class TTSConfig(BaseModel):
+    engine: str = "auto"         # auto | sapi | piper
+    voice: str = ""              # vazio = auto (voz pt-BR se disponível)
+    rate: int = 0                # SAPI: -10 (lento) .. 10 (rápido)
+    output_enabled: bool = True  # falar as respostas automaticamente
+
+
 class VoiceConfig(BaseModel):
-    enabled: bool = False
-    stt: dict[str, Any] = Field(default_factory=dict)
-    tts: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    stt: STTConfig = Field(default_factory=STTConfig)
+    tts: TTSConfig = Field(default_factory=TTSConfig)
 
 
 class AvatarConfig(BaseModel):

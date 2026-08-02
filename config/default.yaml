@@ -59,14 +59,17 @@ agents:
     - binary
 
 voice:
-  enabled: false
+  enabled: true
   stt:
     engine: "faster-whisper"
-    model: "base"             # tiny | base | small | medium
+    model: "base"             # tiny | base | small | medium (baixa na 1ª vez)
     language: "pt"
+    device: "auto"            # auto usa CUDA (RTX 4060) se disponível
   tts:
-    engine: "piper"           # piper | xtts
-    voice: "pt_BR-faber-medium"
+    engine: "auto"            # auto | sapi (Windows nativo) | piper (qualidade)
+    voice: ""                 # vazio = auto (voz pt-BR do Windows, ex.: Maria)
+    rate: 0                   # SAPI: -10 (lento) .. 10 (rápido)
+    output_enabled: true      # Aila fala as respostas por padrão
 
 avatar:
   enabled: false
