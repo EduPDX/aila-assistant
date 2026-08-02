@@ -118,6 +118,33 @@ def test_vision_agent_sends_image(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_lipsync_envelope(tmp_path: Path):
+    """A envoltória de amplitude acompanha o volume do áudio (boca abre/fecha)."""
+    import math
+    import wave
+
+    from aila.avatar.lipsync import amplitude_envelope
+
+    # WAV sintético: 1s de silêncio + 1s de tom alto (deve dar boca fechada->aberta)
+    sr = 16000
+    path = tmp_path / "tone.wav"
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        frames = bytearray()
+        for i in range(sr):  # silêncio
+            frames += (0).to_bytes(2, "little", signed=True)
+        for i in range(sr):  # tom
+            val = int(30000 * math.sin(2 * math.pi * 220 * i / sr))
+            frames += val.to_bytes(2, "little", signed=True)
+        w.writeframes(bytes(frames))
+
+    env, dur = amplitude_envelope(str(path), fps=30)
+    assert 1.9 < dur < 2.1
+    assert min(env) < 0.1 and max(env) > 0.8   # varia de fechada a aberta
+
+
 def test_osc_avatar_bridge_mapping():
     """A ponte OSC mapeia o AvatarState para os endereços /aila/* corretos."""
     pytest.importorskip("pythonosc")
