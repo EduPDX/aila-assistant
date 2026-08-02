@@ -100,16 +100,19 @@ async def avatar_test(request: Request, emotion: str = "happy", gesture: str = "
 
     Ex.: POST /api/avatar/test?emotion=confused&gesture=shrug
     """
-    from aila.avatar.protocol import AvatarState
+    from aila.avatar.protocol import AvatarState, Emotion, Gesture
 
     engine = request.app.state.engine
+    # tolera valores inválidos vindos da query (cai para o default)
+    emo = emotion if emotion in set(Emotion) else "neutral"
+    ges = gesture if gesture in set(Gesture) else "none"
     state = AvatarState(
-        emotion=emotion,
-        gesture=gesture,
+        emotion=emo,
+        gesture=ges,
         animation="talking",
         speech_state="talking",
         intensity=0.85,
-        text=f"teste: {emotion}",
+        text=f"teste: {emo}",
     ).to_event_payload()
     engine.last_avatar_state = state
     if engine.avatar_sink is not None:

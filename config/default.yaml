@@ -80,6 +80,12 @@ avatar:
   osc_host: "127.0.0.1"       # onde o Unreal escuta OSC
   osc_port: 8000              # porta do OSC Server no Unreal
   default_emotion: "neutral"
+  # --- Unreal via Remote Control (recomendado: sem OSC/Blueprint) ---
+  # Habilite em config/local.yaml. Requer o plugin "Remote Control API".
+  unreal_enabled: false
+  unreal_rc_url: "http://127.0.0.1:30010"
+  unreal_mesh_path: ""        # object path do componente de malha no nível
+  unreal_anim_base: "/Game/CiciToonCharacterShaderPak/Character/Hayakawa/Anim/"
 
 binary:
   # Pasta da instalação do Ghidra (contém support/analyzeHeadless).

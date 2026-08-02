@@ -112,6 +112,11 @@ class AvatarConfig(BaseModel):
     osc_host: str = "127.0.0.1"
     osc_port: int = 8000
     default_emotion: str = "neutral"
+    # --- Unreal via Remote Control (sem OSC/Blueprint) ---
+    unreal_enabled: bool = False
+    unreal_rc_url: str = "http://127.0.0.1:30010"
+    unreal_mesh_path: str = ""   # object path do componente de malha no nível
+    unreal_anim_base: str = "/Game/CiciToonCharacterShaderPak/Character/Hayakawa/Anim/"
 
 
 class BinaryConfig(BaseModel):

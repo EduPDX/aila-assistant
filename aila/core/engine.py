@@ -257,6 +257,15 @@ def build_engine(settings: Settings, llm: LLMBackend) -> AilaEngine:
             get_logger("engine").warning(
                 f"ponte OSC indisponível ({exc!r}). Instale: pip install -e \".[avatar]\""
             )
+
+    # Ponte Unreal via Remote Control (sem plugins extras). Tem precedência.
+    av = settings.avatar
+    if av.unreal_enabled and av.unreal_mesh_path:
+        from aila.avatar.unreal_bridge import UnrealRemoteControlBridge
+
+        engine.avatar_sink = UnrealRemoteControlBridge(
+            av.unreal_rc_url, av.unreal_mesh_path, av.unreal_anim_base
+        ).send
     # guarda refs úteis para a API (confirmação de permissão, auditoria)
     engine.permissions = permissions  # type: ignore[attr-defined]
     engine.audit = audit  # type: ignore[attr-defined]

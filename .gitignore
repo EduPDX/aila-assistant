@@ -15,6 +15,7 @@ env/
 # --- Environment / secrets ---
 .env
 *.local
+config/local.yaml
 
 # --- Modelos (pesos grandes, nunca versionar) ---
 models/

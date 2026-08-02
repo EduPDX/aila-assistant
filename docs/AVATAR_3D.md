@@ -21,7 +21,48 @@ O pacote já traz o essencial (confirmado nos assets):
 | `Anim_Wink`, `Anim_Nice`, `Anim_Quan`, `Anim_Doodle` | Gestos one-shot |
 | KawaiiPhysics + SPCRJointDynamics | Balanço de cabelo e saia |
 
-## 1. Lado da Aila
+## Método recomendado: Remote Control (sem plugins, sem Blueprint) ✅
+
+O jeito mais simples — e testado neste projeto — **não usa OSC nem Blueprint**.
+A Aila comanda a personagem pela **Web Remote Control API** do Unreal.
+
+**No Unreal (uma vez):**
+1. *Edit → Plugins* → habilite **Remote Control API** (+ Web Remote Control) e
+   reinicie. Ele sobe um servidor em `127.0.0.1:30010`.
+2. Deixe **uma** personagem no nível (ex.: `BP_Character` ou uma
+   `SkeletalMeshActor` da Hayakawa).
+
+**Na Aila (`config/local.yaml`):**
+```yaml
+avatar:
+  unreal_enabled: true
+  unreal_rc_url: "http://127.0.0.1:30010"
+  # object path do componente de malha da personagem no nível:
+  unreal_mesh_path: "/Game/.../Map_Main.Map_Main:PersistentLevel.SkeletalMeshActor_6.SkeletalMeshComponent0"
+  unreal_anim_base: "/Game/CiciToonCharacterShaderPak/Character/Hayakawa/Anim/"
+```
+
+Pronto. A cada emoção, a Aila faz `PUT /remote/object/call → PlayAnimation`,
+tocando `Anim_Breathy_Happy` (feliz), `Anim_Breathy_UnHappy` (triste/confuso) ou
+`Anim_Breathy` (neutro) — animações de **corpo inteiro**. Mapeamento em
+`aila/avatar/unreal_bridge.py`.
+
+**Testar sem chat:**
+```bash
+curl -X POST "http://127.0.0.1:8770/api/avatar/test?emotion=happy"
+```
+
+> Como descobrir o `unreal_mesh_path`? É `PersistentLevel.<Ator>.<Componente>`.
+> Para uma `SkeletalMeshActor`, o componente é `SkeletalMeshComponent0`; para um
+> `Character` BP, é `CharacterMesh0`.
+
+> **Próximos passos (corpo inteiro):** hoje tocamos animações inteiras por
+> emoção. Para locomoção/gestos de braço e perna dirigidos, o caminho é um
+> Animation Blueprint com *blend* por estado + montagens — dá para acionar as
+> montagens pelo mesmo Remote Control (`Montage_Play`) ou evoluir para o OSC
+> abaixo.
+
+## 1. (Alternativa) Lado da Aila para OSC
 
 ```powershell
 pip install -e ".[avatar]"      # instala python-osc
