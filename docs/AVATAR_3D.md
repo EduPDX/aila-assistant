@@ -60,6 +60,21 @@ Reinicie o editor.
 Arraste `Blueprints/Pawn/BP_Character` (Hayakawa) para um nível, ou use o nível
 de demo do pacote.
 
+### 3.2.1 Teste rápido do "cano" (faça isto primeiro)
+Antes de mexer em animação, prove que o Unreal recebe o OSC:
+
+1. Crie o `BP_AilaReceiver` só com **Create OSC Server** (port 8000, Start
+   Listening) + **On Osc Message Received** → **Print String** do endereço.
+2. Ponha o ator no nível e dê Play.
+3. No PC, rode o emissor de teste da Aila:
+
+   ```powershell
+   .\.venv\Scripts\python.exe scripts\send_test_osc.py
+   ```
+
+Você deve ver `/aila/emotion`, `/aila/gesture`, etc. aparecendo no Print String.
+Funcionou? Então passe a rotear para a personagem (3.4/3.5).
+
 ### 3.3 Ator receptor de OSC (`BP_AilaReceiver`)
 Crie um **Actor Blueprint**:
 
