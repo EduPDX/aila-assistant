@@ -94,6 +94,29 @@ async def avatar_current(request: Request) -> dict:
     }
 
 
+@router.post("/avatar/test")
+async def avatar_test(request: Request, emotion: str = "happy", gesture: str = "none") -> dict:
+    """Define manualmente o estado do avatar — para testar o receptor 3D sem chat.
+
+    Ex.: POST /api/avatar/test?emotion=confused&gesture=shrug
+    """
+    from aila.avatar.protocol import AvatarState
+
+    engine = request.app.state.engine
+    state = AvatarState(
+        emotion=emotion,
+        gesture=gesture,
+        animation="talking",
+        speech_state="talking",
+        intensity=0.85,
+        text=f"teste: {emotion}",
+    ).to_event_payload()
+    engine.last_avatar_state = state
+    if engine.avatar_sink is not None:
+        engine.avatar_sink(state)
+    return {"ok": True, "state": state}
+
+
 @router.get("/memory")
 async def memory(request: Request, n: int = 20) -> dict:
     engine = request.app.state.engine
