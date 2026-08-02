@@ -13,10 +13,10 @@ Embeddings são gravados como bytes float32 (compacto) no SQLite.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Awaitable, Callable
 
 import numpy as np
 
@@ -64,7 +64,7 @@ class MemoryStore:
     # ------------------------------------------------------------------ #
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
 
     @staticmethod
     def _normalize(v: np.ndarray) -> np.ndarray:

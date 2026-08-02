@@ -8,7 +8,7 @@ mensagem de sistema (persona).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 Role = Literal["system", "user", "assistant", "tool"]
@@ -22,7 +22,7 @@ class Message:
     # tool_calls: presente no turno do assistente que solicita ferramentas
     tool_calls: list[dict[str, Any]] | None = None
     timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
 
     def to_llm(self) -> dict[str, Any]:

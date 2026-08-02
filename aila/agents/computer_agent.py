@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import subprocess
 
-from aila.agents.base import AgentDeps, BaseAgent
+from aila.agents.base import BaseAgent
 from aila.core.logging import get_logger
 from aila.tools.schema import Tool, ToolParam, ToolResult
 

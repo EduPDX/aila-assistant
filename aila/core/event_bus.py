@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from aila.core.logging import get_logger
 
@@ -40,7 +41,7 @@ class Event:
     payload: dict[str, Any] = field(default_factory=dict)
     source: str = "unknown"
     timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
 
 

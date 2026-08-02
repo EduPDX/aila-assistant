@@ -7,8 +7,9 @@ tool-calling nativo do Ollama quanto o protocolo JSON próprio da Aila.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
 
 # Handler assíncrono: recebe os argumentos e retorna um ToolResult.
 ToolHandler = Callable[[dict[str, Any]], Awaitable["ToolResult"]]
@@ -30,11 +31,11 @@ class ToolResult:
     data: dict[str, Any] | None = None
 
     @classmethod
-    def success(cls, content: str, **data: Any) -> "ToolResult":
+    def success(cls, content: str, **data: Any) -> ToolResult:
         return cls(ok=True, content=content, data=data or None)
 
     @classmethod
-    def error(cls, content: str) -> "ToolResult":
+    def error(cls, content: str) -> ToolResult:
         return cls(ok=False, content=content)
 
 

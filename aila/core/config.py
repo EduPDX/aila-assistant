@@ -90,6 +90,13 @@ class AvatarConfig(BaseModel):
     default_emotion: str = "neutral"
 
 
+class BinaryConfig(BaseModel):
+    # Caminho da instalação do Ghidra (a pasta que contém support/analyzeHeadless).
+    # Vazio = integração Ghidra desabilitada (triagem básica continua funcionando).
+    ghidra_path: str = ""
+    analysis_timeout: int = 600  # segundos (Ghidra é lento)
+
+
 class MemoryConfig(BaseModel):
     enabled: bool = True
     embed_model: str = "nomic-embed-text"
@@ -122,6 +129,7 @@ class Settings(BaseSettings):
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    binary: BinaryConfig = Field(default_factory=BinaryConfig)
 
     # ------------------------------------------------------------------ #
     def sandbox_path(self) -> Path:

@@ -118,6 +118,33 @@ def test_vision_agent_sends_image(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_binary_agent_triage(tmp_path: Path):
+    """Triagem de binário funciona em modo somente-leitura (identify/entropy)."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.binary_agent import BinaryAgent
+
+    s = get_settings()
+    s.security.read_only = True
+    audit = AuditLog(tmp_path / "a.jsonl")
+    pm = PermissionManager(s.security, audit)
+    sandbox = PathSandbox(tmp_path / "ws")
+    deps = AgentDeps(settings=s, permissions=pm, sandbox=sandbox, llm=None)
+    tools = {t.name: t for t in BinaryAgent(deps).tools()}
+
+    (sandbox.root / "fake.exe").write_bytes(b"MZ" + bytes(range(256)) * 4)
+
+    async def go():
+        r = await tools["binary.identify"].handler({"path": "fake.exe"})
+        assert r.ok and "Windows" in r.content
+        r = await tools["binary.entropy"].handler({"path": "fake.exe"})
+        assert r.ok and "Entropia" in r.content
+        # sem Ghidra configurado -> erro amigável, não exceção
+        r = await tools["binary.decompile"].handler({"path": "fake.exe"})
+        assert not r.ok and "Ghidra" in r.content
+
+    asyncio.run(go())
+
+
 def test_tts_sapi_synthesis(tmp_path: Path):
     """No Windows, o TTS SAPI gera um WAV não-vazio (a Aila fala)."""
     import sys

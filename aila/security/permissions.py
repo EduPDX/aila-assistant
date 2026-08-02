@@ -13,7 +13,7 @@ este módulo não conhece a interface — apenas orquestra a decisão.
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from aila.core.config import SecurityConfig
 from aila.core.logging import get_logger

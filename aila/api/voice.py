@@ -47,7 +47,7 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
         text = voice.transcribe_bytes(data, suffix=suffix)
     except Exception as exc:  # noqa: BLE001
         log.exception("falha na transcrição")
-        raise HTTPException(status_code=500, detail=f"Falha na transcrição: {exc}")
+        raise HTTPException(status_code=500, detail=f"Falha na transcrição: {exc}") from exc
     return JSONResponse({"text": text})
 
 
@@ -61,5 +61,5 @@ async def speak(request: Request, body: SpeakBody) -> FileResponse:
         wav = voice.speak_to_file(text)
     except Exception as exc:  # noqa: BLE001
         log.exception("falha na síntese")
-        raise HTTPException(status_code=500, detail=f"Falha na síntese: {exc}")
+        raise HTTPException(status_code=500, detail=f"Falha na síntese: {exc}") from exc
     return FileResponse(str(wav), media_type="audio/wav", filename="aila.wav")

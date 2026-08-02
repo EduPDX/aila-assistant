@@ -7,8 +7,9 @@ interface, de modo que o resto do sistema não conhece detalhes do backend.
 from __future__ import annotations
 
 import abc
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator
+from typing import Any
 
 
 @dataclass(slots=True)

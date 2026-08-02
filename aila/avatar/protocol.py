@@ -19,12 +19,12 @@ Formato do payload (exemplo):
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class Emotion(str, Enum):
+class Emotion(StrEnum):
     NEUTRAL = "neutral"
     HAPPY = "happy"
     CONFIDENT = "confident"
@@ -35,7 +35,7 @@ class Emotion(str, Enum):
     THINKING = "thinking"
 
 
-class Gesture(str, Enum):
+class Gesture(StrEnum):
     NONE = "none"
     HAND_EXPLAIN = "hand_explain"
     POINT = "point"
@@ -45,7 +45,7 @@ class Gesture(str, Enum):
     NOD = "nod"
 
 
-class Animation(str, Enum):
+class Animation(StrEnum):
     IDLE = "idle"
     THINKING = "thinking"
     TALKING = "talking"
@@ -53,7 +53,7 @@ class Animation(str, Enum):
     CELEBRATE = "celebrate"
 
 
-class SpeechState(str, Enum):
+class SpeechState(StrEnum):
     SILENT = "silent"
     TALKING = "talking"
     LISTENING = "listening"

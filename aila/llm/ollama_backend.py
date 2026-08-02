@@ -8,7 +8,8 @@ aceleração CUDA da RTX 4060 automaticamente — o offload de camadas para a GP
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 

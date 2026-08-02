@@ -7,7 +7,7 @@ alimentar a memória de longo prazo (embeddings/RAG).
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from aila.core.config import PROJECT_ROOT
@@ -38,7 +38,7 @@ class ConversationStore:
         self.conn.commit()
 
     def _now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
 
     def create_session(self, title: str = "Nova conversa") -> int:
         cur = self.conn.execute(

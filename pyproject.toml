@@ -43,7 +43,14 @@ include = ["aila*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Script Jython roda no interpretador do Ghidra (Python 2.7): fora do lint.
+extend-exclude = ["aila/tools/ghidra"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]
+# B027: métodos de ciclo de vida opcionais em ABC (ex.: aclose) podem ser vazios.
+ignore = ["E501", "B027"]
+
+[tool.ruff.lint.per-file-ignores]
+# B008: File(...)/Depends(...) em defaults é o idioma padrão do FastAPI.
+"aila/api/*" = ["B008"]

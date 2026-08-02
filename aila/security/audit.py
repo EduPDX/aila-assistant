@@ -7,7 +7,7 @@ Toda ação sensível (escrita de arquivo, comando, controle de mouse/teclado)
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +30,7 @@ class AuditLog:
         allowed: bool,
     ) -> None:
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "action": action,
             "agent": agent,
             "params": _safe(params),

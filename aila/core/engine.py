@@ -15,7 +15,8 @@ WebSocket), então a engine não conhece a camada de transporte.
 from __future__ import annotations
 
 import json
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aila.agents.base import AgentDeps
 from aila.agents.manager import AgentManager
@@ -41,8 +42,8 @@ class AilaEngine:
         settings: Settings,
         llm: LLMBackend,
         agents: AgentManager,
-        store: "ConversationStore | None" = None,
-        memory: "MemoryStore | None" = None,
+        store: ConversationStore | None = None,
+        memory: MemoryStore | None = None,
     ) -> None:
         self.settings = settings
         self.llm = llm

@@ -7,7 +7,7 @@ depois, ou buscar o que já sabe sobre um assunto.
 
 from __future__ import annotations
 
-from aila.agents.base import AgentDeps, BaseAgent
+from aila.agents.base import BaseAgent
 from aila.core.logging import get_logger
 from aila.tools.schema import Tool, ToolParam, ToolResult
 

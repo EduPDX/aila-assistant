@@ -50,7 +50,7 @@ class WSSession:
         )
         try:
             return await asyncio.wait_for(fut, timeout=120)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
         finally:
             self._pending.pop(req_id, None)

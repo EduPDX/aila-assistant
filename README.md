@@ -3,7 +3,7 @@
 > Um agente de IA multimodal, com voz e avatar 3D, que roda **100% local** no seu PC.
 > Capacidades no estilo ChatGPT + Claude Code, sem depender de nuvem.
 
-[![Status](https://img.shields.io/badge/status-alpha-orange)]()
+[![CI](https://github.com/EduPDX/aila-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/EduPDX/aila-assistant/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)]()
 [![Platform](https://img.shields.io/badge/platform-Windows%2011-informational)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
@@ -87,27 +87,31 @@ aila-assistant/
 - [Ollama](https://ollama.com/download) instalado
 - Drivers NVIDIA + CUDA atualizados
 
-### 2. Instalação
+### 2. Instalação (um comando)
 
 ```powershell
-cd aila-assistant
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e .
-copy .env.example .env
+.\install.ps1                    # base (chat, agentes, avatar)
 ```
 
-### 3. Baixar um modelo
+Ou com os módulos opcionais que quiser:
 
 ```powershell
-ollama serve        # em um terminal
-.\scripts\pull_models.ps1
+.\install.ps1 -Extras voice,vision   # + voz (Whisper) e captura de tela
 ```
 
-### 4. Rodar
+```powershell
+.\install.ps1 -All -PullModels       # tudo + baixa os modelos do Ollama
+```
+
+Extras: `voice` (STT Whisper), `piper` (TTS neural), `vision` (captura de
+tela), `computer` (controle de mouse/teclado), `dev` (lint/testes).
+A **saída de voz** (a Aila falar) já funciona sem extras, via SAPI do Windows.
+
+### 3. Rodar
 
 ```powershell
-python -m aila.main
+ollama serve                                  # em outro terminal
+.\.venv\Scripts\python.exe -m aila.main
 ```
 
 Abra `http://localhost:8770` no navegador.
@@ -130,7 +134,7 @@ O projeto é entregue em fases. O que já funciona e o que vem a seguir está em
 | 2    | Computer Agent (mouse/teclado/janelas/cmd) | ✅ funcional  |
 | 2    | Voz: STT (Whisper) + TTS (SAPI/Piper) + conversa | ✅ funcional  |
 | 3    | Vision Agent (LLaVA: imagem/OCR/tela) | ✅ funcional  |
-| 3    | Binary Agent (Ghidra)               | 🚧 interface  |
+| 3    | Binary Agent (triagem + Ghidra)     | ✅ funcional  |
 | 4    | Avatar visual no navegador (SVG + lip-sync) | ✅ funcional  |
 | 4    | Avatar 3D dedicado (Unreal/Unity)   | 🧩 protocolo  |
 

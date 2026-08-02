@@ -53,10 +53,10 @@ agents:
     - code
     - memory
     - vision
-  # Agentes desabilitados por padrão (exigem extras / risco):
+    - binary
+  # Agentes desabilitados por padrão (risco de controle do SO):
   disabled:
     - computer
-    - binary
 
 voice:
   enabled: true
@@ -75,6 +75,13 @@ avatar:
   enabled: false
   transport: "websocket"      # canal para enviar AvatarState à engine 3D
   default_emotion: "neutral"
+
+binary:
+  # Pasta da instalação do Ghidra (contém support/analyzeHeadless).
+  # Vazio = decompilação Ghidra desabilitada; a triagem (tipo, strings,
+  # entropia, cabeçalho PE) funciona sem Ghidra.
+  ghidra_path: ""
+  analysis_timeout: 600
 
 memory:
   enabled: true               # memória de longo prazo (RAG)

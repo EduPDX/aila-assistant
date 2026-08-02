@@ -98,15 +98,20 @@ Envie imagens pela UI (botão 📎) ou via `POST /api/upload` → elas vão para
 analisa screenshots do Computer Agent (loop **ver → entender → agir**).
 Se o modelo não estiver baixado, as tools retornam instrução para `ollama pull`.
 
-## Binary Agent — `binary` 🚧 (Fase 3)
-Triagem de binários e ponte para o Ghidra.
+## Binary Agent — `binary` ✅ (Fase 3)
+Triagem de binários (sem dependências) + descompilação com Ghidra. Todas as
+ações são **leitura**. Detalhes em [BINARY.md](BINARY.md).
 
 | Tool | Descrição |
 |------|-----------|
-| `binary.identify` | Identifica o tipo pelo cabeçalho (magic bytes) |
+| `binary.identify` | Tipo pelo cabeçalho (magic bytes) + tamanho |
 | `binary.strings` | Extrai strings ASCII legíveis |
+| `binary.entropy` | Entropia de Shannon (detecta packed/cifrado) |
+| `binary.pe_info` | Cabeçalho PE (arquitetura, formato, seções) |
+| `binary.decompile` | Ghidra headless → pseudo-C (requer `binary.ghidra_path`) |
 
-Integração Ghidra headless (descompilação) planejada para a Fase 3.
+Análise **estática** — o binário nunca é executado. A decompilação usa
+`analyzeHeadless` + um script Jython em `aila/tools/ghidra/`.
 
 ## Como a IA escolhe a ferramenta (roteamento automático)
 
