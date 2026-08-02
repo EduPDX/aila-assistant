@@ -62,31 +62,42 @@ class UnrealRemoteControlBridge:
         self._client = httpx.Client(timeout=1.5)
         self._last_key: tuple[str, str] | None = None
         self._timer: threading.Timer | None = None
+        self._editor_ready = False
         log.info(f"ponte Unreal (Remote Control) -> {self.call_url}")
 
     def _full_asset(self, name: str) -> str:
         # /Game/.../Anim/Anim_X  ->  /Game/.../Anim/Anim_X.Anim_X
         return f"{self.anim_base}{name}.{name}"
 
-    def play(self, anim_name: str, looping: bool = True) -> bool:
+    def _rc_call(self, function_name: str, parameters: dict) -> bool:
         body = {
             "objectPath": self.mesh_path,
-            "functionName": "PlayAnimation",
-            "parameters": {
-                "NewAnimToPlay": self._full_asset(anim_name),
-                "bLooping": looping,
-            },
+            "functionName": function_name,
+            "parameters": parameters,
             "generateTransaction": False,
         }
         try:
             resp = self._client.put(self.call_url, json=body)
             if resp.status_code >= 400:
-                log.warning(f"Unreal recusou PlayAnimation: {resp.status_code} {resp.text[:120]}")
+                log.warning(f"Unreal recusou {function_name}: {resp.status_code} {resp.text[:120]}")
                 return False
             return True
         except httpx.HTTPError as exc:
             log.warning(f"Unreal indisponível (Remote Control): {exc!r}")
             return False
+
+    def _ensure_editor_updates(self) -> None:
+        # Sem isto, PlayAnimation não atualiza a malha no viewport do EDITOR.
+        if not self._editor_ready:
+            if self._rc_call("SetUpdateAnimationInEditor", {"NewUpdateState": True}):
+                self._editor_ready = True
+
+    def play(self, anim_name: str, looping: bool = True) -> bool:
+        self._ensure_editor_updates()
+        return self._rc_call(
+            "PlayAnimation",
+            {"NewAnimToPlay": self._full_asset(anim_name), "bLooping": looping},
+        )
 
     def _resume_idle(self, emotion: str) -> None:
         self.play(EMO_ANIM.get(emotion, "Anim_Breathy"), looping=True)
