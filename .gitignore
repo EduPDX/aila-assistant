@@ -25,6 +25,8 @@ models/
 *.onnx
 *.pt
 *.pth
+*.vrm
+ui/models/
 
 # --- Dados / banco / logs ---
 data/

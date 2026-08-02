@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aila — Avatar 3D</title>
+<style>
+  :root { --accent:#35d0ba; --bg:#0a0e14; --panel:#0f1620; --border:#1e2a3a; --muted:#6b7c93; }
+  * { box-sizing:border-box; margin:0; }
+  html,body { height:100%; background:radial-gradient(circle at 50% 30%, #16202c, var(--bg)); overflow:hidden;
+    font-family:"Segoe UI",system-ui,sans-serif; color:#d7e0ea; }
+  #app { position:fixed; inset:0; }
+  #canvas { width:100%; height:100%; display:block; }
+  #hud { position:fixed; left:14px; top:12px; font-size:12px; color:var(--muted);
+    background:rgba(15,22,32,.6); border:1px solid var(--border); border-radius:10px; padding:8px 12px; }
+  #hud b { color:var(--accent); }
+  #emotion { color:var(--accent); text-transform:uppercase; letter-spacing:1px; }
+  #err { position:fixed; inset:0; display:none; align-items:center; justify-content:center; padding:8%;
+    text-align:center; line-height:1.6; }
+  #err.show { display:flex; }
+  #err code { background:var(--panel); padding:2px 6px; border-radius:4px; color:var(--accent); }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); }
+</style>
+</head>
+<body>
+  <div id="app"><canvas id="canvas"></canvas></div>
+  <div id="loading">carregando avatar 3D…</div>
+  <div id="hud">
+    <div>Aila · avatar 3D (VRM)</div>
+    <div>emoção: <span id="emotion">neutral</span> · <span id="state">idle</span></div>
+  </div>
+  <div id="err">
+    <div>
+      <h2>Nenhum modelo VRM encontrado 🙈</h2>
+      <p>Coloque um arquivo <code>.vrm</code> em <code>ui/models/avatar.vrm</code><br>
+      (crie um grátis no <b>VRoid Studio</b> e exporte como VRM), ou abra com
+      <code>?model=URL</code>.</p>
+      <p id="errdetail" style="color:var(--muted);font-size:12px;margin-top:10px"></p>
+    </div>
+  </div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.6/lib/three-vrm.module.min.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const MODEL_URL = params.get('model') || '/static/models/avatar.vrm';
+
+// ---------------- cena ----------------
+const renderer = new THREE.WebGLRenderer({ canvas: $('canvas'), antialias:true, alpha:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, innerWidth/innerHeight, 0.1, 20);
+camera.position.set(0, 1.3, 1.6);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.28, 0);
+controls.enablePan = false;
+controls.minDistance = 0.8; controls.maxDistance = 4;
+controls.update();
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.4));
+const dir = new THREE.DirectionalLight(0xffffff, 1.6);
+dir.position.set(1, 2, 2); scene.add(dir);
+const rim = new THREE.DirectionalLight(0x35d0ba, 0.6);
+rim.position.set(-1, 1, -2); scene.add(rim);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ---------------- carregar VRM ----------------
+let vrm = null;
+const loader = new GLTFLoader();
+loader.register((parser) => new VRMLoaderPlugin(parser));
+
+loader.load(MODEL_URL, (gltf) => {
+  vrm = gltf.userData.vrm;
+  // otimizações opcionais (variam por versão do three-vrm)
+  try { VRMUtils.removeUnnecessaryJoints?.(gltf.scene); } catch(e){}
+  try { VRMUtils.removeUnnecessaryVertices?.(gltf.scene); } catch(e){}
+  try { VRMUtils.combineSkeletons?.(gltf.scene); } catch(e){}
+  if (vrm.meta?.metaVersion === '0') VRMUtils.rotateVRM0(vrm);  // VRM0 encara a câmera
+  vrm.scene.traverse((o) => { o.frustumCulled = false; });
+  scene.add(vrm.scene);
+  window.vrm = vrm;  // debug
+  $('loading').style.display = 'none';
+  restPose();
+}, undefined, (e) => {
+  $('loading').style.display = 'none';
+  $('err').classList.add('show');
+  $('errdetail').textContent = 'tentei carregar: ' + MODEL_URL + '  ·  ' + (e?.message || e);
+});
+
+// braços um pouco abaixados (pose de descanso natural)
+function restPose() {
+  const h = vrm?.humanoid; if (!h) return;
+  const set = (name, x, y, z) => {
+    const b = h.getNormalizedBoneNode(name); if (b) b.rotation.set(x, y, z);
+  };
+  set('leftUpperArm', 0, 0, 1.2);
+  set('rightUpperArm', 0, 0, -1.2);
+  set('leftLowerArm', 0, -0.2, 0.3);
+  set('rightLowerArm', 0, 0.2, -0.3);
+}
+
+// ---------------- expressões / emoção ----------------
+const EMO = {
+  happy:'happy', confident:'happy', surprised:'surprised', sad:'sad',
+  confused:'sad', focused:'relaxed', thinking:'relaxed', neutral:'neutral',
+};
+const ALL_EMO = ['happy','angry','sad','relaxed','surprised','neutral'];
+let targetEmotion = 'neutral', mouthTarget = 0, mouthNow = 0;
+
+function setEmotion(name) {
+  targetEmotion = EMO[name] || 'neutral';
+  $('emotion').textContent = name;
+}
+function applyExpressions(dt) {
+  const em = vrm?.expressionManager; if (!em) return;
+  for (const e of ALL_EMO) {
+    const cur = em.getValue(e) || 0;
+    const goal = (e === targetEmotion) ? 0.85 : 0.0;
+    em.setValue(e, cur + (goal - cur) * Math.min(1, dt*8));
+  }
+  mouthNow += (mouthTarget - mouthNow) * Math.min(1, dt*20);
+  em.setValue('aa', mouthNow);   // viseme da boca (lip-sync)
+}
+
+// piscar automático
+let nextBlink = 1.5, blinking = 0;
+function updateBlink(dt) {
+  const em = vrm?.expressionManager; if (!em) return;
+  nextBlink -= dt;
+  if (nextBlink <= 0 && blinking <= 0) { blinking = 0.18; nextBlink = 2 + Math.random()*4; }
+  if (blinking > 0) {
+    blinking -= dt;
+    const b = Math.sin(Math.max(0, blinking)/0.18 * Math.PI);
+    em.setValue('blink', b);
+  }
+}
+
+// respiração idle sutil
+let breathT = 0;
+function idle(dt) {
+  breathT += dt;
+  const h = vrm?.humanoid; if (!h) return;
+  const chest = h.getNormalizedBoneNode('chest') || h.getNormalizedBoneNode('spine');
+  if (chest) chest.rotation.x = Math.sin(breathT*1.4) * 0.02;
+}
+
+// ---------------- loop ----------------
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  if (vrm) {
+    idle(dt); updateBlink(dt); applyExpressions(dt);
+    vrm.update(dt);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// ---------------- Aila: WebSocket + lip-sync ----------------
+let ws, ttsAudio, lipCtx, lipAnalyser, lipBuf;
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.type === 'avatar.state') { setEmotion(m.emotion); $('state').textContent = m.animation || m.speech_state || 'idle'; }
+    else if (m.type === 'assistant.message' && m.text) speak(m.text);
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+connect();
+
+async function speak(text) {
+  try {
+    const r = await fetch('/api/voice/speak', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text})
+    });
+    if (!r.ok) return;
+    const blob = await r.blob();
+    if (ttsAudio) { try{ttsAudio.pause();}catch(e){} }
+    ttsAudio = new Audio(URL.createObjectURL(blob));
+    lipCtx = lipCtx || new (window.AudioContext||window.webkitAudioContext)();
+    if (lipCtx.state === 'suspended') await lipCtx.resume();
+    const src = lipCtx.createMediaElementSource(ttsAudio);
+    lipAnalyser = lipCtx.createAnalyser(); lipAnalyser.fftSize = 1024;
+    lipBuf = new Uint8Array(lipAnalyser.fftSize);
+    src.connect(lipAnalyser); lipAnalyser.connect(lipCtx.destination);
+    driveMouth();
+    ttsAudio.onended = () => { mouthTarget = 0; lipAnalyser = null; };
+    await ttsAudio.play();
+  } catch(e) {}
+}
+function driveMouth() {
+  if (!lipAnalyser) return;
+  lipAnalyser.getByteTimeDomainData(lipBuf);
+  let sum=0; for (let i=0;i<lipBuf.length;i++){ const v=(lipBuf[i]-128)/128; sum+=v*v; }
+  mouthTarget = Math.min(1, Math.sqrt(sum/lipBuf.length) * 4.5);
+  requestAnimationFrame(driveMouth);
+}
+
+// permite testar do console / do chat: window.ailaSpeak("texto")
+window.ailaSpeak = speak;
+window.ailaEmotion = setEmotion;
+</script>
+</body>
+</html>
