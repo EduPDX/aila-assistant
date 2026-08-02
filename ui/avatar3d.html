@@ -208,7 +208,18 @@ function connect() {
   };
   ws.onclose = () => setTimeout(connect, 2000);
 }
-connect();
+
+// Embutido na UI principal: NÃO conecta ao /ws (a página-mãe comanda via
+// postMessage). Standalone: conecta normalmente.
+const EMBEDDED = window.parent && window.parent !== window;
+if (!EMBEDDED) connect();
+
+// comandos da página-mãe (index.html): emoção e boca (lip-sync)
+addEventListener('message', (e) => {
+  const d = e.data || {};
+  if (d.type === 'aila:emotion') { setEmotion(d.value); $('state').textContent = d.state || 'idle'; }
+  else if (d.type === 'aila:mouth') { mouthTarget = Math.max(0, Math.min(1, d.value)); }
+});
 
 async function speak(text) {
   try {

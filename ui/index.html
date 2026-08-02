@@ -234,7 +234,9 @@
   <!-- Painel do Avatar -->
   <aside class="avatar-panel">
     <div class="avatar-name">A I L A</div>
-    <div class="avatar-stage">
+    <iframe id="avatar3d" src="/static/avatar3d.html"
+            style="width:100%;height:360px;border:none;border-radius:14px;background:transparent"></iframe>
+    <div class="avatar-stage" style="display:none">
       <div id="ava-gesture">👋</div>
       <svg id="ava" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -657,6 +659,7 @@
       open = 0.22 + 0.2 * Math.abs(Math.sin(Date.now() / 85));
     }
     setMouth(curCurve, open);
+    toAvatar3D({ type: "aila:mouth", value: open });   // lip-sync no VRM 3D
     requestAnimationFrame(render);
   }
 
@@ -666,7 +669,13 @@
     setTimeout(blink, 2400 + Math.random() * 3600);
   }
 
+  function toAvatar3D(msg) {
+    const f = document.getElementById("avatar3d");
+    if (f && f.contentWindow) f.contentWindow.postMessage(msg, "*");
+  }
+
   function applyAvatarState(m) {
+    toAvatar3D({ type: "aila:emotion", value: m.emotion, state: m.animation || m.speech_state });
     const e = EMO[m.emotion] || EMO.neutral;
     const k = (m.intensity != null ? m.intensity : 0.6) * 1.3 + 0.3;
     browL.style.transform = `rotate(${e.brow[0] * k * 0.06}rad)`;
