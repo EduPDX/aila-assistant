@@ -213,6 +213,12 @@ function connect() {
 // postMessage). Standalone: conecta normalmente.
 const EMBEDDED = window.parent && window.parent !== window;
 if (!EMBEDDED) connect();
+if (EMBEDDED) { const c = document.getElementById('controls'); if (c) c.style.display = 'none'; }
+
+// permite recarregar o VRM padrão (após trocar pelo drawer da UI-mãe)
+addEventListener('message', (e) => {
+  if ((e.data||{}).type === 'aila:reloadVRM') loadVRM('/static/models/avatar.vrm?t=' + Date.now());
+});
 
 // comandos da página-mãe (index.html): emoção e boca (lip-sync)
 addEventListener('message', (e) => {

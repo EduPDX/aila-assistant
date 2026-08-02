@@ -1,0 +1,23 @@
+{
+  "name": "aila-desktop",
+  "version": "0.1.0",
+  "description": "Aila — app de desktop (Electron) que roda o backend Python e a interface do avatar",
+  "main": "electron/main.js",
+  "author": "EduPDX",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.edupdx.aila",
+    "productName": "Aila",
+    "files": ["electron/**/*"],
+    "win": { "target": "nsis" },
+    "publish": [{ "provider": "github", "owner": "EduPDX", "repo": "aila-assistant" }]
+  }
+}

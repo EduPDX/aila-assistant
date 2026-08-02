@@ -76,7 +76,9 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def index():  # noqa: ANN202
-        return FileResponse(UI_DIR / "index.html")
+        # nova UI (avatar central + drawer de config + temas); index.html antigo
+        # continua acessível em /static/index.html
+        return FileResponse(UI_DIR / "app.html")
 
     if UI_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(UI_DIR)), name="static")
