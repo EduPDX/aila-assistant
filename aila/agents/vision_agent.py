@@ -1,7 +1,17 @@
 """Vision Agent — análise de imagens, screenshots e interfaces.
 
-⚠️  FASE 3. Usa um modelo multimodal (LLaVA / Qwen-VL) servido pelo Ollama.
-A captura de tela requer o extra ``vision`` (mss + pillow).
+FASE 3. Usa um modelo multimodal (LLaVA / Qwen-VL) servido pelo Ollama. O
+Ollama aceita imagens em base64 no campo ``images`` da mensagem de chat.
+
+Fecha o ciclo com o Computer Agent: ele captura a tela (`computer.screenshot`
+ou `vision.screenshot_analyze`), o Vision Agent interpreta, e a IA decide a ação.
+
+Requer o modelo baixado::
+
+    ollama pull llava:7b        # ou qwen2.5vl:7b
+
+Se o modelo não estiver disponível, as ferramentas retornam uma mensagem clara
+em vez de quebrar.
 """
 
 from __future__ import annotations
@@ -9,16 +19,28 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
+import httpx
+
 from aila.agents.base import AgentDeps, BaseAgent
 from aila.core.logging import get_logger
 from aila.tools.schema import Tool, ToolParam, ToolResult
 
 log = get_logger("vision_agent")
 
+_DEFAULT_PROMPT = "Descreva esta imagem em detalhes, em português."
+_UI_PROMPT = (
+    "Você está vendo uma captura de tela de um computador. Descreva a interface: "
+    "quais janelas/apps estão abertos, botões e campos visíveis, e onde estão "
+    "(canto superior, centro, etc.). Seja objetivo e útil para automação."
+)
+
 
 class VisionAgent(BaseAgent):
     name = "vision"
-    description = "Analisa imagens e screenshots, interpretando interfaces e conteúdo visual."
+    description = (
+        "Analisa imagens e screenshots com um modelo multimodal (LLaVA): descreve "
+        "conteúdo, lê texto e interpreta interfaces para ajudar a agir na tela."
+    )
 
     def __init__(self, deps: AgentDeps) -> None:
         super().__init__(deps)
@@ -28,59 +50,95 @@ class VisionAgent(BaseAgent):
         return [
             Tool(
                 name="vision.analyze_image",
-                description="Descreve/analisa uma imagem do workspace.",
+                description="Descreve/analisa uma imagem que está no workspace.",
                 params=[
                     ToolParam("path", "string", "Caminho da imagem no workspace"),
-                    ToolParam("question", "string", "O que analisar", required=False),
+                    ToolParam("question", "string", "O que analisar (opcional)",
+                              required=False),
                 ],
                 handler=self._analyze,
                 agent=self.name,
             ),
             Tool(
+                name="vision.read_text",
+                description="Lê/extrai o texto visível em uma imagem (OCR via modelo).",
+                params=[ToolParam("path", "string", "Caminho da imagem no workspace")],
+                handler=self._read_text,
+                agent=self.name,
+            ),
+            Tool(
                 name="vision.screenshot_analyze",
-                description="Captura a tela e a interpreta (requer extra 'vision').",
-                params=[ToolParam("question", "string", "O que procurar", required=False)],
+                description="Captura a tela agora e interpreta a interface visível.",
+                params=[
+                    ToolParam("question", "string", "O que procurar (opcional)",
+                              required=False)
+                ],
                 handler=self._screenshot,
                 agent=self.name,
             ),
         ]
 
-    async def _describe(self, image_b64: str, question: str) -> str:
-        """Envia imagem+pergunta ao modelo multimodal via Ollama.
+    # ------------------------------------------------------------------ #
+    async def _describe(self, image_b64: str, prompt: str) -> ToolResult:
+        """Envia imagem+pergunta ao modelo multimodal via Ollama."""
+        messages = [{"role": "user", "content": prompt, "images": [image_b64]}]
+        try:
+            out = await self.deps.llm.complete(messages, model=self.vision_model)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return ToolResult.error(
+                    f"Modelo de visão '{self.vision_model}' não encontrado. "
+                    f"Baixe com: ollama pull {self.vision_model}"
+                )
+            return ToolResult.error(f"Erro do modelo de visão: {exc}")
+        except httpx.HTTPError as exc:
+            return ToolResult.error(f"Falha ao contatar o modelo de visão: {exc}")
+        return ToolResult.success(out.strip() or "(sem descrição)")
 
-        O backend Ollama aceita imagens no campo ``images`` da mensagem.
-        """
-        messages = [
-            {
-                "role": "user",
-                "content": question or "Descreva esta imagem em detalhes.",
-                "images": [image_b64],
-            }
-        ]
-        return await self.deps.llm.complete(messages, model=self.vision_model)
+    def _encode_workspace_image(self, rel_path: str) -> tuple[str | None, str | None]:
+        """Retorna (base64, erro). Valida sandbox e existência."""
+        path = self.deps.sandbox.resolve(rel_path)
+        if not path.is_file():
+            return None, f"Imagem não encontrada no workspace: {rel_path}"
+        data = path.read_bytes()
+        if len(data) > 20_000_000:
+            return None, "Imagem muito grande (>20MB)."
+        return base64.b64encode(data).decode(), None
 
     async def _analyze(self, args: dict) -> ToolResult:
-        await self.authorize("vision.analyze_image", args)
-        path = self.deps.sandbox.resolve(args["path"])
-        if not path.is_file():
-            return ToolResult.error(f"Imagem não encontrada: {args['path']}")
-        b64 = base64.b64encode(Path(path).read_bytes()).decode()
-        out = await self._describe(b64, args.get("question", ""))
-        return ToolResult.success(out)
+        await self.authorize("vision.analyze", args)  # leitura (permitido em RO)
+        b64, err = self._encode_workspace_image(args["path"])
+        if err:
+            return ToolResult.error(err)
+        return await self._describe(b64, args.get("question") or _DEFAULT_PROMPT)
+
+    async def _read_text(self, args: dict) -> ToolResult:
+        await self.authorize("vision.read", args)  # leitura (permitido em RO)
+        b64, err = self._encode_workspace_image(args["path"])
+        if err:
+            return ToolResult.error(err)
+        prompt = (
+            "Transcreva TODO o texto visível nesta imagem, preservando a ordem de "
+            "leitura. Responda apenas com o texto, sem comentários."
+        )
+        return await self._describe(b64, prompt)
 
     async def _screenshot(self, args: dict) -> ToolResult:
-        await self.authorize("vision.analyze_image", args)
+        await self.authorize("vision.screenshot.get", args)
         try:
             import mss  # type: ignore
+            import mss.tools  # type: ignore
         except Exception:  # noqa: BLE001
             return ToolResult.error(
-                "Captura indisponível. Instale: pip install -e \".[vision]\""
+                'Captura indisponível. Instale: pip install -e ".[vision]"'
             )
+        # captura a tela e salva no workspace (fica inspecionável)
+        dest = self.deps.sandbox.resolve("_screenshot_vision.png")
         with mss.mss() as sct:
-            shot = sct.grab(sct.monitors[0])
-            import mss.tools  # type: ignore
-
-            png = mss.tools.to_png(shot.rgb, shot.size)
-        b64 = base64.b64encode(png).decode()
-        out = await self._describe(b64, args.get("question", ""))
-        return ToolResult.success(out)
+            sct.shot(mon=-1, output=str(dest))
+        b64 = base64.b64encode(Path(dest).read_bytes()).decode()
+        prompt = args.get("question") or _UI_PROMPT
+        result = await self._describe(b64, prompt)
+        if result.data is None:
+            result.data = {}
+        return result

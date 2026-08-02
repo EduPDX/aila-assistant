@@ -40,8 +40,10 @@ A Aila é entregue em fases. Cada fase é utilizável por conta própria — nad
 
 ## Fase 3 — Multimodal e binários
 
-- [ ] **Vision Agent**: LLaVA / Qwen-VL via Ollama (imagem + screenshot)
-- [ ] Interpretação de UI (detecção de elementos, OCR) para o Computer Agent
+- ✅ **Vision Agent**: LLaVA/Qwen-VL via Ollama — analisar imagem, OCR
+  (`vision.read_text`) e interpretar a tela (`vision.screenshot_analyze`);
+  upload de imagem na UI (📎) e `/api/upload`
+- [ ] Coordenadas de elementos de UI (clicar exatamente onde a visão indicou)
 - [ ] **Binary Agent**: integração Ghidra headless (descompilação, chamadas)
 
 ## Fase 4 — Avatar 3D

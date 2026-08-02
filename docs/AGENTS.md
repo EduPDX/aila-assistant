@@ -83,13 +83,20 @@ para abortar qualquer automação em andamento.
 4. Mantenha `security.confirm_destructive: true` — cada clique/tecla/comando
    pede sua confirmação na UI.
 
-## Vision Agent — `vision` 🚧 (Fase 3)
-Análise visual via modelo multimodal (LLaVA/Qwen-VL) no Ollama.
+## Vision Agent — `vision` ✅ (Fase 3)
+Análise visual via modelo multimodal (LLaVA/Qwen-VL) no Ollama. Requer
+`ollama pull llava:7b`. Ações são **leitura** (funcionam em modo somente-leitura).
 
 | Tool | Descrição |
 |------|-----------|
 | `vision.analyze_image` | Descreve/analisa uma imagem do workspace |
-| `vision.screenshot_analyze` | Captura a tela e interpreta (extra `vision`) |
+| `vision.read_text` | Lê/extrai o texto visível numa imagem (OCR via modelo) |
+| `vision.screenshot_analyze` | Captura a tela (mss) e interpreta a interface |
+
+Envie imagens pela UI (botão 📎) ou via `POST /api/upload` → elas vão para
+`workspace/uploads/`. O Vision Agent lê imagens do workspace, então também
+analisa screenshots do Computer Agent (loop **ver → entender → agir**).
+Se o modelo não estiver baixado, as tools retornam instrução para `ollama pull`.
 
 ## Binary Agent — `binary` 🚧 (Fase 3)
 Triagem de binários e ponte para o Ghidra.

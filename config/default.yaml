@@ -52,10 +52,10 @@ agents:
     - file
     - code
     - memory
-  # Agentes desabilitados por padrão (fases futuras / exigem extras):
+    - vision
+  # Agentes desabilitados por padrão (exigem extras / risco):
   disabled:
     - computer
-    - vision
     - binary
 
 voice:

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+import time
+
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 router = APIRouter(prefix="/api")
+
+_IMG_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
 
 @router.get("/status")
@@ -59,6 +63,24 @@ async def session_messages(request: Request, session_id: int) -> dict:
     if engine.store is None:
         return {"messages": []}
     return {"messages": engine.store.get_messages(session_id)}
+
+
+@router.post("/upload")
+async def upload(request: Request, file: UploadFile = File(...)) -> dict:
+    """Salva uma imagem no workspace e retorna o caminho relativo (para o Vision Agent)."""
+    engine = request.app.state.engine
+    sandbox = engine.agents.deps.sandbox
+    ext = ("." + (file.filename or "img.png").rsplit(".", 1)[-1]).lower()
+    if ext not in _IMG_EXT:
+        raise HTTPException(status_code=400, detail=f"Extensão não suportada: {ext}")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    rel = f"uploads/{int(time.time())}{ext}"
+    dest = sandbox.resolve(rel)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return {"path": rel, "bytes": len(data)}
 
 
 @router.get("/memory")

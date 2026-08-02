@@ -15,8 +15,8 @@ catch {
 $models = @(
     "qwen2.5:7b-instruct",     # chat geral (recomendado)
     "deepseek-coder:6.7b",     # code agent (recomendado)
-    "nomic-embed-text"         # memória de longo prazo / RAG (recomendado)
-    # "llava:7b"               # descomente para o Vision Agent (Fase 3)
+    "nomic-embed-text",        # memória de longo prazo / RAG (recomendado)
+    "llava:7b"                 # Vision Agent — análise de imagem/tela (~4.7GB)
 )
 
 foreach ($m in $models) {

@@ -188,6 +188,8 @@
     <div class="composer">
       <div class="box">
         <textarea id="input" rows="1" placeholder="Fale com a Aila…  (Enter envia, Shift+Enter quebra linha)"></textarea>
+        <button id="btn-img" class="icon-btn" title="Enviar imagem para a Aila analisar" onclick="document.getElementById('imgfile').click()">📎</button>
+        <input type="file" id="imgfile" accept="image/*" style="display:none" onchange="uploadImage(this)" />
         <button id="btn-mic" class="icon-btn" title="Falar (clique e fale; para sozinho no silêncio)" onclick="toggleMic()">🎙</button>
         <button class="icon-btn send" onclick="send()">➤</button>
       </div>
@@ -272,6 +274,21 @@
     if (!text) return;
     sendText(text);
     input.value = ""; input.style.height = "auto";
+  }
+
+  async function uploadImage(inp) {
+    const f = inp.files[0]; if (!f) return;
+    addBubble("sys", `enviando imagem "${f.name}"…`);
+    const fd = new FormData(); fd.append("file", f, f.name);
+    try {
+      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || "falha no upload");
+      sendText(`Analise a imagem que enviei. Arquivo no workspace: ${j.path}`);
+    } catch (e) {
+      addBubble("sys", "falha ao enviar imagem: " + e.message);
+    }
+    inp.value = "";
   }
 
   function setMode(m) {

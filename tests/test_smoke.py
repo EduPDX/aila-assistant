@@ -80,6 +80,44 @@ def test_memory_store_search(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_vision_agent_sends_image(tmp_path: Path):
+    """Vision Agent codifica a imagem em base64 e a envia ao modelo (RO permitido)."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.vision_agent import VisionAgent
+
+    captured = {}
+
+    class FakeLLM:
+        async def complete(self, messages, *, model=None, **kw):
+            captured["messages"] = messages
+            captured["model"] = model
+            return "uma imagem de teste"
+
+    s = get_settings()
+    s.security.read_only = True  # visão deve funcionar mesmo em somente-leitura
+    audit = AuditLog(tmp_path / "a.jsonl")
+    pm = PermissionManager(s.security, audit)
+    sandbox = PathSandbox(tmp_path / "ws")
+    deps = AgentDeps(settings=s, permissions=pm, sandbox=sandbox, llm=FakeLLM())
+    tools = {t.name: t for t in VisionAgent(deps).tools()}
+
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d494844520000000100000001010600000"
+        "01f15c4890000000a49444154789c6300010000050001"
+    )
+    (sandbox.root / "img.png").write_bytes(png)
+
+    async def go():
+        r = await tools["vision.analyze_image"].handler({"path": "img.png"})
+        assert r.ok
+        assert "images" in captured["messages"][0]
+        assert captured["model"]  # usa o modelo de visão configurado
+        err = await tools["vision.analyze_image"].handler({"path": "nao.png"})
+        assert not err.ok  # imagem inexistente -> erro amigável
+
+    asyncio.run(go())
+
+
 def test_tts_sapi_synthesis(tmp_path: Path):
     """No Windows, o TTS SAPI gera um WAV não-vazio (a Aila fala)."""
     import sys
