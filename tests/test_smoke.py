@@ -118,6 +118,28 @@ def test_vision_agent_sends_image(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_osc_avatar_bridge_mapping():
+    """A ponte OSC mapeia o AvatarState para os endereços /aila/* corretos."""
+    pytest.importorskip("pythonosc")
+    from aila.avatar.emotion_engine import EmotionEngine
+    from aila.avatar.osc_bridge import OSCAvatarBridge
+
+    sent = []
+
+    class FakeClient:
+        def send_message(self, addr, val):
+            sent.append((addr, val))
+
+    bridge = OSCAvatarBridge.__new__(OSCAvatarBridge)  # sem abrir socket
+    bridge.client = FakeClient()
+    bridge.send(EmotionEngine().from_text("Pronto, funcionou!").to_event_payload())
+
+    addrs = {a for a, _ in sent}
+    assert {"/aila/emotion", "/aila/gesture", "/aila/animation", "/aila/speech",
+            "/aila/intensity"} <= addrs
+    assert ("/aila/emotion", "happy") in sent
+
+
 def test_binary_agent_triage(tmp_path: Path):
     """Triagem de binário funciona em modo somente-leitura (identify/entropy)."""
     from aila.agents.base import AgentDeps

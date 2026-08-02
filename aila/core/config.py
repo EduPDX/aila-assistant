@@ -20,7 +20,28 @@ from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+# Camada YAML preenchida por get_settings() e lida pela fonte de config abaixo.
+_YAML_LAYER: dict[str, Any] = {}
+
+
+class _YamlSource(PydanticBaseSettingsSource):
+    """Fonte de configuração que injeta o YAML mesclado (default + local).
+
+    Fica ABAIXO das variáveis de ambiente na precedência, então o ambiente
+    (e o .env) de fato sobrescreve o YAML.
+    """
+
+    def get_field_value(self, field, field_name):  # noqa: ANN001 - assinatura do pydantic
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        return _YAML_LAYER
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -86,7 +107,10 @@ class VoiceConfig(BaseModel):
 
 class AvatarConfig(BaseModel):
     enabled: bool = False
+    # websocket = avatar do navegador; osc = motor 3D (Unreal); both = os dois
     transport: str = "websocket"
+    osc_host: str = "127.0.0.1"
+    osc_port: int = 8000
     default_emotion: str = "neutral"
 
 
@@ -131,6 +155,24 @@ class Settings(BaseSettings):
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     binary: BinaryConfig = Field(default_factory=BinaryConfig)
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        # Precedência (maior primeiro): init > env > .env > YAML > secrets.
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            _YamlSource(settings_cls),
+            file_secret_settings,
+        )
+
     # ------------------------------------------------------------------ #
     def sandbox_path(self) -> Path:
         root = Path(self.security.sandbox_root)
@@ -158,8 +200,12 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Retorna a configuração efetiva (cacheada)."""
+    """Retorna a configuração efetiva (cacheada).
+
+    Camadas (maior precedência primeiro): variáveis de ambiente ``AILA_*`` e
+    ``.env`` > ``config/local.yaml`` > ``config/default.yaml``.
+    """
+    global _YAML_LAYER
     data = _load_yaml(CONFIG_DIR / "default.yaml")
-    data = _deep_merge(data, _load_yaml(CONFIG_DIR / "local.yaml"))
-    # Pydantic-settings aplica os overrides de ambiente por cima do YAML.
-    return Settings(**data)
+    _YAML_LAYER = _deep_merge(data, _load_yaml(CONFIG_DIR / "local.yaml"))
+    return Settings()

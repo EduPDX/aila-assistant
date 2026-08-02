@@ -52,6 +52,9 @@ class AilaEngine:
         self.memory = memory
         self.session_id: int | None = None
         self.emotions = EmotionEngine()
+        # Canal opcional para um motor 3D (ex.: ponte OSC -> Unreal).
+        self.avatar_sink: Callable[[dict[str, Any]], None] | None = None
+        self.last_avatar_state: dict[str, Any] | None = None
         self.context = ConversationContext(
             system_prompt=self._system_prompt(),
             max_turns=settings.context.max_turns,
@@ -97,6 +100,18 @@ class AilaEngine:
             return
         self.ensure_session(content[:40] if role == "user" else "Nova conversa")
         self.store.add_message(self.session_id, role, content)
+
+    # --------------------------- avatar -------------------------------- #
+    async def _avatar(self, emit: Emit, payload: dict[str, Any]) -> None:
+        """Emite o estado do avatar para a UI (WebSocket) e, se houver, para o
+        motor 3D (ponte OSC). Guarda o último estado para /api/avatar/current."""
+        self.last_avatar_state = payload
+        await emit("avatar.state", payload)
+        if self.avatar_sink is not None:
+            try:
+                self.avatar_sink(payload)
+            except Exception as exc:  # noqa: BLE001
+                log.warning(f"avatar_sink falhou: {exc!r}")
 
     # -------------------------- memória (RAG) -------------------------- #
     async def _recall(self, query: str, emit: Emit) -> str | None:
@@ -144,7 +159,7 @@ class AilaEngine:
         ``mode="auto"`` (padrão): a IA decide sozinha se usa ferramentas.
         ``mode="chat"``: força conversa pura (sem ferramentas), menor latência.
         """
-        await emit("avatar.state", self.emotions.thinking().to_event_payload())
+        await self._avatar(emit, self.emotions.thinking().to_event_payload())
 
         # Recupera memórias relevantes ANTES de adicionar a mensagem ao contexto.
         mem_block = await self._recall(user_text, emit)
@@ -200,7 +215,7 @@ class AilaEngine:
         self._persist("assistant", final_text)
         await self._remember(user_text, final_text)
         await emit("assistant.message", {"text": final_text})
-        await emit("avatar.state", self.emotions.from_text(final_text).to_event_payload())
+        await self._avatar(emit, self.emotions.from_text(final_text).to_event_payload())
         return final_text
 
 
@@ -228,6 +243,20 @@ def build_engine(settings: Settings, llm: LLMBackend) -> AilaEngine:
     )
     manager = AgentManager(deps)
     engine = AilaEngine(settings, llm, manager, store=store, memory=memory)
+
+    # Ponte OSC para um motor 3D (Unreal), quando configurada.
+    if settings.avatar.transport in ("osc", "both"):
+        try:
+            from aila.avatar.osc_bridge import OSCAvatarBridge
+
+            bridge = OSCAvatarBridge(settings.avatar.osc_host, settings.avatar.osc_port)
+            engine.avatar_sink = bridge.send
+        except Exception as exc:  # noqa: BLE001
+            from aila.core.logging import get_logger
+
+            get_logger("engine").warning(
+                f"ponte OSC indisponível ({exc!r}). Instale: pip install -e \".[avatar]\""
+            )
     # guarda refs úteis para a API (confirmação de permissão, auditoria)
     engine.permissions = permissions  # type: ignore[attr-defined]
     engine.audit = audit  # type: ignore[attr-defined]

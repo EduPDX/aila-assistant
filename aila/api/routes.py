@@ -83,6 +83,17 @@ async def upload(request: Request, file: UploadFile = File(...)) -> dict:
     return {"path": rel, "bytes": len(data)}
 
 
+@router.get("/avatar/current")
+async def avatar_current(request: Request) -> dict:
+    """Último estado do avatar (para polling HTTP ou depuração da ponte 3D)."""
+    engine = request.app.state.engine
+    return {
+        "state": engine.last_avatar_state,
+        "transport": engine.settings.avatar.transport,
+        "osc": f"{engine.settings.avatar.osc_host}:{engine.settings.avatar.osc_port}",
+    }
+
+
 @router.get("/memory")
 async def memory(request: Request, n: int = 20) -> dict:
     engine = request.app.state.engine

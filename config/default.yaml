@@ -73,7 +73,12 @@ voice:
 
 avatar:
   enabled: false
-  transport: "websocket"      # canal para enviar AvatarState à engine 3D
+  # websocket = avatar SVG no navegador (padrão)
+  # osc       = motor 3D (Unreal) via OSC
+  # both      = navegador + Unreal ao mesmo tempo
+  transport: "websocket"
+  osc_host: "127.0.0.1"       # onde o Unreal escuta OSC
+  osc_port: 8000              # porta do OSC Server no Unreal
   default_emotion: "neutral"
 
 binary:

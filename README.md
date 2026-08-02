@@ -136,7 +136,7 @@ O projeto é entregue em fases. O que já funciona e o que vem a seguir está em
 | 3    | Vision Agent (LLaVA: imagem/OCR/tela) | ✅ funcional  |
 | 3    | Binary Agent (triagem + Ghidra)     | ✅ funcional  |
 | 4    | Avatar visual no navegador (SVG + lip-sync) | ✅ funcional  |
-| 4    | Avatar 3D dedicado (Unreal/Unity)   | 🧩 protocolo  |
+| 4    | Ponte OSC → Unreal (avatar 3D)      | ✅ funcional  |
 
 ## Segurança
 

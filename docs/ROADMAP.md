@@ -52,9 +52,11 @@ A Aila é entregue em fases. Cada fase é utilizável por conta própria — nad
 - ✅ **Avatar visual no navegador** (SVG): consome `avatar.state` em tempo real —
   expressões faciais por emoção, gestos, blink/idle, e **lip-sync real** pela
   amplitude do áudio TTS (WebAudio AnalyserNode). Embutido na UI, sem engine 3D.
-- [ ] Projeto Unreal Engine 5 (ou Unity) em `Avatar/` (avatar 3D dedicado)
-- [ ] Blend shapes / morph targets 3D + visemes finos do TTS
-- [ ] Biblioteca de gestos/animações 3D mapeada ao enum `Gesture`/`Animation`
+- ✅ **Ponte OSC → Unreal Engine**: a Aila transmite o AvatarState via OSC para
+  um motor 3D. Guia de montagem com a personagem Hayakawa (UE 5.4) em
+  [AVATAR_3D.md](AVATAR_3D.md). Endpoint `GET /api/avatar/current`.
+- [ ] Lip-sync 3D via envelope de amplitude do áudio TTS no Unreal
+- [ ] Mapeamento fino gesto→montagem e emoção→Control Rig de morph (no editor)
 
 ## Escolhas de modelo para a RTX 4060 8GB
 

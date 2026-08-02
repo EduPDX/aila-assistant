@@ -4,10 +4,16 @@ O núcleo da Aila não desenha o avatar — ele **dirige** um cliente 3D
 (Unreal Engine ou Unity) enviando estados. Isso mantém a IA e o render 3D
 desacoplados: você pode trocar a engine 3D sem tocar no núcleo.
 
-## Canal
+## Canais
 
-Estados são emitidos como eventos `avatar.state` pela WebSocket (`/ws`). O
-cliente 3D conecta como um consumidor e aplica cada estado recebido.
+O mesmo `AvatarState` é distribuído por dois transportes (config `avatar.transport`):
+
+- **WebSocket** (`/ws`, evento `avatar.state`) — usado pelo avatar SVG do
+  navegador. Padrão.
+- **OSC** — usado por um motor 3D (Unreal Engine). Ative com `transport: osc`
+  (ou `both`). Mapeamento de endereços e guia de montagem da personagem
+  Hayakawa em [AVATAR_3D.md](AVATAR_3D.md). O último estado também fica em
+  `GET /api/avatar/current`.
 
 ## Payload: `AvatarState`
 
