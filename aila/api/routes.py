@@ -94,6 +94,22 @@ async def avatar_current(request: Request) -> dict:
     }
 
 
+@router.post("/avatar/vrm")
+async def upload_vrm(request: Request, file: UploadFile = File(...)) -> dict:
+    """Salva um modelo VRM escolhido pelo usuário como o avatar padrão."""
+    from aila.core.config import PROJECT_ROOT
+
+    if not (file.filename or "").lower().endswith(".vrm"):
+        raise HTTPException(status_code=400, detail="Envie um arquivo .vrm")
+    data = await file.read()
+    if len(data) < 1000:
+        raise HTTPException(status_code=400, detail="Arquivo VRM inválido.")
+    dest = PROJECT_ROOT / "ui" / "models" / "avatar.vrm"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return {"ok": True, "bytes": len(data), "name": file.filename}
+
+
 @router.post("/avatar/test")
 async def avatar_test(request: Request, emotion: str = "happy", gesture: str = "none") -> dict:
     """Define manualmente o estado do avatar — para testar o receptor 3D sem chat.

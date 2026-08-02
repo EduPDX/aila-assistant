@@ -29,6 +29,13 @@
     <div>Aila · avatar 3D (VRM)</div>
     <div>emoção: <span id="emotion">neutral</span> · <span id="state">idle</span></div>
   </div>
+  <div id="controls" style="position:fixed;right:14px;top:12px;display:flex;gap:8px;align-items:center">
+    <span id="vrmnote" style="font-size:11px;color:var(--muted)"></span>
+    <button id="pick" style="background:var(--panel);border:1px solid var(--border);
+      color:var(--accent);padding:8px 14px;border-radius:10px;cursor:pointer;font-size:13px">
+      📁 Escolher VRM</button>
+    <input type="file" id="vrmfile" accept=".vrm" style="display:none" />
+  </div>
   <div id="err">
     <div>
       <h2>Nenhum modelo VRM encontrado 🙈</h2>
@@ -89,23 +96,35 @@ let vrm = null;
 const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
 
-loader.load(MODEL_URL, (gltf) => {
-  vrm = gltf.userData.vrm;
-  // otimizações opcionais (variam por versão do three-vrm)
-  try { VRMUtils.removeUnnecessaryJoints?.(gltf.scene); } catch(e){}
-  try { VRMUtils.removeUnnecessaryVertices?.(gltf.scene); } catch(e){}
-  try { VRMUtils.combineSkeletons?.(gltf.scene); } catch(e){}
-  if (vrm.meta?.metaVersion === '0') VRMUtils.rotateVRM0(vrm);  // VRM0 encara a câmera
-  vrm.scene.traverse((o) => { o.frustumCulled = false; });
-  scene.add(vrm.scene);
-  window.vrm = vrm;  // debug
-  $('loading').style.display = 'none';
-  restPose();
-}, undefined, (e) => {
-  $('loading').style.display = 'none';
-  $('err').classList.add('show');
-  $('errdetail').textContent = 'tentei carregar: ' + MODEL_URL + '  ·  ' + (e?.message || e);
-});
+function disposeVRM() {
+  if (!vrm) return;
+  scene.remove(vrm.scene);
+  try { VRMUtils.deepDispose?.(vrm.scene); } catch(e){}
+  vrm = null; window.vrm = null;
+}
+
+function loadVRM(url) {
+  $('err').classList.remove('show');
+  $('loading').style.display = 'flex';
+  loader.load(url, (gltf) => {
+    disposeVRM();
+    vrm = gltf.userData.vrm;
+    try { VRMUtils.removeUnnecessaryJoints?.(gltf.scene); } catch(e){}
+    try { VRMUtils.removeUnnecessaryVertices?.(gltf.scene); } catch(e){}
+    try { VRMUtils.combineSkeletons?.(gltf.scene); } catch(e){}
+    if (vrm.meta?.metaVersion === '0') VRMUtils.rotateVRM0(vrm);  // VRM0 encara a câmera
+    vrm.scene.traverse((o) => { o.frustumCulled = false; });
+    scene.add(vrm.scene);
+    window.vrm = vrm;
+    $('loading').style.display = 'none';
+    restPose();
+  }, undefined, (e) => {
+    $('loading').style.display = 'none';
+    $('err').classList.add('show');
+    $('errdetail').textContent = 'tentei carregar: ' + url + '  ·  ' + (e?.message || e);
+  });
+}
+loadVRM(MODEL_URL);
 
 // braços um pouco abaixados (pose de descanso natural)
 function restPose() {
@@ -218,6 +237,23 @@ function driveMouth() {
   mouthTarget = Math.min(1, Math.sqrt(sum/lipBuf.length) * 4.5);
   requestAnimationFrame(driveMouth);
 }
+
+// ---------------- trocar VRM (botão) ----------------
+$('pick').addEventListener('click', () => $('vrmfile').click());
+$('vrmfile').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0]; if (!file) return;
+  $('vrmnote').textContent = 'carregando…';
+  // 1) troca na hora (preview local, sem esperar o upload)
+  loadVRM(URL.createObjectURL(file));
+  // 2) salva no servidor como padrão (persiste entre recargas/abas)
+  try {
+    const fd = new FormData(); fd.append('file', file, file.name);
+    const r = await fetch('/api/avatar/vrm', { method:'POST', body:fd });
+    $('vrmnote').textContent = r.ok ? '✓ salvo como padrão' : 'trocado (não salvo)';
+  } catch(e) { $('vrmnote').textContent = 'trocado (não salvo)'; }
+  setTimeout(() => $('vrmnote').textContent = '', 4000);
+  ev.target.value = '';
+});
 
 // permite testar do console / do chat: window.ailaSpeak("texto")
 window.ailaSpeak = speak;
