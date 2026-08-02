@@ -133,7 +133,7 @@ def test_lipsync_envelope(tmp_path: Path):
         w.setsampwidth(2)
         w.setframerate(sr)
         frames = bytearray()
-        for i in range(sr):  # silêncio
+        for _ in range(sr):  # silêncio
             frames += (0).to_bytes(2, "little", signed=True)
         for i in range(sr):  # tom
             val = int(30000 * math.sin(2 * math.pi * 220 * i / sr))
