@@ -15,6 +15,8 @@ O caminho do componente de malha e a pasta de animações são configuráveis
 
 from __future__ import annotations
 
+import threading
+
 import httpx
 
 from aila.core.logging import get_logger
@@ -33,6 +35,17 @@ EMO_ANIM = {
     "neutral": "Anim_Breathy",
 }
 
+# gesto -> animação one-shot (braço/corpo). Toca uma vez e volta ao idle.
+# Ajuste os nomes conforme o que cada animação faz na sua personagem.
+GEST_ANIM = {
+    "thumbs_up": "Anim_Nice",
+    "hand_explain": "Anim_Nice",
+    "wave": "Anim_Quan",
+    "point": "Anim_Quan",
+    "shrug": "Anim_Doodle",
+    "nod": "Anim_Stand",
+}
+
 
 class UnrealRemoteControlBridge:
     def __init__(
@@ -40,12 +53,15 @@ class UnrealRemoteControlBridge:
         rc_url: str,
         mesh_path: str,
         anim_base: str,
+        gesture_hold: float = 2.5,
     ) -> None:
         self.call_url = rc_url.rstrip("/") + "/remote/object/call"
         self.mesh_path = mesh_path
         self.anim_base = anim_base.rstrip("/") + "/"
+        self.gesture_hold = gesture_hold
         self._client = httpx.Client(timeout=1.5)
-        self._last_anim: str | None = None
+        self._last_key: tuple[str, str] | None = None
+        self._timer: threading.Timer | None = None
         log.info(f"ponte Unreal (Remote Control) -> {self.call_url}")
 
     def _full_asset(self, name: str) -> str:
@@ -72,10 +88,32 @@ class UnrealRemoteControlBridge:
             log.warning(f"Unreal indisponível (Remote Control): {exc!r}")
             return False
 
+    def _resume_idle(self, emotion: str) -> None:
+        self.play(EMO_ANIM.get(emotion, "Anim_Breathy"), looping=True)
+
     def send(self, state: dict) -> None:
-        """Recebe um AvatarState (dict) e dirige a personagem. Nunca levanta."""
-        anim = EMO_ANIM.get(state.get("emotion", "neutral"), "Anim_Breathy")
-        if anim == self._last_anim:
-            return  # evita re-enviar a mesma animação
-        self._last_anim = anim
-        self.play(anim, looping=True)
+        """Recebe um AvatarState (dict) e dirige a personagem. Nunca levanta.
+
+        Emoção -> animação de idle (loop). Gesto -> animação one-shot que toca e
+        depois volta ao idle da emoção (após ``gesture_hold`` segundos).
+        """
+        emotion = state.get("emotion", "neutral")
+        gesture = state.get("gesture", "none")
+        key = (emotion, gesture)
+        if key == self._last_key:
+            return
+        self._last_key = key
+
+        # cancela um retorno-ao-idle pendente de um gesto anterior
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+
+        gest_anim = GEST_ANIM.get(gesture) if gesture and gesture != "none" else None
+        if gest_anim:
+            self.play(gest_anim, looping=False)          # gesto: toca uma vez
+            self._timer = threading.Timer(self.gesture_hold, self._resume_idle, args=(emotion,))
+            self._timer.daemon = True
+            self._timer.start()
+        else:
+            self.play(EMO_ANIM.get(emotion, "Anim_Breathy"), looping=True)
