@@ -93,9 +93,11 @@ class STTConfig(BaseModel):
 
 
 class TTSConfig(BaseModel):
-    engine: str = "auto"         # auto | sapi | piper
-    voice: str = ""              # vazio = auto (voz pt-BR se disponível)
+    engine: str = "auto"         # auto | edge | sapi | piper
+    voice: str = ""              # vazio = auto; p/ edge: ex. "pt-BR-FranciscaNeural"
     rate: int = 0                # SAPI: -10 (lento) .. 10 (rápido)
+    edge_pitch: str = "+0Hz"     # Edge-TTS: tom (ex.: "+30Hz" = mais fino/anime)
+    edge_rate: str = "+0%"       # Edge-TTS: velocidade (ex.: "+10%")
     output_enabled: bool = True  # falar as respostas automaticamente
 
 
@@ -117,6 +119,7 @@ class AvatarConfig(BaseModel):
     unreal_rc_url: str = "http://127.0.0.1:30010"
     unreal_mesh_path: str = ""   # object path do componente de malha no nível
     unreal_anim_base: str = "/Game/CiciToonCharacterShaderPak/Character/Hayakawa/Anim/"
+    unreal_mouth_morph: str = ""  # morph da boca p/ lip-sync (ex.: "A"); vazio = sem lip-sync
 
 
 class BinaryConfig(BaseModel):

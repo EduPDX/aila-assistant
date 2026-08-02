@@ -22,7 +22,11 @@ class VoiceSystem:
             model_size=cfg.stt.model, language=cfg.stt.language, device=cfg.stt.device
         )
         self.tts = TextToSpeech(
-            engine=cfg.tts.engine, voice=cfg.tts.voice, rate=cfg.tts.rate
+            engine=cfg.tts.engine,
+            voice=cfg.tts.voice,
+            rate=cfg.tts.rate,
+            edge_pitch=cfg.tts.edge_pitch,
+            edge_rate=cfg.tts.edge_rate,
         )
         _OUT_DIR.mkdir(parents=True, exist_ok=True)
 
