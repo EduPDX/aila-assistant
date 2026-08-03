@@ -107,44 +107,95 @@
   .modal h3 { color:var(--danger); margin-bottom:8px; }
   .modal pre { background:var(--panel2); padding:10px; border-radius:8px; font-size:12px; color:var(--muted); overflow-x:auto; }
   .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
+
+  /* drawer: engrenagem + histórico de conversas */
+  .brand .gear { margin-left:auto; background:none; border:none; cursor:pointer; font-size:18px; opacity:.8; }
+  .brand .gear:hover { opacity:1; }
+  .sessions { display:flex; flex-direction:column; gap:4px; overflow-y:auto; }
+  .session-item { padding:9px 10px; border-radius:8px; color:var(--text); cursor:pointer; font-size:13px;
+    border:1px solid transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .session-item:hover { background:var(--panel2); }
+  .session-item.active { border-color:var(--accent); color:var(--accent); }
+  .muted { color:var(--muted); font-size:12px; }
+
+  /* tela de configurações */
+  .settings { display:flex; width:min(760px,92vw); height:min(560px,88vh); background:var(--panel);
+    border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .settings-side { width:200px; flex-shrink:0; background:var(--panel2); border-right:1px solid var(--border);
+    padding:16px 12px; display:flex; flex-direction:column; gap:6px; }
+  .settings-title { font-size:14px; margin-bottom:10px; }
+  .snav { text-align:left; background:none; border:none; color:var(--muted); padding:9px 12px; border-radius:9px;
+    cursor:pointer; font-size:13px; }
+  .snav:hover { background:var(--panel); color:var(--text); }
+  .snav.active { background:var(--accent); color:#06120f; font-weight:600; }
+  .settings-main { flex:1; padding:24px; overflow-y:auto; }
+  .settings-main h3 { margin-bottom:6px; }
+  .spane { display:none; } .spane.active { display:block; }
 </style>
 </head>
 <body>
-  <!-- ========== DRAWER DE CONFIGURAÇÃO ========== -->
+  <!-- ========== DRAWER: HISTÓRICO DE CONVERSAS ========== -->
   <aside class="drawer" id="drawer">
-    <div class="brand"><div class="orb"></div><h1>AILA</h1></div>
-
-    <div>
-      <div class="sec-title">Aparência · tema</div>
-      <div class="themes" id="themes"></div>
+    <div class="brand">
+      <div class="orb"></div><h1>AILA</h1>
+      <button class="gear" title="Configurações" onclick="openSettings()">⚙️</button>
     </div>
-
-    <div>
-      <div class="sec-title">Avatar 3D</div>
-      <button class="btn accent" id="pickvrm">📁 Escolher modelo VRM</button>
-      <input type="file" id="vrmfile" accept=".vrm" style="display:none" />
-      <div id="vrmnote" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
-    </div>
-
-    <div>
-      <div class="sec-title">Voz</div>
-      <div class="card">
-        <div class="toggle on" id="tg-voice"><div class="sw"></div><span>Aila fala as respostas</span></div>
-      </div>
-    </div>
-
-    <div>
-      <div class="sec-title">Status</div>
-      <div class="card">
-        <div class="row"><span>LLM</span><span id="s-llm"><span class="dot off"></span>—</span></div>
-        <div class="row"><span>Modelo</span><span id="s-model" style="color:var(--muted)">—</span></div>
-        <div class="row"><span>Voz</span><span id="s-voice" style="color:var(--muted)">—</span></div>
-        <div class="row"><span>🧠 Memórias</span><span id="s-mem" style="color:var(--muted)">—</span></div>
-      </div>
-    </div>
+    <button class="btn accent" onclick="newSession()">＋ Nova conversa</button>
+    <div class="sec-title">Conversas</div>
+    <div class="sessions" id="sessions"></div>
     <div style="flex:1"></div>
     <div style="font-size:10px;color:var(--muted)">Aila · assistente local</div>
   </aside>
+
+  <!-- ========== CONFIGURAÇÕES (⚙️) ========== -->
+  <div class="overlay" id="settings-overlay">
+    <div class="settings">
+      <div class="settings-side">
+        <div class="settings-title">⚙️ Configurações</div>
+        <button class="snav active" data-p="tema" onclick="settingsTab('tema')">🎨 Tema</button>
+        <button class="snav" data-p="vrm" onclick="settingsTab('vrm')">🧍 Modelos VRM</button>
+        <button class="snav" data-p="voz" onclick="settingsTab('voz')">🔊 Voz</button>
+        <button class="snav" data-p="user" onclick="settingsTab('user')">👤 Usuário</button>
+        <button class="snav" data-p="status" onclick="settingsTab('status')">📊 Status</button>
+        <div style="flex:1"></div>
+        <button class="btn" onclick="closeSettings()">Fechar</button>
+      </div>
+      <div class="settings-main">
+        <section class="spane active" id="sp-tema">
+          <h3>Tema</h3>
+          <p class="muted">Escolha a aparência do app.</p>
+          <div class="themes" id="themes"></div>
+        </section>
+        <section class="spane" id="sp-vrm">
+          <h3>Modelos VRM</h3>
+          <p class="muted">Modelo 3D do avatar. Escolha um arquivo <code>.vrm</code> do seu PC.</p>
+          <button class="btn accent" id="pickvrm">📁 Escolher modelo VRM</button>
+          <input type="file" id="vrmfile" accept=".vrm" style="display:none" />
+          <div id="vrmnote" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+          <div class="muted" style="margin-top:20px;border-top:1px solid var(--border);padding-top:14px">
+            📚 <b>Catálogo de VRMs</b> — em breve: escolher de uma galeria pronta.
+          </div>
+        </section>
+        <section class="spane" id="sp-voz">
+          <h3>Voz</h3>
+          <div class="toggle on" id="tg-voice"><div class="sw"></div><span>Aila fala as respostas</span></div>
+        </section>
+        <section class="spane" id="sp-user">
+          <h3>Usuário</h3>
+          <p class="muted">Login e perfil — em breve.</p>
+        </section>
+        <section class="spane" id="sp-status">
+          <h3>Status</h3>
+          <div class="card">
+            <div class="row"><span>LLM</span><span id="s-llm"><span class="dot off"></span>—</span></div>
+            <div class="row"><span>Modelo</span><span id="s-model" style="color:var(--muted)">—</span></div>
+            <div class="row"><span>Voz</span><span id="s-voice" style="color:var(--muted)">—</span></div>
+            <div class="row"><span>🧠 Memórias</span><span id="s-mem" style="color:var(--muted)">—</span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <!-- ========== ÁREA PRINCIPAL ========== -->
   <main class="main">
@@ -239,7 +290,10 @@
         if (!aiBubble) addBubble('ai', m.text);
         aiBubble = null;
         if (voiceOut && m.text) speak(m.text);
+        loadSessions();
         break;
+      case 'session.loaded': renderMessages(m.messages); activeSession = m.id; loadSessions(); break;
+      case 'session.changed': clearChat(); activeSession = m.id; loadSessions(); break;
       case 'agent.invoked': addBubble('ai', `↳ ${m.tool}(${JSON.stringify(m.args)})`, 'tool'); break;
       case 'agent.result': addBubble('ai', `✓ ${m.tool}: ${m.content}`, 'tool'); break;
       case 'avatar.state':
@@ -363,7 +417,36 @@
     } catch(e){ setLlm(false); }
   }
 
-  connect(); loadStatus(); setInterval(loadStatus, 8000);
+  /* ============ CONFIGURAÇÕES (⚙️) ============ */
+  window.openSettings = () => $('settings-overlay').classList.add('show');
+  window.closeSettings = () => $('settings-overlay').classList.remove('show');
+  window.settingsTab = (p) => {
+    document.querySelectorAll('.snav').forEach(b => b.classList.toggle('active', b.dataset.p === p));
+    document.querySelectorAll('.spane').forEach(s => s.classList.toggle('active', s.id === 'sp-' + p));
+  };
+  $('settings-overlay').addEventListener('click', (e) => { if (e.target.id === 'settings-overlay') closeSettings(); });
+
+  /* ============ HISTÓRICO DE CONVERSAS ============ */
+  let activeSession = null;
+  function clearChat() { chat.innerHTML = ''; aiBubble = null; }
+  function renderMessages(msgs) {
+    clearChat();
+    (msgs || []).forEach(m => addBubble(m.role === 'user' ? 'user' : 'ai', m.content));
+  }
+  window.newSession = () => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type:'session.new' })); clearChat(); showTab('chat'); };
+  window.openSession = (id) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type:'session.load', id })); showTab('chat'); };
+  async function loadSessions() {
+    try {
+      const r = await (await fetch('/api/sessions')).json();
+      if (r.current != null) activeSession = r.current;
+      $('sessions').innerHTML = (r.sessions || []).map(s =>
+        `<div class="session-item ${s.id===activeSession?'active':''}" onclick="openSession(${s.id})"
+              title="${(s.title||'').replace(/"/g,'')}">💬 ${s.title || ('conversa '+s.id)}</div>`
+      ).join('') || '<div class="muted" style="padding:6px">nenhuma ainda</div>';
+    } catch(e){}
+  }
+
+  connect(); loadStatus(); loadSessions(); setInterval(loadStatus, 8000);
 </script>
 </body>
 </html>
