@@ -244,8 +244,9 @@
       case 'agent.result': addBubble('ai', `✓ ${m.tool}: ${m.content}`, 'tool'); break;
       case 'avatar.state':
         $('emochip').textContent = m.emotion;
-        toAvatar({ type:'aila:emotion', value:m.emotion, state:m.animation });
+        toAvatar({ type:'aila:emotion', value:m.emotion, state:m.animation, gesture:m.gesture });
         break;
+      case 'avatar.gesture': toAvatar({ type:'aila:gesture', value:m.value }); break;
       case 'memory.recalled': addBubble('ai', `🧠 lembrei de ${m.items.length} memória(s)`, 'tool'); break;
       case 'permission.request': showPerm(m); break;
       case 'error': addBubble('sys', 'erro: ' + m.message); aiBubble = null; break;

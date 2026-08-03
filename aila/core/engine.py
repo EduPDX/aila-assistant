@@ -55,6 +55,8 @@ class AilaEngine:
         # Canal opcional para um motor 3D (ex.: ponte OSC -> Unreal).
         self.avatar_sink: Callable[[dict[str, Any]], None] | None = None
         self.last_avatar_state: dict[str, Any] | None = None
+        # gesto pedido pela IA (AvatarAgent) durante o turno atual
+        self.pending_gesture: str | None = None
         self.context = ConversationContext(
             system_prompt=self._system_prompt(),
             max_turns=settings.context.max_turns,
@@ -216,6 +218,10 @@ class AilaEngine:
         await self._remember(user_text, final_text)
         await emit("assistant.message", {"text": final_text})
         await self._avatar(emit, self.emotions.from_text(final_text).to_event_payload())
+        # gesto explícito pedido pela IA (via AvatarAgent) tem prioridade
+        if self.pending_gesture:
+            await emit("avatar.gesture", {"value": self.pending_gesture})
+            self.pending_gesture = None
         return final_text
 
 
@@ -243,6 +249,8 @@ def build_engine(settings: Settings, llm: LLMBackend) -> AilaEngine:
     )
     manager = AgentManager(deps)
     engine = AilaEngine(settings, llm, manager, store=store, memory=memory)
+    # o AvatarAgent aciona gestos setando engine.pending_gesture (emitido no turno)
+    deps.gesture_sink = lambda g: setattr(engine, "pending_gesture", g)
 
     # Ponte OSC para um motor 3D (Unreal), quando configurada.
     if settings.avatar.transport in ("osc", "both"):

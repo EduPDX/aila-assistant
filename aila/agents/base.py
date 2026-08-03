@@ -11,6 +11,7 @@ evitando acoplamento a singletons e facilitando testes.
 from __future__ import annotations
 
 import abc
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -31,6 +32,8 @@ class AgentDeps:
     sandbox: PathSandbox
     llm: LLMBackend
     memory: MemoryStore | None = None
+    # callback opcional p/ o Avatar Agent acionar gestos no avatar 3D
+    gesture_sink: Callable[[str], None] | None = None
 
 
 class BaseAgent(abc.ABC):

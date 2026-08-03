@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from aila.agents.avatar_agent import AvatarAgent
 from aila.agents.base import AgentDeps, BaseAgent
 from aila.agents.binary_agent import BinaryAgent
 from aila.agents.code_agent import CodeAgent
@@ -22,6 +23,7 @@ AGENT_CLASSES: dict[str, type[BaseAgent]] = {
     "vision": VisionAgent,
     "binary": BinaryAgent,
     "memory": MemoryAgent,
+    "avatar": AvatarAgent,
 }
 
 

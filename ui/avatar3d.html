@@ -115,7 +115,7 @@ function loadVRM(url) {
     vrm.scene.traverse((o) => { o.frustumCulled = false; });
     scene.add(vrm.scene);
     window.vrm = vrm;
-    restPose();                                     // pose dos braços UMA vez só
+    for (const b in _cur) delete _cur[b]; _target = POSES.rest;  // começa no rest
     try { vrm.springBoneManager?.reset?.(); } catch(e){}  // molas (cabelo/saia) assentadas
     clock.getDelta();                               // zera o dt (evita a saia "explodir")
     $('loading').style.display = 'none';
@@ -127,18 +127,66 @@ function loadVRM(url) {
 }
 loadVRM(MODEL_URL);
 
-// braços abaixados ao lado do corpo (a pose padrão do VRM é em "T", braços
-// abertos; aqui rotacionamos os ombros pra baixar). Aplicado todo frame p/ segurar.
-function restPose() {
-  const h = vrm?.humanoid; if (!h) return;
-  const set = (name, x, y, z) => {
-    const b = h.getNormalizedBoneNode(name); if (b) b.rotation.set(x, y, z);
-  };
-  set('leftUpperArm', 0, 0, -1.25);   // baixa o braço esquerdo
-  set('rightUpperArm', 0, 0, 1.25);   // baixa o braço direito
-  set('leftLowerArm', 0, 0, -0.15);
-  set('rightLowerArm', 0, 0, 0.15);
+// ============================================================
+//  SISTEMA DE POSE POR OSSO (humanoid VRM — padronizado p/ qualquer modelo)
+//  Cada pose é um mapa { osso: [xGraus, yGraus, zGraus] } aplicado com
+//  interpolação suave. Ossos não citados numa pose voltam ao "rest".
+// ============================================================
+const DEG = Math.PI / 180;
+
+// ossos que o sistema controla (o resto do corpo fica com a pose base do modelo)
+const CTRL_BONES = [
+  'leftUpperArm', 'rightUpperArm', 'leftLowerArm', 'rightLowerArm',
+  'leftHand', 'rightHand', 'head',
+];
+
+// biblioteca de poses/gestos (graus). "rest" = braços abaixados ao lado do corpo.
+const POSES = {
+  rest:        { leftUpperArm:[0,0,-72], rightUpperArm:[0,0,72], leftLowerArm:[0,4,-10], rightLowerArm:[0,-4,10] },
+  wave:        { rightUpperArm:[0,0,150], rightLowerArm:[0,-25,20] },   // acena (braço p/ cima)
+  thumbs_up:   { rightUpperArm:[-25,0,80], rightLowerArm:[-95,0,10] },  // joinha na frente
+  point:       { rightUpperArm:[-80,0,74], rightLowerArm:[0,0,5] },     // aponta pra frente
+  hand_explain:{ leftUpperArm:[-35,0,-70], rightUpperArm:[-35,0,70], leftLowerArm:[-40,10,-20], rightLowerArm:[-40,-10,20] },
+  shrug:       { leftUpperArm:[0,0,-110], rightUpperArm:[0,0,110], leftLowerArm:[0,40,-80], rightLowerArm:[0,-40,80] },
+  think:       { rightUpperArm:[-60,0,66], rightLowerArm:[-115,0,10], head:[10,-8,0] },  // mão no queixo
+  cheer:       { leftUpperArm:[0,0,-165], rightUpperArm:[0,0,165] },    // dois braços pra cima
+  raise_right: { rightUpperArm:[0,0,168] },                            // levanta a mão direita
+  raise_left:  { leftUpperArm:[0,0,-168] },                            // levanta a mão esquerda
+};
+const GESTURE_ALIASES = { nice:'thumbs_up', none:'rest', nod:'rest' };
+
+const _cur = {};                 // rotação atual (rad) por osso, para interpolar
+let _target = POSES.rest;        // pose-alvo atual
+let _gestureTimer = null;
+
+function setPose(name) {
+  const key = GESTURE_ALIASES[name] || name;
+  if (!POSES[key]) return;
+  _target = { ...POSES.rest, ...POSES[key] };
+  clearTimeout(_gestureTimer);
+  if (key !== 'rest') {          // gesto: volta ao rest depois de um tempo
+    _gestureTimer = setTimeout(() => { _target = POSES.rest; }, 2800);
+  }
 }
+window.ailaGesture = setPose;    // permite testar: ailaGesture('wave')
+
+function applyBody(dt) {
+  const h = vrm?.humanoid; if (!h) return;
+  const k = Math.min(1, dt * 6);
+  for (const bone of CTRL_BONES) {
+    const node = h.getNormalizedBoneNode(bone); if (!node) continue;
+    const t = _target[bone] || [0, 0, 0];
+    const c = _cur[bone] || (_cur[bone] = [0, 0, 0]);
+    c[0] += (t[0] * DEG - c[0]) * k;
+    c[1] += (t[1] * DEG - c[1]) * k;
+    c[2] += (t[2] * DEG - c[2]) * k;
+    node.rotation.set(c[0], c[1], c[2]);
+  }
+  // respiração idle sutil (na espinha, amplitude pequena — não desincroniza)
+  const spine = h.getNormalizedBoneNode('spine');
+  if (spine) spine.rotation.x = Math.sin(performance.now() / 1400) * 0.012;
+}
+window.__applyBody = applyBody;  // debug
 
 // ---------------- expressões / emoção ----------------
 const EMO = {
@@ -182,7 +230,7 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);  // limita o dt: molas não explodem
   if (vrm) {
-    updateBlink(dt); applyExpressions(dt);       // sem forçar pose/respiração todo frame
+    applyBody(dt); updateBlink(dt); applyExpressions(dt);
     vrm.update(dt);
   }
   controls.update();
@@ -196,7 +244,11 @@ function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
-    if (m.type === 'avatar.state') { setEmotion(m.emotion); $('state').textContent = m.animation || m.speech_state || 'idle'; }
+    if (m.type === 'avatar.state') {
+      setEmotion(m.emotion); $('state').textContent = m.animation || m.speech_state || 'idle';
+      if (m.gesture) setPose(m.gesture);
+    }
+    else if (m.type === 'avatar.gesture') { setPose(m.value); }
     else if (m.type === 'assistant.message' && m.text) speak(m.text);
   };
   ws.onclose = () => setTimeout(connect, 2000);
@@ -216,8 +268,12 @@ addEventListener('message', (e) => {
 // comandos da página-mãe (index.html): emoção e boca (lip-sync)
 addEventListener('message', (e) => {
   const d = e.data || {};
-  if (d.type === 'aila:emotion') { setEmotion(d.value); $('state').textContent = d.state || 'idle'; }
+  if (d.type === 'aila:emotion') {
+    setEmotion(d.value); $('state').textContent = d.state || 'idle';
+    if (d.gesture) setPose(d.gesture);
+  }
   else if (d.type === 'aila:mouth') { mouthTarget = Math.max(0, Math.min(1, d.value)); }
+  else if (d.type === 'aila:gesture') { setPose(d.value); }
 });
 
 async function speak(text) {

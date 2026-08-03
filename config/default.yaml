@@ -54,6 +54,7 @@ agents:
     - memory
     - vision
     - binary
+    - avatar
   # Agentes desabilitados por padrão (risco de controle do SO):
   disabled:
     - computer
