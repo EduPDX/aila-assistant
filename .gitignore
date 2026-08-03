@@ -54,3 +54,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# workspace do usuário (não versionar conteúdo)
+workspace/**
+!workspace/.gitkeep
