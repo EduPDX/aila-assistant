@@ -99,6 +99,10 @@
   .icon { background:var(--panel); border:1px solid var(--border); color:var(--muted); width:38px; height:38px;
     border-radius:10px; cursor:pointer; font-size:15px; }
   .icon.send { background:var(--accent); color:#06120f; border:none; } .icon.rec { background:var(--danger); color:#fff; border:none; }
+  .attachments { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .chip { display:flex; align-items:center; gap:6px; background:var(--panel2); border:1px solid var(--border);
+    border-radius:16px; padding:4px 10px; font-size:12px; color:var(--text); }
+  .chip button { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:0; }
 
   /* modal permissão */
   .overlay { position:fixed; inset:0; background:#0009; display:none; align-items:center; justify-content:center; z-index:50; }
@@ -219,7 +223,10 @@
           <div class="msg sys"><div class="bubble">Converse com a Aila. As respostas aparecem aqui e o avatar reage na aba Avatar.</div></div>
         </div>
         <div class="composer">
+          <div id="attachments" class="attachments"></div>
           <div class="cbox">
+            <button class="icon" id="attach" title="Anexar arquivo" onclick="document.getElementById('attachfile').click()">📎</button>
+            <input type="file" id="attachfile" multiple style="display:none" onchange="attachFiles(this)" />
             <textarea id="input" rows="1" placeholder="Fale com a Aila…  (Enter envia)"></textarea>
             <button class="icon" id="mic" title="Falar" onclick="toggleMic()">🎙</button>
             <button class="icon send" onclick="send()">➤</button>
@@ -314,7 +321,44 @@
   function scroll() { chat.scrollTop = chat.scrollHeight; }
   function sendText(t) { if (!t || ws.readyState !== 1) return; addBubble('user', t); aiBubble = null;
     ws.send(JSON.stringify({ type:'user.message', text:t, mode:'auto' })); }
-  function send() { const t = input.value.trim(); if (!t) return; sendText(t); input.value=''; input.style.height='auto'; }
+
+  /* ---- anexos ---- */
+  let attached = [];
+  window.attachFiles = async (inp) => {
+    for (const f of inp.files) {
+      const fd = new FormData(); fd.append('file', f, f.name);
+      try {
+        const j = await (await fetch('/api/upload/file', { method:'POST', body:fd })).json();
+        if (j.path) attached.push(j);
+      } catch(e){ addBubble('sys', 'falha ao anexar ' + f.name); }
+    }
+    inp.value=''; renderChips(); showTab('chat');
+  };
+  window.removeAttach = (i) => { attached.splice(i,1); renderChips(); };
+  function renderChips() {
+    $('attachments').innerHTML = attached.map((a,i) =>
+      `<span class="chip">📎 ${a.name}<button onclick="removeAttach(${i})" title="remover">✕</button></span>`
+    ).join('');
+  }
+
+  function send() {
+    const t = input.value.trim();
+    if (!t && !attached.length) return;
+    let payload = '';
+    for (const a of attached) {
+      payload += `\n[Anexo: ${a.name} — salvo no workspace em: ${a.path}]\n`;
+      payload += (a.text != null)
+        ? '```\n' + a.text.slice(0, 20000) + '\n```\n'
+        : '(arquivo binário; use os agentes de arquivo/binário para inspecioná-lo)\n';
+    }
+    const full = (payload ? payload + '\n' : '') + t;
+    const label = attached.map(a => '📎 ' + a.name).join('  ') + (t ? (attached.length ? '\n' : '') + t : '');
+    addBubble('user', label || '(anexos)');
+    aiBubble = null;
+    if (ws.readyState === 1) ws.send(JSON.stringify({ type:'user.message', text: full, mode:'auto' }));
+    input.value=''; input.style.height='auto';
+    attached = []; renderChips();
+  }
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
   input.addEventListener('input', () => { input.style.height='auto'; input.style.height=input.scrollHeight+'px'; });
 

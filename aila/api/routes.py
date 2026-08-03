@@ -94,6 +94,33 @@ async def avatar_current(request: Request) -> dict:
     }
 
 
+@router.post("/upload/file")
+async def upload_file(request: Request, file: UploadFile = File(...)) -> dict:
+    """Salva um arquivo anexado no workspace (para a Aila ler/analisar).
+
+    Se for texto pequeno, devolve o conteúdo para incluir direto na conversa.
+    """
+    from pathlib import Path as _Path
+
+    engine = request.app.state.engine
+    sandbox = engine.agents.deps.sandbox
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    name = _Path(file.filename or "arquivo").name  # sem diretórios (anti-traversal)
+    rel = f"uploads/{name}"
+    dest = sandbox.resolve(rel)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    text = None
+    if len(data) <= 100_000:
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            text = None
+    return {"path": rel, "name": name, "bytes": len(data), "text": text}
+
+
 @router.post("/avatar/vrm")
 async def upload_vrm(request: Request, file: UploadFile = File(...)) -> dict:
     """Salva um modelo VRM escolhido pelo usuário como o avatar padrão."""
