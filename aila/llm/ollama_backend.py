@@ -82,6 +82,11 @@ class OllamaBackend(LLMBackend):
                 body.pop("tools", None)
                 async for chunk in self._stream(body):
                     yield chunk
+            elif exc.response.status_code == 404:
+                raise RuntimeError(
+                    f"Modelo '{body.get('model')}' não encontrado no Ollama. "
+                    f"Rode: ollama pull {body.get('model')}"
+                ) from exc
             else:
                 raise
 

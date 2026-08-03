@@ -19,7 +19,7 @@ async def status(request: Request) -> dict:
         "app": engine.settings.app.name,
         "llm_backend": engine.settings.llm.backend,
         "llm_online": await llm.health(),
-        "model": engine.settings.llm.model,
+        "model": getattr(engine.llm, "default_model", engine.settings.llm.model),
         "read_only": engine.settings.security.read_only,
         "agents": list(engine.agents.agents.keys()),
         "memory_count": engine.memory.count() if engine.memory else 0,

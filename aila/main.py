@@ -36,7 +36,18 @@ async def lifespan(app: FastAPI):
     llm = get_backend(settings.llm)
     online = await llm.health()
     if online:
-        log.info(f"LLM online ({settings.llm.backend}) — modelo: {settings.llm.model}")
+        # Se o modelo configurado não estiver baixado, usa um disponível
+        # (evita o 404 do Ollama). Ignora modelos de embedding para o chat.
+        models = await llm.list_models()
+        if models and settings.llm.model not in models and hasattr(llm, "default_model"):
+            chat_models = [m for m in models if "embed" not in m.lower()] or models
+            llm.default_model = chat_models[0]
+            log.warning(
+                f"Modelo '{settings.llm.model}' não está no Ollama; usando "
+                f"'{llm.default_model}'. Para o recomendado: ollama pull {settings.llm.model}"
+            )
+        eff = getattr(llm, "default_model", settings.llm.model)
+        log.info(f"LLM online ({settings.llm.backend}) — modelo: {eff}")
     else:
         log.warning(
             f"LLM OFFLINE em {settings.llm.base_url}. "
