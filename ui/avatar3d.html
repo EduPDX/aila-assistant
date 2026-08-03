@@ -109,15 +109,16 @@ function loadVRM(url) {
   loader.load(url, (gltf) => {
     disposeVRM();
     vrm = gltf.userData.vrm;
-    try { VRMUtils.removeUnnecessaryJoints?.(gltf.scene); } catch(e){}
-    try { VRMUtils.removeUnnecessaryVertices?.(gltf.scene); } catch(e){}
-    try { VRMUtils.combineSkeletons?.(gltf.scene); } catch(e){}
+    // (sem as otimizações removeUnnecessary*/combineSkeletons: quebram o
+    //  skinning de vários modelos — deixam rosto/olho "parados")
     if (vrm.meta?.metaVersion === '0') VRMUtils.rotateVRM0(vrm);  // VRM0 encara a câmera
     vrm.scene.traverse((o) => { o.frustumCulled = false; });
     scene.add(vrm.scene);
     window.vrm = vrm;
+    restPose();                                     // pose dos braços UMA vez só
+    try { vrm.springBoneManager?.reset?.(); } catch(e){}  // molas (cabelo/saia) assentadas
+    clock.getDelta();                               // zera o dt (evita a saia "explodir")
     $('loading').style.display = 'none';
-    restPose();
   }, undefined, (e) => {
     $('loading').style.display = 'none';
     $('err').classList.add('show');
@@ -175,22 +176,13 @@ function updateBlink(dt) {
   }
 }
 
-// respiração idle sutil
-let breathT = 0;
-function idle(dt) {
-  breathT += dt;
-  const h = vrm?.humanoid; if (!h) return;
-  const chest = h.getNormalizedBoneNode('chest') || h.getNormalizedBoneNode('spine');
-  if (chest) chest.rotation.x = Math.sin(breathT*1.4) * 0.02;
-}
-
 // ---------------- loop ----------------
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
-  const dt = clock.getDelta();
+  const dt = Math.min(clock.getDelta(), 0.05);  // limita o dt: molas não explodem
   if (vrm) {
-    restPose(); idle(dt); updateBlink(dt); applyExpressions(dt);
+    updateBlink(dt); applyExpressions(dt);       // sem forçar pose/respiração todo frame
     vrm.update(dt);
   }
   controls.update();
