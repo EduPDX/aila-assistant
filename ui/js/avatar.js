@@ -1,0 +1,12 @@
+// Ponte com o avatar 3D (iframe). Comanda via postMessage.
+import { byId } from './dom.js';
+
+export function toAvatar(msg) {
+  const f = byId('avatar3d');
+  if (f && f.contentWindow) f.contentWindow.postMessage(msg, '*');
+}
+export const avatarEmotion = (emotion, state, gesture) =>
+  toAvatar({ type: 'aila:emotion', value: emotion, state, gesture });
+export const avatarGesture = (name) => toAvatar({ type: 'aila:gesture', value: name });
+export const avatarMouth = (v) => toAvatar({ type: 'aila:mouth', value: v });
+export const avatarReload = () => toAvatar({ type: 'aila:reloadVRM' });

@@ -162,6 +162,7 @@ class AilaEngine:
         ``mode="chat"``: força conversa pura (sem ferramentas), menor latência.
         """
         await self._avatar(emit, self.emotions.thinking().to_event_payload())
+        await emit("aila.state", {"status": "THINKING"})
 
         # Recupera memórias relevantes ANTES de adicionar a mensagem ao contexto.
         mem_block = await self._recall(user_text, emit)
@@ -204,6 +205,7 @@ class AilaEngine:
                     except json.JSONDecodeError:
                         args = {}
                 await emit("agent.invoked", {"tool": name, "args": args})
+                await emit("aila.state", {"status": _tool_status(name), "tool": name})
                 result = await self.agents.registry.execute(name, args)
                 await emit(
                     "agent.result",
@@ -222,7 +224,21 @@ class AilaEngine:
         if self.pending_gesture:
             await emit("avatar.gesture", {"value": self.pending_gesture})
             self.pending_gesture = None
+        await emit("aila.state", {"status": "IDLE"})
         return final_text
+
+
+def _tool_status(tool_name: str) -> str:
+    """Mapeia o nome da ferramenta para um estado global da Aila."""
+    if tool_name.startswith("code."):
+        return "CODING"
+    if tool_name.startswith(("vision.", "binary.")):
+        return "ANALYZING_IMAGE" if tool_name.startswith("vision.") else "TOOL_RUNNING"
+    if tool_name.startswith("file."):
+        return "READING_FILE"
+    if tool_name.startswith("memory.search"):
+        return "SEARCHING"
+    return "TOOL_RUNNING"
 
 
 def build_engine(settings: Settings, llm: LLMBackend) -> AilaEngine:
