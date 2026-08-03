@@ -5,14 +5,14 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from aila.core.config import PROJECT_ROOT, VoiceConfig
+from aila.core.config import DATA_ROOT, VoiceConfig
 from aila.core.logging import get_logger
 from aila.voice.stt import SpeechToText
 from aila.voice.tts import TextToSpeech
 
 log = get_logger("voice")
 
-_OUT_DIR = PROJECT_ROOT / "data" / "voice"
+_OUT_DIR = DATA_ROOT / "data" / "voice"
 
 
 class VoiceSystem:

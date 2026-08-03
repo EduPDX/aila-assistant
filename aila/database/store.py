@@ -10,7 +10,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from aila.core.config import PROJECT_ROOT
+from aila.core.config import DATA_ROOT
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS messages (
 
 class ConversationStore:
     def __init__(self, db_path: str | Path | None = None) -> None:
-        path = Path(db_path) if db_path else PROJECT_ROOT / "data" / "aila.db"
+        path = Path(db_path) if db_path else DATA_ROOT / "data" / "aila.db"
         path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row

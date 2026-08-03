@@ -14,6 +14,8 @@ Uso::
 
 from __future__ import annotations
 
+import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -43,8 +45,24 @@ class _YamlSource(PydanticBaseSettingsSource):
     def __call__(self) -> dict[str, Any]:
         return _YAML_LAYER
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if getattr(sys, "frozen", False):
+    # Empacotado (PyInstaller): dados de LEITURA (config/, ui/) vêm do bundle;
+    # dados de ESCRITA (data/, logs/, workspace/, models) vão para uma pasta
+    # gravável do usuário.
+    PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    DATA_ROOT = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Aila"
+else:
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    DATA_ROOT = PROJECT_ROOT
+
+DATA_ROOT.mkdir(parents=True, exist_ok=True)
 CONFIG_DIR = PROJECT_ROOT / "config"
+
+
+def data_path(rel: str) -> Path:
+    """Resolve um caminho de ESCRITA sob a raiz gravável (DATA_ROOT)."""
+    p = Path(rel)
+    return p if p.is_absolute() else (DATA_ROOT / p)
 
 
 # --------------------------------------------------------------------------- #
@@ -185,7 +203,7 @@ class Settings(BaseSettings):
     def sandbox_path(self) -> Path:
         root = Path(self.security.sandbox_root)
         if not root.is_absolute():
-            root = (PROJECT_ROOT / root).resolve()
+            root = (DATA_ROOT / root).resolve()
         return root
 
 

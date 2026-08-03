@@ -273,9 +273,6 @@ def build_engine(settings: Settings, llm: LLMBackend) -> AilaEngine:
 
 
 def _resolve(path_str: str):
-    from pathlib import Path
+    from aila.core.config import data_path
 
-    from aila.core.config import PROJECT_ROOT
-
-    p = Path(path_str)
-    return p if p.is_absolute() else PROJECT_ROOT / p
+    return data_path(path_str)

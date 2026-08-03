@@ -17,6 +17,7 @@
     "appId": "com.edupdx.aila",
     "productName": "Aila",
     "files": ["electron/**/*"],
+    "extraResources": [{ "from": "../dist/aila-backend", "to": "aila-backend" }],
     "win": { "target": "nsis" },
     "publish": [{ "provider": "github", "owner": "EduPDX", "repo": "aila-assistant" }]
   }

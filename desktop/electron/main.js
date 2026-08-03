@@ -14,7 +14,14 @@ const fs = require('fs');
 const REPO_ROOT = path.resolve(__dirname, '..', '..'); // desktop/electron -> repo
 const PORT = process.env.AILA_PORT || 8770;
 const URL = `http://127.0.0.1:${PORT}/`;
-const GIT_UPDATE = process.env.AILA_NO_UPDATE !== '1'; // git pull ao abrir (padrão sim)
+// git pull só faz sentido no modo dev (rodando do repositório); no .exe
+// empacotado a atualização é via electron-updater (futuro).
+const GIT_UPDATE = !app.isPackaged && process.env.AILA_NO_UPDATE !== '1';
+
+// caminho do backend empacotado (dentro dos resources do app)
+function bundledBackend() {
+  return path.join(process.resourcesPath, 'aila-backend', 'aila-backend.exe');
+}
 
 let backend = null;
 let win = null;
@@ -37,14 +44,17 @@ function gitPull() {
 
 // --------- 2. sobe o backend Python ---------
 function startBackend() {
-  backend = spawn(pythonExe(), ['-m', 'aila.main'], {
-    cwd: REPO_ROOT,
-    env: { ...process.env, AILA_PORT: String(PORT) },
-    stdio: 'ignore',
-  });
+  const env = { ...process.env, AILA_PORT: String(PORT) };
+  if (app.isPackaged && fs.existsSync(bundledBackend())) {
+    // empacotado: usa o backend .exe (PyInstaller)
+    backend = spawn(bundledBackend(), [], { env, stdio: 'ignore' });
+  } else {
+    // dev: usa o Python do repositório (venv)
+    backend = spawn(pythonExe(), ['-m', 'aila.main'], { cwd: REPO_ROOT, env, stdio: 'ignore' });
+  }
   backend.on('error', (e) => {
-    dialog.showErrorBox('Aila', 'Não consegui iniciar o backend Python:\n' + e.message +
-      '\n\nRode antes:  pip install -e .');
+    dialog.showErrorBox('Aila', 'Não consegui iniciar o backend:\n' + e.message +
+      (app.isPackaged ? '' : '\n\nEm dev, rode antes:  pip install -e .'));
   });
 }
 

@@ -126,16 +126,17 @@ function loadVRM(url) {
 }
 loadVRM(MODEL_URL);
 
-// braços um pouco abaixados (pose de descanso natural)
+// braços abaixados ao lado do corpo (a pose padrão do VRM é em "T", braços
+// abertos; aqui rotacionamos os ombros pra baixar). Aplicado todo frame p/ segurar.
 function restPose() {
   const h = vrm?.humanoid; if (!h) return;
   const set = (name, x, y, z) => {
     const b = h.getNormalizedBoneNode(name); if (b) b.rotation.set(x, y, z);
   };
-  set('leftUpperArm', 0, 0, 1.2);
-  set('rightUpperArm', 0, 0, -1.2);
-  set('leftLowerArm', 0, -0.2, 0.3);
-  set('rightLowerArm', 0, 0.2, -0.3);
+  set('leftUpperArm', 0, 0, -1.25);   // baixa o braço esquerdo
+  set('rightUpperArm', 0, 0, 1.25);   // baixa o braço direito
+  set('leftLowerArm', 0, 0, -0.15);
+  set('rightLowerArm', 0, 0, 0.15);
 }
 
 // ---------------- expressões / emoção ----------------
@@ -189,7 +190,7 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
   if (vrm) {
-    idle(dt); updateBlink(dt); applyExpressions(dt);
+    restPose(); idle(dt); updateBlink(dt); applyExpressions(dt);
     vrm.update(dt);
   }
   controls.update();

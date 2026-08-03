@@ -18,12 +18,13 @@ from fastapi.staticfiles import StaticFiles
 from aila.api.routes import router as api_router
 from aila.api.voice import router as voice_router
 from aila.api.websocket import websocket_endpoint
-from aila.core.config import PROJECT_ROOT, get_settings
+from aila.core.config import DATA_ROOT, PROJECT_ROOT, get_settings
 from aila.core.engine import build_engine
 from aila.core.logging import get_logger, setup_logging
 from aila.llm.registry import get_backend
 
-UI_DIR = PROJECT_ROOT / "ui"
+UI_DIR = PROJECT_ROOT / "ui"             # leitura (no bundle, quando empacotado)
+MODELS_DIR = DATA_ROOT / "ui" / "models"  # gravável (VRM escolhido pelo usuário)
 
 
 @asynccontextmanager
@@ -80,6 +81,19 @@ def create_app() -> FastAPI:
         # continua acessível em /static/index.html
         return FileResponse(UI_DIR / "app.html")
 
+    # modelos VRM ficam numa pasta gravável; na 1ª execução copia o VRM padrão
+    # do bundle. O mount específico vem ANTES do /static geral (precedência).
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    default_vrm = MODELS_DIR / "avatar.vrm"
+    bundled_vrm = UI_DIR / "models" / "avatar.vrm"
+    if not default_vrm.exists() and bundled_vrm.exists() and bundled_vrm != default_vrm:
+        try:
+            import shutil
+
+            shutil.copyfile(bundled_vrm, default_vrm)
+        except OSError:
+            pass
+    app.mount("/static/models", StaticFiles(directory=str(MODELS_DIR)), name="models")
     if UI_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(UI_DIR)), name="static")
 

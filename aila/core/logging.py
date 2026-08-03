@@ -6,7 +6,7 @@ import sys
 
 from loguru import logger
 
-from aila.core.config import PROJECT_ROOT
+from aila.core.config import DATA_ROOT
 
 _CONFIGURED = False
 
@@ -28,7 +28,7 @@ def setup_logging(level: str = "INFO") -> None:
         ),
     )
 
-    log_dir = PROJECT_ROOT / "logs"
+    log_dir = DATA_ROOT / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     logger.add(
         log_dir / "aila.log",

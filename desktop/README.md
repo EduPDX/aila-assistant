@@ -21,14 +21,33 @@ O que acontece ao abrir:
 3. Espera o servidor e abre a janela com a interface (avatar + chat + config).
 4. Ao fechar a janela, encerra o backend.
 
-## Gerar o instalador (.exe)
+## Gerar o instalador (.exe) — com o Python embutido
 
-```bash
-npm run dist
+Um único comando (na raiz do repo, com o venv ativo):
+
+```powershell
+.\desktop\build.ps1
 ```
 
-Usa `electron-builder` (config no `package.json`). Gera um instalador NSIS em
-`desktop/dist/`.
+Ele faz:
+1. **PyInstaller** empacota o backend Python em `dist/aila-backend/aila-backend.exe`.
+2. **electron-builder** empacota o app Electron incluindo esse backend
+   (`extraResources`) e gera o instalador NSIS em `desktop/dist/`.
+
+No app empacotado, o Electron roda o `aila-backend.exe` (não precisa de
+venv/Python instalado). Em dev (`npm start`), ele usa o Python do repositório.
+
+> ⚠ **Primeira vez costuma precisar de ajuste.** Empacotar Python é sensível a
+> *hidden imports*. Se o backend não subir, teste-o isolado:
+> ```powershell
+> .\dist\aila-backend\aila-backend.exe   # deve responder em http://127.0.0.1:8770
+> ```
+> Erros comuns: módulo faltando → adicione `--hidden-import <nome>` no `build.ps1`.
+>
+> **STT (microfone) fica fora do .exe** por enquanto (faster-whisper/ctranslate2
+> são pesados de empacotar). A **voz de saída (Edge-TTS)** funciona normal.
+> Dados graváveis (histórico, memória, VRM escolhido, logs) vão para
+> `%LOCALAPPDATA%\Aila`.
 
 ## Atualização automática
 
