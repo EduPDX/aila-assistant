@@ -61,6 +61,17 @@ class ConversationStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def rename_session(self, session_id: int, title: str) -> None:
+        self.conn.execute(
+            "UPDATE sessions SET title = ? WHERE id = ?", (title.strip() or "Conversa", session_id)
+        )
+        self.conn.commit()
+
+    def delete_session(self, session_id: int) -> None:
+        self.conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        self.conn.commit()
+
     def get_messages(self, session_id: int) -> list[dict]:
         rows = self.conn.execute(
             "SELECT role, content, created_at FROM messages "

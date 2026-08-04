@@ -58,6 +58,7 @@ function wireUI() {
   byId('btn-settings-close').onclick = closeSettings;
   byId('settings-nav').querySelectorAll('.snav').forEach((b) => b.onclick = () => settingsTab(b.dataset.p));
   byId('btn-new').onclick = () => { sidebar.newSession(); chat.clearChat(); showTab('chat'); };
+  byId('search').oninput = sidebar.renderSessions;
   byId('btn-hamb').onclick = () => byId('drawer').classList.toggle('collapsed');
   byId('tab-avatar').onclick = () => showTab('avatar');
   byId('tab-chat').onclick = () => showTab('chat');

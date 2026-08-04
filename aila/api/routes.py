@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api")
 
@@ -63,6 +64,28 @@ async def session_messages(request: Request, session_id: int) -> dict:
     if engine.store is None:
         return {"messages": []}
     return {"messages": engine.store.get_messages(session_id)}
+
+
+class RenameBody(BaseModel):
+    title: str
+
+
+@router.patch("/sessions/{session_id}")
+async def rename_session(request: Request, session_id: int, body: RenameBody) -> dict:
+    engine = request.app.state.engine
+    if engine.store is not None:
+        engine.store.rename_session(session_id, body.title)
+    return {"ok": True}
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(request: Request, session_id: int) -> dict:
+    engine = request.app.state.engine
+    if engine.store is not None:
+        engine.store.delete_session(session_id)
+        if getattr(engine, "session_id", None) == session_id:
+            engine.session_id = None  # a sessão ativa foi apagada
+    return {"ok": True}
 
 
 @router.post("/upload")

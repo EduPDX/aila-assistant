@@ -83,6 +83,11 @@ button, input, textarea { font-family: inherit; color: inherit; }
 .search { display: flex; align-items: center; gap: var(--s-2); padding: 8px 10px; border-radius: var(--r-md);
   background: var(--panel-2); border: 1px solid var(--border); }
 .search input { flex: 1; background: none; border: none; outline: none; font-size: var(--fs-sm); }
+
+/* campo de texto (diálogos) */
+.field { width: 100%; padding: 10px 12px; margin: var(--s-2) 0; background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: var(--r-md); outline: none; font-size: var(--fs-md); }
+.field:focus { border-color: var(--glass-border); box-shadow: var(--glow); }
 .sessions { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; flex: 1; margin: 0 -6px; padding: 0 6px; }
 .sessions .day { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 10px 4px 4px; }
 .session-item { position: relative; display: flex; align-items: center; gap: var(--s-2); padding: 9px 10px;
