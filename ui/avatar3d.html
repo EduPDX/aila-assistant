@@ -86,6 +86,10 @@ dir.position.set(1, 2, 2); scene.add(dir);
 const rim = new THREE.DirectionalLight(0x35d0ba, 0.6);
 rim.position.set(-1, 1, -2); scene.add(rim);
 
+// alvo do olhar (lookAt): fica perto da câmera, com micro-desvios (sacadas)
+const gazeTarget = new THREE.Object3D();
+scene.add(gazeTarget);
+
 addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
@@ -116,6 +120,8 @@ function loadVRM(url) {
     scene.add(vrm.scene);
     window.vrm = vrm;
     for (const b in _cur) delete _cur[b]; _target = POSES.rest;  // começa no rest
+    try { if (vrm.lookAt) vrm.lookAt.target = gazeTarget; } catch(e){}  // olhos seguem o alvo
+    resetLife();                                    // zera fase de respiração/gaze
     try { vrm.springBoneManager?.reset?.(); } catch(e){}  // molas (cabelo/saia) assentadas
     clock.getDelta();                               // zera o dt (evita a saia "explodir")
     $('loading').style.display = 'none';
@@ -182,11 +188,119 @@ function applyBody(dt) {
     c[2] += (t[2] * DEG - c[2]) * k;
     node.rotation.set(c[0], c[1], c[2]);
   }
-  // respiração idle sutil (na espinha, amplitude pequena — não desincroniza)
-  const spine = h.getNormalizedBoneNode('spine');
-  if (spine) spine.rotation.x = Math.sin(performance.now() / 1400) * 0.012;
 }
 window.__applyBody = applyBody;  // debug
+
+// ============================================================
+//  VIDA PROCEDURAL — camada orgânica por cima da pose base.
+//  Objetivo: nunca "NPC parado". Respiração contínua, deslocamento de
+//  peso, micro-movimentos de cabeça/pescoço/ombros, olhar com sacadas e
+//  linguagem corporal por emoção. Tudo ADITIVO: a pose (braços/gestos) e
+//  o lip-sync continuam mandando; a vida só soma deslocamentos pequenos.
+// ============================================================
+
+// ruído suave ~[-1,1]: soma de senoides incomensuráveis (não repete "na cara")
+function noise(t) {
+  return (Math.sin(t) + Math.sin(t * 2.13 + 1.1) * 0.5 + Math.sin(t * 0.5 + 2.7) * 0.7) / 2.2;
+}
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// perfil de linguagem corporal por emoção (postura base em GRAUS + energia).
+//  amp = amplitude geral · speed = velocidade dos micro-movimentos
+//  breath = ritmo respiratório · spine/head = inclinação base (postura)
+//  gaze = modo do olhar · gazeAmp = quão "solto" o olhar vagueia
+const EMO_PROFILE = {
+  neutral:   { amp:1.00, speed:1.00, breath:1.00, spine:[0,0,0],  head:[0,0,0],  gaze:'soft', gazeAmp:1.0 },
+  happy:     { amp:1.35, speed:1.25, breath:1.15, spine:[-2,0,0], head:[-2,0,0], gaze:'soft', gazeAmp:1.2 }, // queixo pra cima, peito aberto
+  relaxed:   { amp:0.85, speed:0.85, breath:0.92, spine:[1,0,0],  head:[2,0,0],  gaze:'soft', gazeAmp:0.8 },
+  sad:       { amp:0.55, speed:0.70, breath:0.82, spine:[6,0,0],  head:[9,0,0],  gaze:'down', gazeAmp:0.5 }, // ombros caídos, olhar baixo
+  angry:     { amp:1.20, speed:1.30, breath:1.20, spine:[-3,0,0], head:[-4,0,0], gaze:'lock', gazeAmp:0.6 },
+  surprised: { amp:1.30, speed:1.40, breath:1.10, spine:[-4,0,0], head:[-5,0,0], gaze:'lock', gazeAmp:1.4 },
+};
+// olhar "pensativo": vagueia pra cima/lado (associado a emoções cruas do backend)
+const GAZE_BY_RAW = { thinking:'wander', focused:'wander', confused:'wander', sad:'down' };
+
+const life = {
+  t: 0,
+  target: EMO_PROFILE.neutral,
+  cur: { amp:1, speed:1, breath:1, sx:0, sy:0, sz:0, hx:0, hy:0, hz:0, gazeAmp:1 },
+  speech: 0,        // envelope 0..1 de "está falando" (dirige ênfase corporal)
+  gazeMode: 'soft',
+};
+function resetLife() { life.t = 0; life.speech = 0; gaze.yaw = gaze.pitch = 0; gaze.saccade = 0; }
+
+function setBone(h, bone, x, y, z) {
+  const n = h.getNormalizedBoneNode(bone); if (n) n.rotation.set(x, y, z);
+}
+
+function updateLife(dt) {
+  const h = vrm?.humanoid; if (!h) return;
+  life.t += dt;
+
+  // interpola os parâmetros do perfil (transições suaves entre emoções)
+  const T = life.target, c = life.cur, k = Math.min(1, dt * 2.5);
+  c.amp = lerp(c.amp, T.amp, k); c.speed = lerp(c.speed, T.speed, k);
+  c.breath = lerp(c.breath, T.breath, k); c.gazeAmp = lerp(c.gazeAmp, T.gazeAmp, k);
+  c.sx = lerp(c.sx, T.spine[0]*DEG, k); c.sy = lerp(c.sy, T.spine[1]*DEG, k); c.sz = lerp(c.sz, T.spine[2]*DEG, k);
+  c.hx = lerp(c.hx, T.head[0]*DEG, k);  c.hy = lerp(c.hy, T.head[1]*DEG, k);  c.hz = lerp(c.hz, T.head[2]*DEG, k);
+
+  const amp = c.amp, t = life.t * c.speed;
+
+  // respiração: ciclo ~4s, acelera ao falar
+  const breathHz = 0.25 * c.breath * (1 + life.speech * 0.35);
+  const breath = Math.sin(life.t * breathHz * Math.PI * 2);  // -1..1
+  const inhale = (breath + 1) / 2;                            // 0..1
+
+  // deslocamento de peso (lento, ~10-14s) — o corpo nunca fica "travado"
+  const shift  = noise(t * 0.11);
+  const shift2 = noise(t * 0.07 + 3.3);
+
+  // torso/quadril/ombros (não estão no CTRL_BONES → seta direto, rest=0)
+  setBone(h, 'spine',      c.sx + breath * 0.010 * amp,  shift * 0.020 * amp,  c.sz + shift * 0.015 * amp);
+  setBone(h, 'chest',      c.sx * 0.5 - inhale * 0.020 * amp,  shift2 * 0.010 * amp,  -shift * 0.010 * amp);
+  setBone(h, 'upperChest', -inhale * 0.012 * amp,  0,  0);
+  setBone(h, 'hips',       0,  shift * 0.015 * amp,  -shift * 0.020 * amp);
+  setBone(h, 'neck',       noise(t * 0.6 + 1.2) * 0.020 * amp,  noise(t * 0.5) * 0.030 * amp,  0);
+  setBone(h, 'leftShoulder',  0, 0, -inhale * 0.030 * amp);
+  setBone(h, 'rightShoulder', 0, 0,  inhale * 0.030 * amp);
+
+  // cabeça: micro-movimentos + postura + acoplamento com o olhar — ADITIVO
+  //  (applyBody já setou a cabeça pela pose; aqui só somamos)
+  const head = h.getNormalizedBoneNode('head');
+  if (head) {
+    head.rotation.x += c.hx + (noise(t * 0.53) * 0.030 + breath * 0.006 + gaze.pitch * 0.45) * amp;
+    head.rotation.y += c.hy + (noise(t * 0.41 + 2.1) * 0.040 + gaze.yaw * 0.55) * amp;
+    head.rotation.z += c.hz + noise(t * 0.33 + 4.2) * 0.020 * amp;
+    // fala: ênfase (leves acenos rítmicos enquanto a boca se mexe)
+    if (life.speech > 0.05) {
+      head.rotation.x += Math.sin(life.t * 7.5) * 0.020 * life.speech;
+      head.rotation.y += Math.sin(life.t * 3.1 + 1) * 0.030 * life.speech;
+    }
+  }
+}
+
+// ---------------- olhar (sacadas + lookAt) ----------------
+const gaze = { yaw:0, pitch:0, tYaw:0, tPitch:0, saccade:0 };
+function updateGaze(dt) {
+  gaze.saccade -= dt;
+  if (gaze.saccade <= 0) {                     // nova sacada: escolhe novo ponto
+    gaze.saccade = 0.8 + Math.random() * 3.4;
+    const a = life.cur.gazeAmp, r = () => Math.random();
+    if (life.gazeMode === 'wander')      { gaze.tYaw = (r() - 0.3) * 0.5;  gaze.tPitch = -0.15 - r() * 0.2; }
+    else if (life.gazeMode === 'down')   { gaze.tYaw = (r() - 0.5) * 0.15; gaze.tPitch = 0.25 + r() * 0.15; }
+    else if (life.gazeMode === 'lock')   { gaze.tYaw = (r() - 0.5) * 0.08 * a; gaze.tPitch = (r() - 0.5) * 0.06; }
+    else                                 { gaze.tYaw = (r() - 0.5) * 0.28 * a; gaze.tPitch = (r() - 0.5) * 0.16 * a; }
+  }
+  const k = Math.min(1, dt * 9);               // sacadas são rápidas
+  gaze.yaw   += (gaze.tYaw   - gaze.yaw)   * k;
+  gaze.pitch += (gaze.tPitch - gaze.pitch) * k;
+  // alvo do lookAt: perto da câmera (engaja o espectador) + desvio do gaze
+  gazeTarget.position.set(
+    camera.position.x + gaze.yaw * 1.2,
+    camera.position.y - gaze.pitch * 1.2,
+    camera.position.z,
+  );
+}
 
 // ---------------- expressões / emoção ----------------
 const EMO = {
@@ -198,6 +312,8 @@ let targetEmotion = 'neutral', mouthTarget = 0, mouthNow = 0;
 
 function setEmotion(name) {
   targetEmotion = EMO[name] || 'neutral';
+  life.target = EMO_PROFILE[targetEmotion] || EMO_PROFILE.neutral;
+  life.gazeMode = GAZE_BY_RAW[name] || life.target.gaze;   // olhar por emoção crua
   $('emotion').textContent = name;
 }
 function applyExpressions(dt) {
@@ -211,16 +327,20 @@ function applyExpressions(dt) {
   em.setValue('aa', mouthNow);   // viseme da boca (lip-sync)
 }
 
-// piscar automático
-let nextBlink = 1.5, blinking = 0;
+// piscar automático (com "piscada dupla" ocasional — mais humano)
+let nextBlink = 1.5, blinking = 0, blinkQueue = 0;
+const BLINK_DUR = 0.12;
 function updateBlink(dt) {
   const em = vrm?.expressionManager; if (!em) return;
   nextBlink -= dt;
-  if (nextBlink <= 0 && blinking <= 0) { blinking = 0.18; nextBlink = 2 + Math.random()*4; }
+  if (nextBlink <= 0 && blinking <= 0) {
+    blinking = BLINK_DUR; nextBlink = 2 + Math.random() * 4;
+    if (Math.random() < 0.18) blinkQueue = 1;          // ~18%: pisca 2x seguidas
+  }
   if (blinking > 0) {
     blinking -= dt;
-    const b = Math.sin(Math.max(0, blinking)/0.18 * Math.PI);
-    em.setValue('blink', b);
+    em.setValue('blink', Math.sin(Math.max(0, blinking) / BLINK_DUR * Math.PI));
+    if (blinking <= 0 && blinkQueue > 0) { blinkQueue = 0; blinking = BLINK_DUR; }
   }
 }
 
@@ -230,8 +350,14 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);  // limita o dt: molas não explodem
   if (vrm) {
-    applyBody(dt); updateBlink(dt); applyExpressions(dt);
-    vrm.update(dt);
+    // envelope de fala (dirige ênfase corporal): sobe rápido, desce suave
+    life.speech += ((mouthTarget > 0.05 ? 1 : 0) - life.speech) * Math.min(1, dt * 3);
+    applyBody(dt);                 // 1) pose base (braços/gestos + cabeça)
+    updateGaze(dt);                // 2) alvo do olhar (sacadas)
+    updateLife(dt);               // 3) vida orgânica ADITIVA (respiração/torso/cabeça)
+    updateBlink(dt);
+    applyExpressions(dt);
+    vrm.update(dt);                // atualiza lookAt + molas por último
   }
   controls.update();
   renderer.render(scene, camera);
