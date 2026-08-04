@@ -3,9 +3,11 @@ import { byId } from './dom.js';
 import { State } from './state.js';
 import { wsSend, wsReady } from './ws.js';
 import { speak } from './voice.js';
+import { renderMarkdown, enhanceCodeBlocks } from './markdown.js';
 
 let aiBubble = null;
 let attached = [];
+let streamRaw = '';   // texto cru acumulado durante o streaming (p/ render final)
 
 const chatEl = () => byId('chat');
 function scroll() { const c = chatEl(); c.scrollTop = c.scrollHeight; }
@@ -15,19 +17,49 @@ export function addBubble(role, text, extra = '') {
   const b = document.createElement('div'); b.className = 'bubble ' + extra; b.textContent = text;
   w.appendChild(b); chatEl().appendChild(w); scroll(); return b;
 }
-export function clearChat() { chatEl().innerHTML = ''; aiBubble = null; }
+export function clearChat() { chatEl().innerHTML = ''; aiBubble = null; streamRaw = ''; }
+
+// renderiza markdown (+ realce + botões) dentro de uma bolha existente
+function renderInto(bubble, text) {
+  const { html, blocks } = renderMarkdown(text);
+  bubble.classList.add('md');
+  bubble.innerHTML = html;
+  enhanceCodeBlocks(bubble, blocks, runCode);
+}
+
 export function renderMessages(msgs) {
   clearChat();
-  (msgs || []).forEach((m) => addBubble(m.role === 'user' ? 'user' : 'ai', m.content));
+  (msgs || []).forEach((m) => {
+    if (m.role === 'user') { addBubble('user', m.content); }
+    else { const b = addBubble('ai', ''); renderInto(b, m.content); }
+  });
+  scroll();
 }
 
 // eventos do WS
-export function onToken(m) { if (!aiBubble) aiBubble = addBubble('ai', ''); aiBubble.textContent += m.text; scroll(); }
-export function onMessage(m) {
-  if (!aiBubble) addBubble('ai', m.text);
-  aiBubble = null;
-  if (State.get('voiceOut') && m.text) speak(m.text);
+export function onToken(m) {
+  if (!aiBubble) { aiBubble = addBubble('ai', ''); streamRaw = ''; aiBubble.classList.add('streaming'); }
+  streamRaw += m.text;
+  aiBubble.textContent = streamRaw;   // durante o stream: texto puro (rápido)
+  scroll();
 }
+export function onMessage(m) {
+  const text = m.text ?? streamRaw;
+  const bubble = aiBubble || addBubble('ai', '');
+  bubble.classList.remove('streaming');
+  renderInto(bubble, text);           // ao concluir: markdown + realce + botões
+  scroll();
+  aiBubble = null; streamRaw = '';
+  if (State.get('voiceOut') && text) speak(text);
+}
+
+// ▶ Executar: manda o código pra Aila rodar (passa pelo fluxo de permissão do backend)
+function runCode(code, lang) {
+  const verb = lang === 'python' ? 'Rode este código Python' : 'Rode este comando no shell';
+  _send(`${verb}:\n\`\`\`${lang}\n${code}\n\`\`\``, `▶ Executar (${lang})`);
+  showChatTab();
+}
+function showChatTab() { const t = byId('tab-chat'); if (t) t.click(); }
 export function onTool(text) { addBubble('ai', text, 'tool'); }
 export function onSys(text) { addBubble('sys', text); aiBubble = null; }
 

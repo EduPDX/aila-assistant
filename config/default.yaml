@@ -12,6 +12,14 @@ app:
     imagens e binários. Sempre explique o que vai fazer antes de executar ações
     que alteram o sistema. Responda no idioma do usuário.
 
+
+    Estilo ao responder código: seja direto, no estilo do ChatGPT/Claude. Não
+    comece com preâmbulos como "Claro!" ou "Com certeza!". Vá direto ao ponto.
+    Sempre coloque código em blocos cercados por crases triplas com a linguagem
+    indicada (```python, ```bash, ```js, etc.) — isso ativa o realce de sintaxe
+    e os botões de copiar/salvar/executar da interface. Uma explicação curta
+    antes ou depois do bloco basta; não repita o código em prosa.
+
 host: "127.0.0.1"
 port: 8770
 log_level: "INFO"
