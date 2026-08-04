@@ -181,3 +181,49 @@ button, input, textarea { font-family: inherit; color: inherit; }
 
 .collapsed { margin-left: -280px; }
 .sidebar { transition: margin-left var(--dur-2) var(--ease); }
+
+/* ============================================================
+   PAINEL DE STATUS (direita) — glassmorphism
+   ============================================================ */
+.statuspanel {
+  width: 280px; flex-shrink: 0; overflow-y: auto;
+  padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-3);
+  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur));
+  border-left: 1px solid var(--glass-border);
+}
+.sp-title { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; color: var(--muted); }
+.sp-state {
+  display: flex; align-items: center; gap: var(--s-2); padding: 12px 14px;
+  border-radius: var(--r-lg); background: var(--panel-2); border: 1px solid var(--glass-border);
+  font-size: var(--fs-lg); font-weight: 600;
+}
+.sp-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.sp-state[data-status="IDLE"] .sp-dot { background: var(--muted); }
+.sp-state:not([data-status="IDLE"]):not([data-status="ERROR"]) .sp-dot {
+  background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: pulse 1.4s ease-in-out infinite;
+}
+.sp-state[data-status="ERROR"] .sp-dot { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+.sp-state[data-status="ERROR"] { color: var(--danger); }
+
+.sp-tool { display: none; font-size: var(--fs-sm); color: var(--accent); font-family: var(--font-mono);
+  padding: 8px 12px; border-radius: var(--r-md); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.sp-tool.show { display: block; animation: fadeIn var(--dur-2) var(--ease); }
+
+.sp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+.sp-card {
+  padding: 12px; border-radius: var(--r-md); background: var(--panel-2);
+  border: 1px solid var(--glass-border);
+}
+.sp-k { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.sp-v { font-size: var(--fs-lg); color: var(--accent); font-weight: 600; margin-top: 3px; }
+.sp-v.sm { font-size: var(--fs-sm); word-break: break-all; }
+
+.sp-meters { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-1); }
+.sp-mrow { display: flex; justify-content: space-between; font-size: var(--fs-xs);
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+.sp-bar { height: 6px; border-radius: 6px; background: var(--panel-2); overflow: hidden; }
+.sp-bar i { display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-radius: 6px; transition: width var(--dur-2) var(--ease); }
+
+@media (max-width: 1180px) { .statuspanel { display: none; } }

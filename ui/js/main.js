@@ -9,6 +9,7 @@ import * as sidebar from './sidebar.js';
 import * as avatar from './avatar.js';
 import * as voice from './voice.js';
 import { initSettings, openSettings, closeSettings, settingsTab, loadStatus, setLlm } from './settings.js';
+import { initStatusPanel } from './statuspanel.js';
 
 /* ---------- abas ---------- */
 function showTab(t) {
@@ -81,6 +82,7 @@ function wireUI() {
 
 /* ---------- start ---------- */
 initSettings();
+initStatusPanel();
 wireUI();
 connectWS({ onMessage: route, onClose: () => setLlm(false) });
 sidebar.loadSessions();

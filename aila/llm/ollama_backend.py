@@ -30,6 +30,7 @@ class OllamaBackend(LLMBackend):
         self.base_url = base_url.rstrip("/")
         self.default_model = default_model
         self.keep_alive = keep_alive
+        self.last_tps = 0.0  # tokens/s da última geração (painel de status)
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
 
     # ------------------------------------------------------------------ #
@@ -105,6 +106,10 @@ class OllamaBackend(LLMBackend):
                 content = msg.get("content", "")
                 tool_calls = msg.get("tool_calls") or None
                 done = bool(data.get("done"))
+                if done:  # tokens/s da geração (para o painel de status)
+                    ec, ed = data.get("eval_count"), data.get("eval_duration")
+                    if ec and ed:
+                        self.last_tps = ec / (ed / 1e9)
                 if content or done or tool_calls:
                     yield ChatChunk(
                         content=content,

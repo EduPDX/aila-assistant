@@ -27,6 +27,14 @@ async def status(request: Request) -> dict:
     }
 
 
+@router.get("/metrics")
+async def metrics(request: Request) -> dict:
+    """Métricas reais do sistema (CPU/RAM/GPU/VRAM/tokens-s/uptime) para o painel."""
+    from aila.core.metrics import collect
+
+    return collect(request.app.state.engine)
+
+
 @router.get("/models")
 async def models(request: Request) -> dict:
     engine = request.app.state.engine
