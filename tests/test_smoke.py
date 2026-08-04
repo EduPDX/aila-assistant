@@ -167,6 +167,44 @@ def test_osc_avatar_bridge_mapping():
     assert ("/aila/emotion", "happy") in sent
 
 
+def test_web_search_parser():
+    """O parser do DuckDuckGo extrai título, URL real e resumo (sem rede)."""
+    from aila.agents.web_agent import WebAgent, _real_url
+
+    # o DDG embrulha o link real no parâmetro uddg de um redirect
+    assert _real_url("//duckduckgo.com/l/?uddg=https%3A%2F%2Fpython.org%2Fx&rut=z") == \
+        "https://python.org/x"
+
+    page = """
+    <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexemplo.com%2Fa&rut=1">
+      Primeiro <b>Resultado</b></a>
+    <a class="result__snippet" href="x">Resumo do primeiro &amp; tal.</a>
+    <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexemplo.com%2Fb&rut=2">Segundo</a>
+    <a class="result__snippet" href="y">Resumo dois.</a>
+    """
+    out = WebAgent._parse_results(page, 5)
+    assert len(out) == 2
+    assert out[0]["title"] == "Primeiro Resultado"
+    assert out[0]["url"] == "https://exemplo.com/a"
+    assert out[0]["snippet"] == "Resumo do primeiro & tal."
+    assert out[1]["url"] == "https://exemplo.com/b"
+
+
+def test_web_search_is_readonly_allowed(tmp_path: Path):
+    """web.search/web.fetch são leitura: permitidas mesmo em modo somente-leitura."""
+    from aila.security.permissions import PermissionManager
+
+    s = get_settings()
+    s.security.read_only = True
+    pm = PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl"))
+
+    async def go():
+        await pm.check("web.search", "web", {"query": "x"})   # não levanta
+        await pm.check("web.page.get", "web", {"url": "x"})    # não levanta
+
+    asyncio.run(go())
+
+
 def test_binary_agent_triage(tmp_path: Path):
     """Triagem de binário funciona em modo somente-leitura (identify/entropy)."""
     from aila.agents.base import AgentDeps

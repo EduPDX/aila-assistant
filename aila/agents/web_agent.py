@@ -1,0 +1,176 @@
+"""Web Agent — pesquisa na internet e leitura de páginas.
+
+Usa o **DuckDuckGo** (endpoint HTML "lite", sem JavaScript) via ``httpx`` —
+não precisa de chave de API nem de dependência extra. Duas ferramentas:
+
+    web.search  — pesquisa e devolve os principais resultados (título/link/resumo)
+    web.fetch   — baixa uma página e devolve o texto legível (para ler/resumir)
+
+Ambas são **ações de leitura** (não alteram nada no sistema), portanto
+funcionam mesmo no modo somente-leitura. A busca não usa chaves nem contas.
+"""
+
+from __future__ import annotations
+
+import html as _html
+import re
+from urllib.parse import parse_qs, unquote, urlparse
+
+import httpx
+
+from aila.agents.base import BaseAgent
+from aila.core.logging import get_logger
+from aila.tools.schema import Tool, ToolParam, ToolResult
+
+log = get_logger("web_agent")
+
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
+_DDG_HTML = "https://html.duckduckgo.com/html/"
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_WS_RE = re.compile(r"[ \t\r\f\v]+")
+_MULTINL_RE = re.compile(r"\n\s*\n\s*\n+")
+_SCRIPT_RE = re.compile(r"<(script|style|noscript|template)\b.*?</\1>", re.S | re.I)
+_RESULT_A_RE = re.compile(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+_SNIPPET_RE = re.compile(r'class="result__snippet"[^>]*>(.*?)</a>', re.S)
+
+
+def _strip_html(fragment: str) -> str:
+    """Remove tags e desescapa entidades de um trecho de HTML."""
+    return _html.unescape(_TAG_RE.sub("", fragment)).strip()
+
+
+def _real_url(href: str) -> str:
+    """Resolve o link real por trás do redirecionamento do DuckDuckGo."""
+    if href.startswith("//"):
+        href = "https:" + href
+    parsed = urlparse(href)
+    if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l/"):
+        uddg = parse_qs(parsed.query).get("uddg")
+        if uddg:
+            return unquote(uddg[0])
+    return href
+
+
+class WebAgent(BaseAgent):
+    name = "web"
+    description = (
+        "Pesquisa na internet e lê páginas web (DuckDuckGo, sem chave de API). "
+        "Use para obter informação atual, notícias, documentação e fatos que "
+        "você não sabe. web.search acha; web.fetch lê a página encontrada."
+    )
+
+    def tools(self) -> list[Tool]:
+        return [
+            Tool(
+                name="web.search",
+                description=(
+                    "Pesquisa na web e retorna os principais resultados "
+                    "(título, link e resumo). Use para achar informação atual."
+                ),
+                params=[
+                    ToolParam("query", "string", "O que pesquisar"),
+                    ToolParam("max_results", "integer", "Máx. de resultados (padrão 5)",
+                              required=False),
+                ],
+                handler=self._search,
+                agent=self.name,
+            ),
+            Tool(
+                name="web.fetch",
+                description=(
+                    "Baixa uma página web (URL http/https) e devolve o texto "
+                    "legível dela, para você ler ou resumir."
+                ),
+                params=[ToolParam("url", "string", "URL http(s) da página")],
+                handler=self._fetch,
+                agent=self.name,
+            ),
+        ]
+
+    # ------------------------------------------------------------------ #
+    async def _search(self, args: dict) -> ToolResult:
+        await self.authorize("web.search", args)  # leitura
+        query = (args.get("query") or "").strip()
+        if not query:
+            return ToolResult.error("Informe o que pesquisar (query vazia).")
+        try:
+            n = max(1, min(10, int(args.get("max_results") or 5)))
+        except (TypeError, ValueError):
+            n = 5
+        try:
+            results = await self._ddg_search(query, n)
+        except httpx.HTTPError as exc:
+            return ToolResult.error(f"Falha na busca (rede): {exc}")
+        except Exception as exc:  # noqa: BLE001
+            log.exception("erro na busca web")
+            return ToolResult.error(f"Falha na busca: {exc}")
+        if not results:
+            return ToolResult.error(f"Nenhum resultado para '{query}'.")
+        lines = [
+            f"{i}. {r['title']}\n   {r['url']}\n   {r['snippet']}"
+            for i, r in enumerate(results, 1)
+        ]
+        return ToolResult.success("\n".join(lines), results=results, query=query)
+
+    async def _ddg_search(self, query: str, n: int) -> list[dict]:
+        async with httpx.AsyncClient(
+            timeout=15, headers={"User-Agent": _UA}, follow_redirects=True
+        ) as client:
+            resp = await client.post(_DDG_HTML, data={"q": query, "kl": "br-pt"})
+            resp.raise_for_status()
+            page = resp.text
+        return self._parse_results(page, n)
+
+    @staticmethod
+    def _parse_results(page: str, n: int) -> list[dict]:
+        """Extrai (título, url, resumo) do HTML de resultados do DuckDuckGo."""
+        titles = _RESULT_A_RE.findall(page)
+        snippets = _SNIPPET_RE.findall(page)
+        results: list[dict] = []
+        for i, (href, title_html) in enumerate(titles[:n]):
+            snippet = _strip_html(snippets[i]) if i < len(snippets) else ""
+            results.append({
+                "title": _strip_html(title_html) or "(sem título)",
+                "url": _real_url(href),
+                "snippet": snippet,
+            })
+        return results
+
+    # ------------------------------------------------------------------ #
+    async def _fetch(self, args: dict) -> ToolResult:
+        await self.authorize("web.page.get", args)  # leitura
+        url = (args.get("url") or "").strip()
+        if not re.match(r"^https?://", url, re.I):
+            return ToolResult.error("URL inválida — use http:// ou https://.")
+        try:
+            async with httpx.AsyncClient(
+                timeout=20, headers={"User-Agent": _UA}, follow_redirects=True
+            ) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                ctype = resp.headers.get("content-type", "")
+                if "html" not in ctype and "text" not in ctype and ctype:
+                    return ToolResult.error(f"Conteúdo não textual ({ctype}).")
+                text = self._html_to_text(resp.text)
+                final_url = str(resp.url)
+        except httpx.HTTPError as exc:
+            return ToolResult.error(f"Falha ao baixar a página: {exc}")
+        if not text:
+            return ToolResult.error("A página não tem texto extraível.")
+        clipped = text[:8000]
+        suffix = "\n\n[…texto truncado]" if len(text) > 8000 else ""
+        return ToolResult.success(clipped + suffix, url=final_url, chars=len(text))
+
+    @staticmethod
+    def _html_to_text(page: str) -> str:
+        page = _SCRIPT_RE.sub(" ", page)          # tira script/style/etc.
+        page = re.sub(r"<br\s*/?>", "\n", page, flags=re.I)
+        page = re.sub(r"</(p|div|h[1-6]|li|tr)>", "\n", page, flags=re.I)
+        text = _html.unescape(_TAG_RE.sub("", page))
+        text = _WS_RE.sub(" ", text)
+        text = _MULTINL_RE.sub("\n\n", text)
+        return "\n".join(line.strip() for line in text.splitlines()).strip()

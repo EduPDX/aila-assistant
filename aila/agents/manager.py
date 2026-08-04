@@ -10,6 +10,7 @@ from aila.agents.computer_agent import ComputerAgent
 from aila.agents.file_agent import FileAgent
 from aila.agents.memory_agent import MemoryAgent
 from aila.agents.vision_agent import VisionAgent
+from aila.agents.web_agent import WebAgent
 from aila.core.logging import get_logger
 from aila.tools.registry import ToolRegistry
 
@@ -19,6 +20,7 @@ log = get_logger("agent_manager")
 AGENT_CLASSES: dict[str, type[BaseAgent]] = {
     "file": FileAgent,
     "code": CodeAgent,
+    "web": WebAgent,
     "computer": ComputerAgent,
     "vision": VisionAgent,
     "binary": BinaryAgent,

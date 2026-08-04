@@ -41,8 +41,9 @@ context:
   summarize_after: 40         # resume histórico antigo após N turnos
 
 security:
-  read_only: true             # bloqueia toda escrita/execução até liberar
-  confirm_destructive: true   # pede confirmação para ações perigosas
+  read_only: false            # Aila PODE agir (rodar comandos, mexer no PC); a
+                              # proteção fica por conta da confirmação abaixo
+  confirm_destructive: true   # toda ação perigosa pede confirmação na UI (overlay ⚠️)
   sandbox_root: "./workspace" # raiz permitida para o File Agent
   # Ações classificadas como perigosas (exigem confirmação):
   destructive_actions:
@@ -59,13 +60,13 @@ agents:
   enabled:
     - file
     - code
+    - web        # pesquisa na internet + leitura de páginas (leitura, sem chave)
     - memory
     - vision
     - binary
     - avatar
-  # Agentes desabilitados por padrão (risco de controle do SO):
-  disabled:
-    - computer
+    - computer   # controle do PC: janelas, mouse, teclado, abrir apps, rodar comandos
+  disabled: []
 
 voice:
   enabled: true

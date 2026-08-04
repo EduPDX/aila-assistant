@@ -236,7 +236,7 @@ def _tool_status(tool_name: str) -> str:
         return "ANALYZING_IMAGE" if tool_name.startswith("vision.") else "TOOL_RUNNING"
     if tool_name.startswith("file."):
         return "READING_FILE"
-    if tool_name.startswith("memory.search"):
+    if tool_name.startswith("web.") or tool_name.startswith("memory.search"):
         return "SEARCHING"
     return "TOOL_RUNNING"
 

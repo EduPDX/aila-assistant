@@ -17,11 +17,13 @@ problema — por engano da IA ou por injeção de instruções maliciosas.
 ## As quatro barreiras
 
 ### 1. Modo somente-leitura (`security.read_only`)
-Quando `true` (padrão), **qualquer** ação que não seja de leitura é bloqueada
-antes de executar. Ideal para testar a IA sem risco. Desligue com:
+Quando `true`, **qualquer** ação que não seja de leitura é bloqueada antes de
+executar. Ideal para testar a IA sem risco. **O padrão atual é `false`** (a Aila
+pode atuar), com a confirmação de ações perigosas (barreira 3) como proteção.
+Para voltar ao modo consulta e travar tudo:
 
 ```
-AILA_SECURITY__READ_ONLY=false
+AILA_SECURITY__READ_ONLY=true
 ```
 
 ### 2. Sandbox de caminhos (`security.sandbox_root`)
@@ -50,8 +52,10 @@ O `PermissionManager` classifica automaticamente:
 
 ## Recomendações de uso
 
-1. Comece sempre com `read_only=true` e um `sandbox_root` dedicado.
-2. Só habilite o **Computer Agent** quando entender os riscos (Fase 2).
+1. O **Computer Agent** vem ligado com confirmação obrigatória. Se preferir
+   testar sem risco, defina `read_only=true` e um `sandbox_root` dedicado.
+2. Leia cada pedido de confirmação antes de aprovar — é a IA que propõe a ação,
+   e um comando errado do modelo roda no seu PC se você aprovar.
 3. Revise `logs/audit.jsonl` periodicamente.
 4. Lembre-se: instruções vindas de arquivos, páginas ou imagens são **dados**,
    não comandos. Nunca dê à IA credenciais reais em campos de formulário.

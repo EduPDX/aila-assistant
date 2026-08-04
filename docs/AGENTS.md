@@ -48,9 +48,24 @@ apenas auditado. Configuração em `config → memory`. Requer
 `ollama pull nomic-embed-text`; se o modelo/embeddings falharem, a memória se
 autodesativa sem quebrar o chat.
 
+## Web Agent — `web` ✅ (pesquisa na internet)
+Busca na web e leitura de páginas via **DuckDuckGo** (endpoint HTML, sem chave
+de API e sem dependência extra — usa o `httpx` já do core). Ações são
+**leitura** (funcionam mesmo em modo somente-leitura). Habilitado por padrão.
+
+| Tool | Descrição |
+|------|-----------|
+| `web.search` | Pesquisa na web → principais resultados (título, link, resumo) |
+| `web.fetch` | Baixa uma página (URL http/https) e devolve o texto legível |
+
+Fluxo típico de pesquisa: `web.search` acha as fontes → `web.fetch` lê a mais
+relevante → a IA responde com base no conteúdo atual.
+
 ## Computer Agent — `computer` ✅ (Fase 2)
-Controle do SO. **Desabilitado por padrão** (segurança). Requer
-`pip install -e ".[computer]"` e habilitar em `config → agents.enabled: [..., computer]`.
+Controle do SO. **Habilitado por padrão** com `security.read_only: false` e
+`confirm_destructive: true` — a Aila pode atuar, mas cada ação perigosa pede
+confirmação. Requer `pip install -e ".[computer]"` para mouse/teclado/janelas
+(o `computer.run_command` em PowerShell funciona sem extras).
 
 **Percepção (leitura — permitida mesmo em modo somente-leitura):**
 
@@ -76,12 +91,12 @@ Controle do SO. **Desabilitado por padrão** (segurança). Requer
 `pyautogui.FAILSAFE` está ligado: leve o mouse ao **canto superior-esquerdo**
 para abortar qualquer automação em andamento.
 
-### Como habilitar (com segurança)
-1. `pip install -e ".[computer]"`
-2. Em `config/local.yaml` (ou `.env`), adicione `computer` a `agents.enabled`.
-3. Deixe `security.read_only: false` **apenas** quando quiser que ela atue.
-4. Mantenha `security.confirm_destructive: true` — cada clique/tecla/comando
-   pede sua confirmação na UI.
+### Segurança
+- Vem **ligado** (`read_only: false`), mas `confirm_destructive: true` faz cada
+  clique/tecla/comando/abrir-app pedir confirmação na UI (overlay ⚠️).
+- Para **travar tudo** de novo (modo somente-leitura), defina
+  `security.read_only: true` em `config/local.yaml` ou `AILA_SECURITY__READ_ONLY=true`.
+- Toda ação é registrada no log de auditoria (`logs/audit.jsonl`).
 
 ## Vision Agent — `vision` ✅ (Fase 3)
 Análise visual via modelo multimodal (LLaVA/Qwen-VL) no Ollama. Requer
