@@ -9,7 +9,7 @@ por interfaces bem definidas e por um **barramento de eventos**.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  APRESENTAÇÃO                                                 │
-│  ui/index.html  ·  (fase 4) Avatar 3D Unreal/Unity           │
+│  ui/app.html (modular)  ·  ui/avatar3d.html (Avatar 3D VRM)  │
 └───────────────┬─────────────────────────────┬───────────────┘
                 │ WebSocket /ws               │ WebSocket avatar.state
 ┌───────────────▼─────────────────────────────▼───────────────┐

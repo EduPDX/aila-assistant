@@ -65,9 +65,9 @@ Definido em `aila/avatar/protocol.py`:
 
 ## Consumidor de referência: avatar no navegador (implementado ✅)
 
-A própria UI (`ui/index.html`) já inclui um **avatar SVG** que consome
-`avatar.state` em tempo real — serve como implementação de referência do
-protocolo, sem precisar de Unreal/Unity:
+A própria UI (`ui/avatar3d.html`) já inclui um **avatar 3D (VRM)** com
+animação procedural que consome `avatar.state` em tempo real — serve como
+implementação de referência do protocolo, sem precisar de Unreal/Unity:
 
 - **emotion** → posição das sobrancelhas, olhos, curvatura da boca e cor do halo
   (ex.: `happy` = sorriso largo + halo teal; `confused` = sobrancelhas

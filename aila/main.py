@@ -88,8 +88,7 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def index():  # noqa: ANN202
-        # nova UI (avatar central + drawer de config + temas); index.html antigo
-        # continua acessível em /static/index.html
+        # UI modular (avatar central + sidebar + painel de status + config/temas)
         return FileResponse(UI_DIR / "app.html")
 
     # modelos VRM ficam numa pasta gravável; na 1ª execução copia o VRM padrão

@@ -271,3 +271,46 @@ button, input, textarea { font-family: inherit; color: inherit; }
 .hl-num { color: #ff9e64; }
 .hl-com { color: #5c6b7f; font-style: italic; }
 .hl-fn  { color: #7dcfff; }
+
+/* ============================================================
+   FASE 5 — polimento: microinterações + responsividade
+   ============================================================ */
+/* entrada suave das mensagens */
+.msg { animation: msgIn var(--dur-2) var(--ease-out) both; }
+@keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* botões do bloco de código: leve realce ao passar o mouse no bloco */
+.codeblock .cb-actions { opacity: .55; transition: opacity var(--dur-1) var(--ease); }
+.codeblock:hover .cb-actions, .codeblock:focus-within .cb-actions { opacity: 1; }
+.cb-btn:active { transform: scale(.94); }
+
+/* respeita quem prefere menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important; }
+}
+
+/* ---------- responsividade: o avatar nunca é sobreposto ---------- */
+/* tablet: sem painel direito, sidebar mais estreita, chat/compositor largos */
+@media (max-width: 1180px) {
+  .sidebar { width: 250px; }
+  .chat, .composer { padding-left: 8%; padding-right: 8%; }
+}
+
+/* mobile: sidebar vira gaveta sobreposta (não empurra/espreme o avatar) */
+@media (max-width: 860px) {
+  .sidebar {
+    position: fixed; z-index: 55; top: 0; bottom: 0; left: 0; height: 100vh; width: min(300px, 84vw);
+    box-shadow: var(--shadow-2); transition: transform var(--dur-2) var(--ease); margin-left: 0;
+  }
+  .sidebar.collapsed { transform: translateX(-100%); margin-left: 0; }
+  .chat, .composer { padding-left: 5%; padding-right: 5%; }
+  .topbar { padding: 0 var(--s-3); }
+  .emochip { display: none; }         /* já aparece no HUD do avatar */
+}
+
+/* scrim da gaveta (mobile) — camada real acima do iframe, clicável p/ fechar */
+.scrim { position: fixed; inset: 0; z-index: 54; background: rgba(0, 0, 0, .5);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  opacity: 0; pointer-events: none; transition: opacity var(--dur-2) var(--ease); }
+.scrim.show { opacity: 1; pointer-events: auto; }
