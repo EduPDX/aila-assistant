@@ -37,7 +37,7 @@ function route(m) {
     case 'agent.result': chat.onTool(`✓ ${m.tool}: ${m.content}`); break;
     case 'avatar.state': State.set({ emotion: m.emotion }); avatar.avatarEmotion(m.emotion, m.animation, m.gesture); break;
     case 'avatar.gesture': avatar.avatarGesture(m.value); break;
-    case 'aila.state': State.set({ status: m.status, tool: m.tool || null }); break;
+    case 'aila.state': State.set({ status: m.status, tool: m.tool || null }); avatar.avatarStatus(m.status); break;
     case 'memory.recalled': chat.onTool(`🧠 lembrei de ${m.items.length} memória(s)`); break;
     case 'permission.request': showPerm(m); break;
     case 'session.loaded': chat.renderMessages(m.messages); State.set({ activeSession: m.id }); sidebar.loadSessions(); break;
