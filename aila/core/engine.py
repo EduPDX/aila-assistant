@@ -84,8 +84,11 @@ class AilaEngine:
             '  {\"tool\": \"computer.run_command\", \"args\": {\"command\": \"Get-Date\"}}\n\n'
             "Depois que eu devolver o resultado da ferramenta, aí sim responda ao "
             "usuário em linguagem natural, com base no que a ferramenta retornou. "
-            "Use ferramentas só quando necessário; para conversa comum, responda "
-            "normalmente. Nunca invente resultados de ferramentas."
+            "Se o resultado vier com ERRO, leia a mensagem, corrija os argumentos e "
+            "tente de novo — não desista na primeira falha.\n"
+            "Use ferramentas só quando necessário: para conversa, opinião ou gerar "
+            "código simples, responda direto SEM ferramenta. Nunca invente "
+            "resultados de ferramentas."
         )
 
     # ------------------------ sessões / persistência ------------------- #
@@ -236,7 +239,7 @@ class AilaEngine:
                     "agent.result",
                     {"tool": name, "ok": result.ok, "content": result.content[:2000]},
                 )
-                self.context.add_tool(name, result.content)
+                self.context.add_tool(name, _clip_for_context(result.content))
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
 
@@ -251,6 +254,24 @@ class AilaEngine:
             self.pending_gesture = None
         await emit("aila.state", {"status": "IDLE"})
         return final_text
+
+
+#: teto de caracteres de um resultado de ferramenta REinjetado no contexto do
+#: modelo (o usuário ainda vê o conteúdo completo no chat). Evita que um
+#: web.fetch de 8k chars entupa a janela de contexto do 7B.
+MAX_TOOL_RESULT_CHARS = 3000
+
+
+def _clip_for_context(content: str, limit: int = MAX_TOOL_RESULT_CHARS) -> str:
+    """Corta um resultado grande mantendo início e fim (onde costuma estar o
+    mais relevante: topo de páginas, erros no fim de comandos)."""
+    content = content or ""
+    if len(content) <= limit:
+        return content
+    head = content[: limit * 2 // 3]
+    tail = content[-(limit // 3):]
+    omitted = len(content) - len(head) - len(tail)
+    return f"{head}\n…[{omitted} caracteres omitidos]…\n{tail}"
 
 
 def _iter_json_objects(text: str) -> list[dict]:

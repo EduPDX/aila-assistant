@@ -212,6 +212,20 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_clip_tool_result_for_context():
+    """Resultados grandes de ferramenta são cortados (cabeça+cauda) p/ não
+    entupir o contexto; pequenos passam intactos."""
+    from aila.core.engine import _clip_for_context
+
+    assert _clip_for_context("curto") == "curto"          # pequeno: intacto
+    big = "A" * 5000 + "ZFIM"
+    clipped = _clip_for_context(big, limit=1200)
+    assert len(clipped) < len(big)
+    assert clipped.startswith("A")                        # mantém o início
+    assert clipped.endswith("ZFIM")                       # mantém o fim
+    assert "omitidos" in clipped                          # marca o corte
+
+
 def test_web_search_is_readonly_allowed(tmp_path: Path):
     """web.search/web.fetch são leitura: permitidas mesmo em modo somente-leitura."""
     from aila.security.permissions import PermissionManager
