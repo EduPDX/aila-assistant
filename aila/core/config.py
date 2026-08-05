@@ -81,6 +81,7 @@ class LLMConfig(BaseModel):
     vision_model: str = "llava:7b"
     temperature: float = 0.7
     max_tokens: int = 2048
+    num_ctx: int = 8192          # janela de contexto (Ollama usa 2048 por padrão!)
     keep_alive: str = "10m"
     timeout_seconds: int = 120
 

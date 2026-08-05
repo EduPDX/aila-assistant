@@ -115,8 +115,10 @@ class TextToSpeech:
 
     # ----------------------------- Edge ------------------------------- #
     def _edge(self, text: str, out: Path) -> Path:
-        """Edge-TTS (vozes neurais da Microsoft, online). Gera MP3 e converte
-        para WAV (necessário p/ o navegador e p/ o lip-sync)."""
+        """Edge-TTS (vozes neurais da Microsoft, online). Gera MP3; converte
+        para WAV se o PyAV estiver disponível, senão devolve o MP3 direto — o
+        navegador toca MP3 nativamente e o lip-sync (MediaElementSource) também
+        funciona. Assim a voz NÃO depende do PyAV (que falta no .exe)."""
         try:
             import edge_tts  # type: ignore
         except ImportError as exc:
@@ -134,9 +136,14 @@ class TextToSpeech:
             await comm.save(str(mp3))
 
         _run_coro(_gen())
-        mp3_to_wav(mp3, out)
-        mp3.unlink(missing_ok=True)
-        return out
+        if _module_available("av"):
+            try:
+                mp3_to_wav(mp3, out)
+                mp3.unlink(missing_ok=True)
+                return out
+            except Exception as exc:  # noqa: BLE001 - conversão falhou: usa o MP3
+                log.warning(f"mp3->wav falhou ({exc!r}); servindo MP3 direto")
+        return mp3
 
     # ----------------------------- SAPI ------------------------------- #
     def _sapi(self, text: str, out: Path) -> Path:

@@ -58,8 +58,10 @@ async def speak(request: Request, body: SpeakBody) -> FileResponse:
     if not text:
         raise HTTPException(status_code=400, detail="Texto vazio.")
     try:
-        wav = voice.speak_to_file(text)
+        audio = voice.speak_to_file(text)
     except Exception as exc:  # noqa: BLE001
         log.exception("falha na síntese")
         raise HTTPException(status_code=500, detail=f"Falha na síntese: {exc}") from exc
-    return FileResponse(str(wav), media_type="audio/wav", filename="aila.wav")
+    is_mp3 = str(audio).lower().endswith(".mp3")
+    media = "audio/mpeg" if is_mp3 else "audio/wav"
+    return FileResponse(str(audio), media_type=media, filename="aila." + ("mp3" if is_mp3 else "wav"))

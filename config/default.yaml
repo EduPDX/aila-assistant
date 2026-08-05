@@ -32,6 +32,7 @@ llm:
   vision_model: "llava:7b"          # Vision Agent (ollama pull llava:7b)
   temperature: 0.7
   max_tokens: 2048
+  num_ctx: 8192               # janela de contexto (Ollama usa só 2048 por padrão — sufoca o agente)
   # keep_alive: tempo que o Ollama mantém o modelo na VRAM
   keep_alive: "10m"
   timeout_seconds: 120

@@ -42,14 +42,17 @@ class VoiceSystem:
             Path(path).unlink(missing_ok=True)
 
     def speak_to_file(self, text: str) -> Path:
-        """Sintetiza ``text`` em um WAV e retorna o caminho."""
+        """Sintetiza ``text`` em áudio e retorna o caminho REAL do arquivo
+        (pode ser .wav ou .mp3, dependendo do engine/PyAV)."""
         import hashlib
 
-        name = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16] + ".wav"
-        out = _OUT_DIR / name
-        if not out.exists():
-            self.tts.synthesize(text, out)
-        return out
+        key = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
+        wav, mp3 = _OUT_DIR / f"{key}.wav", _OUT_DIR / f"{key}.mp3"
+        if wav.exists():
+            return wav
+        if mp3.exists():
+            return mp3
+        return self.tts.synthesize(text, wav)  # devolve o caminho de fato gerado
 
     def status(self) -> dict:
         return {

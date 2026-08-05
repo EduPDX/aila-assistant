@@ -15,6 +15,7 @@ WebSocket), então a engine não conhece a camada de transporte.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -68,9 +69,23 @@ class AilaEngine:
         caps = self.agents.describe_capabilities()
         return (
             f"{base}\n\n{caps}\n\n"
-            "Use as ferramentas acima automaticamente quando a tarefa exigir ler, "
-            "escrever ou buscar arquivos, ou gerar/analisar/corrigir código. Para "
-            "conversa comum, apenas responda. Nunca invente resultados de ferramentas."
+            "=== COMO AGIR (MUITO IMPORTANTE) ===\n"
+            "Você tem ferramentas REAIS (listadas acima) e roda no computador do "
+            "usuário. Você NÃO é um assistente 'somente texto': você PESQUISA na "
+            "web, EXECUTA comandos, LÊ/ESCREVE arquivos e VÊ a tela de verdade. "
+            "Quando o usuário pedir para pesquisar, executar, rodar, abrir ou "
+            "fazer algo no PC, USE a ferramenta certa. NUNCA diga que 'não é capaz' "
+            "nem explique como o usuário faria manualmente — apenas faça.\n\n"
+            "Para chamar uma ferramenta, responda com UM único objeto JSON, "
+            "sozinho, sem mais nenhum texto em volta:\n"
+            '{\"tool\": \"<nome_exato>\", \"args\": { ... }}\n\n'
+            "Exemplos:\n"
+            '  {\"tool\": \"web.search\", \"args\": {\"query\": \"novidades de IA 2026\"}}\n'
+            '  {\"tool\": \"computer.run_command\", \"args\": {\"command\": \"Get-Date\"}}\n\n'
+            "Depois que eu devolver o resultado da ferramenta, aí sim responda ao "
+            "usuário em linguagem natural, com base no que a ferramenta retornou. "
+            "Use ferramentas só quando necessário; para conversa comum, responda "
+            "normalmente. Nunca invente resultados de ferramentas."
         )
 
     # ------------------------ sessões / persistência ------------------- #
@@ -172,12 +187,14 @@ class AilaEngine:
 
         tools = self.agents.registry.schemas() if mode != "chat" else None
 
+        opts = {"num_ctx": self.settings.llm.num_ctx}
         final_text = ""
         for _ in range(MAX_TOOL_ITERS):
             collected: list[str] = []
             tool_calls: list[dict] = []
             async for chunk in self.llm.chat(
-                self._messages_with_memory(mem_block), stream=True, tools=tools
+                self._messages_with_memory(mem_block), stream=True, tools=tools,
+                options=opts,
             ):
                 if chunk.content:
                     collected.append(chunk.content)
@@ -186,6 +203,14 @@ class AilaEngine:
                     tool_calls = chunk.tool_calls
 
             text = "".join(collected)
+
+            # Fallback: modelos como qwen-coder emitem a tool-call como TEXTO
+            # (tool_calls nativo vem vazio). Tentamos interpretar o JSON do texto.
+            if not tool_calls and mode != "chat":
+                parsed = extract_text_tool_calls(text, self.agents.registry)
+                if parsed:
+                    tool_calls = parsed
+                    text = strip_tool_call_text(text)
 
             if not tool_calls:
                 final_text = text.strip()
@@ -226,6 +251,57 @@ class AilaEngine:
             self.pending_gesture = None
         await emit("aila.state", {"status": "IDLE"})
         return final_text
+
+
+def _iter_json_objects(text: str) -> list[dict]:
+    """Extrai objetos JSON de nível superior de um texto (varredura de chaves)."""
+    objs: list[dict] = []
+    depth, start = 0, -1
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    val = json.loads(text[start : i + 1])
+                    if isinstance(val, dict):
+                        objs.append(val)
+                except json.JSONDecodeError:
+                    pass
+                start = -1
+    return objs
+
+
+def extract_text_tool_calls(text: str, registry: Any) -> list[dict]:
+    """Fallback p/ modelos que emitem a tool-call como TEXTO (ex.: qwen-coder).
+
+    Reconhece objetos JSON com ``{"tool"|"name", "args"|"arguments"}`` cujo nome
+    é uma ferramenta registrada, devolvendo no formato nativo do Ollama.
+    """
+    calls: list[dict] = []
+    for obj in _iter_json_objects(text):
+        name = obj.get("tool") or obj.get("name")
+        args = obj.get("args")
+        if args is None:
+            args = obj.get("arguments") or obj.get("parameters") or {}
+        if not isinstance(name, str) or registry.get(name) is None:
+            continue
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {}
+        calls.append({"function": {"name": name, "arguments": args}})
+    return calls
+
+
+def strip_tool_call_text(text: str) -> str:
+    """Remove blocos de código cercados (onde o JSON da tool-call costuma vir),
+    deixando só a prosa que o modelo escreveu antes/depois."""
+    return re.sub(r"```[\s\S]*?```", "", text).strip()
 
 
 def _tool_status(tool_name: str) -> str:

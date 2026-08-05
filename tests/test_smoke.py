@@ -190,6 +190,28 @@ def test_web_search_parser():
     assert out[1]["url"] == "https://exemplo.com/b"
 
 
+def test_text_tool_call_fallback():
+    """Modelos que emitem a tool-call como TEXTO (ex.: qwen-coder) são parseados."""
+    from aila.core.engine import extract_text_tool_calls, strip_tool_call_text
+
+    class Reg:
+        def get(self, n):
+            return object() if n in {"web.search", "computer.run_command"} else None
+
+    reg = Reg()
+    # formato name/arguments dentro de bloco cercado (o que o app mostrou)
+    txt = 'Vou buscar.\n```json\n{"name": "web.search", "arguments": {"query": "IA"}}\n```'
+    calls = extract_text_tool_calls(txt, reg)
+    assert calls == [{"function": {"name": "web.search", "arguments": {"query": "IA"}}}]
+    # formato tool/args, bare
+    calls2 = extract_text_tool_calls('{"tool":"computer.run_command","args":{"command":"Get-Date"}}', reg)
+    assert calls2[0]["function"]["name"] == "computer.run_command"
+    # nome desconhecido é ignorado (não vira tool-call)
+    assert extract_text_tool_calls('{"tool":"inexistente","args":{}}', reg) == []
+    # a prosa sobra depois de remover o bloco de código
+    assert strip_tool_call_text(txt) == "Vou buscar."
+
+
 def test_web_search_is_readonly_allowed(tmp_path: Path):
     """web.search/web.fetch são leitura: permitidas mesmo em modo somente-leitura."""
     from aila.security.permissions import PermissionManager
