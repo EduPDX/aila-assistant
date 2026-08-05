@@ -34,13 +34,24 @@ _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"[ \t\r\f\v]+")
 _MULTINL_RE = re.compile(r"\n\s*\n\s*\n+")
 _SCRIPT_RE = re.compile(r"<(script|style|noscript|template)\b.*?</\1>", re.S | re.I)
-_RESULT_A_RE = re.compile(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
-_SNIPPET_RE = re.compile(r'class="result__snippet"[^>]*>(.*?)</a>', re.S)
+# pareia título (href + texto) com o resumo do MESMO resultado, sem cruzar
+# para o próximo título (lookahead negativo).
+_RESULT_RE = re.compile(
+    r'result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>'
+    r'(?:(?!result__a").)*?'
+    r'result__snippet"[^>]*>(.*?)</a>',
+    re.S,
+)
 
 
 def _strip_html(fragment: str) -> str:
     """Remove tags e desescapa entidades de um trecho de HTML."""
     return _html.unescape(_TAG_RE.sub("", fragment)).strip()
+
+
+def _is_ad(href: str) -> bool:
+    """Links patrocinados do DuckDuckGo (não são resultado orgânico)."""
+    return any(s in href for s in ("/y.js", "ad_domain", "ad_provider", "ad_type"))
 
 
 def _real_url(href: str) -> str:
@@ -127,17 +138,22 @@ class WebAgent(BaseAgent):
 
     @staticmethod
     def _parse_results(page: str, n: int) -> list[dict]:
-        """Extrai (título, url, resumo) do HTML de resultados do DuckDuckGo."""
-        titles = _RESULT_A_RE.findall(page)
-        snippets = _SNIPPET_RE.findall(page)
+        """Extrai (título, url, resumo) dos resultados ORGÂNICOS do DuckDuckGo,
+        descartando anúncios e links internos de redirecionamento."""
         results: list[dict] = []
-        for i, (href, title_html) in enumerate(titles[:n]):
-            snippet = _strip_html(snippets[i]) if i < len(snippets) else ""
+        for href, title_html, snippet_html in _RESULT_RE.findall(page):
+            if _is_ad(href):
+                continue
+            url = _real_url(href)
+            if "duckduckgo.com" in urlparse(url).netloc:  # ainda é link do DDG: pula
+                continue
             results.append({
                 "title": _strip_html(title_html) or "(sem título)",
-                "url": _real_url(href),
-                "snippet": snippet,
+                "url": url,
+                "snippet": _strip_html(snippet_html),
             })
+            if len(results) >= n:
+                break
         return results
 
     # ------------------------------------------------------------------ #

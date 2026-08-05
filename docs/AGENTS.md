@@ -25,7 +25,9 @@ Geração e manutenção de código com modelo especializado (deepseek-coder).
 | `code.analyze` | Revisa código e aponta problemas |
 | `code.fix` | Corrige código dado um erro |
 
-> Não executa código. Execução chegará via Computer Agent + confirmação.
+> `code.run` executa código **Python** e devolve a saída real (ação
+> destrutiva → pede confirmação). Para comandos de shell, use
+> `computer.run_command`.
 
 ## Memory Agent — `memory` ✅ (memória de longo prazo / RAG)
 Dá à IA controle explícito sobre a memória. Além disso, a engine **recupera e

@@ -323,11 +323,27 @@ function updateLife(dt) {
     head.rotation.x += c.hx + (noise(t * 0.53) * 0.030 + breath * 0.006 + gaze.pitch * 0.45) * amp;
     head.rotation.y += c.hy + (noise(t * 0.41 + 2.1) * 0.040 + gaze.yaw * 0.55) * amp;
     head.rotation.z += c.hz + noise(t * 0.33 + 4.2) * 0.020 * amp;
-    // fala: ênfase (leves acenos rítmicos enquanto a boca se mexe)
+    // fala: leve ênfase da cabeça (mais lenta, sem "tremer")
     if (life.speech > 0.05) {
-      head.rotation.x += Math.sin(life.t * 7.5) * 0.020 * life.speech;
-      head.rotation.y += Math.sin(life.t * 3.1 + 1) * 0.030 * life.speech;
+      head.rotation.x += Math.sin(life.t * 4.2) * 0.018 * life.speech;
+      head.rotation.y += Math.sin(life.t * 2.6 + 1) * 0.028 * life.speech;
     }
+  }
+
+  // fala: GESTICULAÇÃO de braços/mãos (não só "tremer o braço") — aditivo sobre
+  //  a pose: levanta um pouco os braços e dobra os cotovelos ALTERNANDO, num
+  //  ritmo natural de quem fala com as mãos. Some suave quando ela para de falar.
+  if (life.speech > 0.06) {
+    const g = Math.min(1, life.speech), beat = Math.sin(life.t * 2.3),
+          off = noise(life.t * 1.2 + 7), up = Math.max(0, beat), dn = Math.max(0, -beat);
+    const ru = h.getNormalizedBoneNode('rightUpperArm');
+    const rl = h.getNormalizedBoneNode('rightLowerArm');
+    const lu = h.getNormalizedBoneNode('leftUpperArm');
+    const ll = h.getNormalizedBoneNode('leftLowerArm');
+    if (ru) { ru.rotation.z += (0.16 + 0.12 * up) * g; ru.rotation.x -= (0.05 + 0.05 * off) * g; }
+    if (rl) { rl.rotation.x -= (0.30 + 0.40 * up) * g; rl.rotation.y += 0.12 * beat * g; }
+    if (lu) { lu.rotation.z -= (0.16 + 0.12 * dn) * g; lu.rotation.x -= (0.05 - 0.05 * off) * g; }
+    if (ll) { ll.rotation.x -= (0.30 + 0.40 * dn) * g; ll.rotation.y -= 0.12 * beat * g; }
   }
 }
 

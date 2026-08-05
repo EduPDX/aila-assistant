@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -19,6 +21,26 @@ router = APIRouter(prefix="/api/voice")
 
 class SpeakBody(BaseModel):
     text: str
+
+
+def speech_text(raw: str) -> str:
+    """Limpa o texto para NÃO ler código/markdown em voz alta.
+
+    Remove blocos de código (a Aila não deve falar o código nem os '#'),
+    marcações de markdown, links e URLs — deixando só a prosa.
+    """
+    t = raw or ""
+    t = re.sub(r"```[\s\S]*?```", " ", t)              # blocos de código: fora
+    t = re.sub(r"`([^`]*)`", r"\1", t)                 # código inline: mantém a palavra
+    t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)     # [texto](url) -> texto
+    t = re.sub(r"https?://\S+", " ", t)                # URLs cruas: fora
+    t = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", t)        # títulos #
+    t = re.sub(r"(?m)^\s*[-*+]\s+", "", t)             # marcadores de lista
+    t = re.sub(r"(?m)^\s*\d+\.\s+", "", t)             # listas numeradas
+    t = re.sub(r"[*_>#`|]", "", t)                     # ênfase/símbolos soltos
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n\s*\n\s*\n+", "\n\n", t)
+    return t.strip()
 
 
 def _voice(request: Request):
@@ -54,7 +76,7 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
 @router.post("/speak")
 async def speak(request: Request, body: SpeakBody) -> FileResponse:
     voice = _voice(request)
-    text = body.text.strip()
+    text = speech_text(body.text)   # remove código/markdown antes de falar
     if not text:
         raise HTTPException(status_code=400, detail="Texto vazio.")
     try:

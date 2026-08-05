@@ -226,6 +226,36 @@ def test_clip_tool_result_for_context():
     assert "omitidos" in clipped                          # marca o corte
 
 
+def test_speech_text_strips_code_and_markdown():
+    """O TTS não deve falar código nem os '#'/marcações de markdown."""
+    from aila.api.voice import speech_text
+
+    md = "Claro! Veja:\n```python\nx=1  # comenta\n```\n## Título\n* item **b** e `cod` e [x](https://a.com)."
+    out = speech_text(md)
+    assert "```" not in out and "#" not in out and "*" not in out and "`" not in out
+    assert "https://" not in out
+    assert "x=1" not in out          # o código em si não é falado
+    assert "Claro! Veja:" in out and "Título" in out and "item b" in out
+
+
+def test_web_search_filters_ads():
+    """Anúncios do DuckDuckGo (y.js/ad_domain) são descartados; orgânicos ficam."""
+    from aila.agents.web_agent import WebAgent, _is_ad
+
+    assert _is_ad("//duckduckgo.com/y.js?ad_domain=x&ad_provider=bing")
+    assert not _is_ad("//duckduckgo.com/l/?uddg=https%3A%2F%2Freal.com")
+    page = (
+        '<a class="result__a" href="//duckduckgo.com/y.js?ad_domain=loja.com&ad_type=txad">Anúncio</a>'
+        '<a class="result__snippet" href="x">compre já</a>'
+        '<a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fnoticia.com%2Fia&rut=1">Notícia real</a>'
+        '<a class="result__snippet" href="y">resumo da notícia</a>'
+    )
+    out = WebAgent._parse_results(page, 5)
+    assert len(out) == 1                       # só o orgânico
+    assert out[0]["url"] == "https://noticia.com/ia"
+    assert out[0]["title"] == "Notícia real"
+
+
 def test_web_search_is_readonly_allowed(tmp_path: Path):
     """web.search/web.fetch são leitura: permitidas mesmo em modo somente-leitura."""
     from aila.security.permissions import PermissionManager
