@@ -27,9 +27,9 @@ log_level: "INFO"
 llm:
   backend: "ollama"           # ollama | llamacpp
   base_url: "http://127.0.0.1:11434"
-  model: "qwen2.5:7b-instruct"      # modelo de conversa padrão
-  code_model: "deepseek-coder:6.7b" # usado pelo Code Agent
-  vision_model: "llava:7b"          # usado pelo Vision Agent
+  model: "qwen2.5-coder:7b"         # conversa + roteamento + tool-calling (Qwen2.5, cabe na 4060 8GB)
+  code_model: "qwen2.5-coder:7b"    # Code Agent usa o mesmo (evita 2º modelo na VRAM/disco)
+  vision_model: "llava:7b"          # Vision Agent (ollama pull llava:7b)
   temperature: 0.7
   max_tokens: 2048
   # keep_alive: tempo que o Ollama mantém o modelo na VRAM
