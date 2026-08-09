@@ -19,6 +19,7 @@ import { createLipSyncLayer } from './layers/lipsync.js';
 import { createBlinkLayer } from './layers/blink.js';
 import { createJointLimits } from './solvers/joint-limits.js';
 import { createArmIK } from './solvers/ik.js';
+import { createSelfCollision } from './solvers/self-collision.js';
 
 const GESTURE_HOLD = 2.8;   // seg que um gesto fica antes de voltar ao rest
 
@@ -38,7 +39,8 @@ export class AnimationController {
     ];
     // solvers: clampam/corrigem a pose antes do commit final
     this.bufferSolver = createJointLimits();  // opera no PoseBuffer (antes de aplicar)
-    this.ikSolver = createArmIK();            // opera nos ossos posados (após aplicar)
+    this.collision = createSelfCollision();   // empurra a mão p/ fora do corpo (define alvo de IK)
+    this.ikSolver = createArmIK();            // resolve o braço até o alvo (após aplicar)
     this.ctx = {
       t: 0,
       camera,
@@ -109,9 +111,14 @@ export class AnimationController {
     // 2) limites anatômicos (clampa o buffer FK) e aplica no esqueleto
     this.bufferSolver.solve(this.rig, buf);
     this.rig.applyBones();
-    // 3) IK (se houver alvo de mão): opera sobre a pose já aplicada
-    if (buf.ik.size) { this.rig.updateMatrices(); this.ikSolver.solve(this.rig, buf); }
-    // 4) blendshapes + olhar + física secundária
+    this.rig.updateMatrices();
+    // 3) IK de gesto (se houver alvo de mão explícito)
+    if (buf.ik.size) { this.ikSolver.solve(this.rig, buf); this.rig.updateMatrices(); }
+    // 4) auto-colisão: checa a mão JÁ POSADA e empurra p/ fora do corpo (novo alvo)
+    this.collision.solve(this.rig, buf, ctx, dt);
+    // 5) reprocessa o IK se a colisão criou/ajustou um alvo
+    if (buf.ik.size) this.ikSolver.solve(this.rig, buf);
+    // 6) blendshapes + olhar + física secundária
     this.rig.finalize(dt);
   }
 }
