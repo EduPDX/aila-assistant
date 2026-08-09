@@ -21,6 +21,7 @@ from typing import Any
 
 from aila.agents.base import AgentDeps
 from aila.agents.manager import AgentManager
+from aila.avatar.behavior_planner import BehaviorPlanner
 from aila.avatar.emotion_engine import EmotionEngine
 from aila.core.config import Settings
 from aila.core.context import ConversationContext, Message
@@ -53,6 +54,9 @@ class AilaEngine:
         self.memory = memory
         self.session_id: int | None = None
         self.emotions = EmotionEngine()
+        # Behavior Planner: decide o comportamento do avatar pelo SIGNIFICADO
+        # da resposta (emoção/postura/olhar/ritmo/gestos), antes do TTS.
+        self.planner = BehaviorPlanner(self.emotions)
         # Canal opcional para um motor 3D (ex.: ponte OSC -> Unreal).
         self.avatar_sink: Callable[[dict[str, Any]], None] | None = None
         self.last_avatar_state: dict[str, Any] | None = None
@@ -191,6 +195,7 @@ class AilaEngine:
         tools = self.agents.registry.schemas() if mode != "chat" else None
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
+        tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
         final_text = ""
         for _ in range(MAX_TOOL_ITERS):
             collected: list[str] = []
@@ -232,6 +237,7 @@ class AilaEngine:
                         args = json.loads(args)
                     except json.JSONDecodeError:
                         args = {}
+                tools_used.append(name)
                 await emit("agent.invoked", {"tool": name, "args": args})
                 await emit("aila.state", {"status": _tool_status(name), "tool": name})
                 result = await self.agents.registry.execute(name, args)
@@ -246,8 +252,20 @@ class AilaEngine:
         self.context.add_assistant(final_text)
         self._persist("assistant", final_text)
         await self._remember(user_text, final_text)
+
+        # Behavior Planner: decide o comportamento pelo SIGNIFICADO e emite ANTES
+        # do assistant.message (que dispara o TTS) — o avatar já assume a
+        # postura/emoção/gesto no início da fala, não reagindo só ao áudio.
+        spec = self.planner.plan(final_text, tools_used=tools_used)
+        await emit("avatar.behavior", spec.to_event_payload())
+        self.last_avatar_state = self.emotions.from_text(final_text).to_event_payload()
+        if self.avatar_sink is not None:            # compat: ponte OSC/estado
+            try:
+                self.avatar_sink(self.last_avatar_state)
+            except Exception as exc:  # noqa: BLE001
+                log.warning(f"avatar_sink falhou: {exc!r}")
+
         await emit("assistant.message", {"text": final_text})
-        await self._avatar(emit, self.emotions.from_text(final_text).to_event_payload())
         # gesto explícito pedido pela IA (via AvatarAgent) tem prioridade
         if self.pending_gesture:
             await emit("avatar.gesture", {"value": self.pending_gesture})

@@ -55,8 +55,27 @@ export class AnimationController {
       speech: 0,                                // envelope 0..1 "está falando"
       gesture: 'rest',
       handTarget: null,                         // {side,x,y,z,weight} → braço via IK
+      intensity: 1,                             // reservado (força de expressão)
     };
     this._gestureTimer = 0;
+    this._behavior = null;                      // overlay do BehaviorSpec (F4)
+  }
+
+  /** aplica um BehaviorSpec (do Behavior Planner): decide emoção/olhar/ritmo/
+   *  gesto pelo SIGNIFICADO da resposta. Fica ativo pela duração da fala. */
+  applyBehavior(spec) {
+    if (!spec) return;
+    if (spec.state) this.setStatus(spec.state);
+    if (spec.emotion) this.setEmotion(spec.emotion);
+    this.ctx.intensity = spec.intensity ?? 1;
+    const m = spec.motion || {};
+    this._behavior = {
+      gaze: spec.gaze || null,
+      amp: m.amplitude ?? 1, speed: m.speed ?? 1, breath: m.breath ?? 1,
+      timer: (spec.est_speech_seconds || 2) + 1.2,   // renovado enquanto fala
+    };
+    const g = spec.gestures && spec.gestures[0];      // F5: timeline por at_time
+    if (g && g.type) this.triggerGesture(g.type);
   }
 
   /** move só a MÃO (mundo); o IK resolve o braço. null desliga. */
@@ -86,15 +105,27 @@ export class AnimationController {
       if (this._gestureTimer <= 0) ctx.gesture = 'rest';
     }
 
-    // ritmo-alvo = estado × emoção (amplitude/velocidade/respiração), suavizado
     const st = STATES[ctx.status] || STATES.IDLE, em = ctx.emotion;
-    ctx.motion.amp = damp(ctx.motion.amp, st.amp * em.amp, 2.5, dt);
-    ctx.motion.speed = damp(ctx.motion.speed, em.speed, 2.5, dt);
-    ctx.motion.breath = damp(ctx.motion.breath, em.breath, 2.5, dt);
 
-    // olhar: estados de tarefa mandam (tela/usuário/baixo); senão, viés da emoção
-    ctx.gazeMode = (st.gaze === 'screen' || st.gaze === 'user' || st.gaze === 'down')
-      ? st.gaze : (em.gaze || st.gaze);
+    // overlay do Behavior Planner: ativo pela duração da fala (renovado enquanto
+    // a boca se mexe); ao expirar, volta ao ritmo derivado de estado × emoção.
+    const b = this._behavior;
+    if (b) {
+      if (ctx.mouth > 0.05) b.timer = Math.max(b.timer, 0.8);
+      b.timer -= dt;
+      if (b.timer <= 0) this._behavior = null;
+    }
+    const bb = this._behavior;
+
+    // ritmo-alvo (amplitude/velocidade/respiração), suavizado
+    ctx.motion.amp = damp(ctx.motion.amp, bb ? bb.amp : st.amp * em.amp, 2.5, dt);
+    ctx.motion.speed = damp(ctx.motion.speed, bb ? bb.speed : em.speed, 2.5, dt);
+    ctx.motion.breath = damp(ctx.motion.breath, bb ? bb.breath : em.breath, 2.5, dt);
+
+    // olhar: overlay do planner > estados de tarefa (tela/usuário/baixo) > emoção
+    ctx.gazeMode = (bb && bb.gaze) ? bb.gaze
+      : (st.gaze === 'screen' || st.gaze === 'user' || st.gaze === 'down') ? st.gaze
+      : (em.gaze || st.gaze);
     ctx.blinkRange = st.blink;
 
     // envelope de fala (sobe rápido, desce suave)

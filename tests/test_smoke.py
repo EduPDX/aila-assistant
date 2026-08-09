@@ -212,6 +212,27 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_behavior_planner_reads_meaning():
+    """O Behavior Planner deriva intenção/gesto/olhar do SIGNIFICADO + tools."""
+    from aila.avatar.behavior_planner import BehaviorPlanner
+
+    p = BehaviorPlanner()
+    # saudação -> gesto de aceno
+    g = p.plan("Olá! Como posso ajudar?")
+    assert g.intent == "greeting" and g.gestures[0].type == "wave"
+    # tool de busca -> intenção search, olhar deslocado
+    s = p.plan("Aqui estão as novidades.", tools_used=["web.search"])
+    assert s.intent == "search" and s.gaze == "wander"
+    # tool de código -> coding, olhar na tela, menos energia
+    c = p.plan("Segue o código.", tools_used=["code.generate", "code.run"])
+    assert c.intent == "coding" and c.gaze == "screen" and c.motion.amplitude < 1.0
+    # erro -> intenção error, emoção confusa, olhar baixo
+    e = p.plan("Desculpe, deu um erro.")
+    assert e.intent == "error" and e.gaze == "down"
+    # duração estimada cresce com o tamanho do texto
+    assert p.plan("x" * 300).est_speech_seconds > p.plan("oi").est_speech_seconds
+
+
 def test_clip_tool_result_for_context():
     """Resultados grandes de ferramenta são cortados (cabeça+cauda) p/ não
     entupir o contexto; pequenos passam intactos."""

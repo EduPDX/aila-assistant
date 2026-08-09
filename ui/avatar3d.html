@@ -212,7 +212,8 @@ function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
-    if (m.type === 'avatar.state') applyEmotion(m.emotion, m.gesture);
+    if (m.type === 'avatar.behavior') { controller?.applyBehavior(m); $('emotion').textContent = m.emotion || 'neutral'; }
+    else if (m.type === 'avatar.state') applyEmotion(m.emotion, m.gesture);
     else if (m.type === 'avatar.gesture') controller?.triggerGesture(m.value);
     else if (m.type === 'aila.state') applyStatus(m.status);
     else if (m.type === 'assistant.message' && m.text) speak(m.text);
@@ -229,6 +230,7 @@ addEventListener('message', (e) => {
   switch (d.type) {
     case 'aila:reloadVRM': loadVRM('/static/models/avatar.vrm?t=' + Date.now()); break;
     case 'aila:emotion':   applyEmotion(d.value, d.gesture); if (d.state) $('state').textContent = d.state; break;
+    case 'aila:behavior':  controller?.applyBehavior(d.spec); if (d.spec) $('emotion').textContent = d.spec.emotion || 'neutral'; break;
     case 'aila:status':    applyStatus(d.value); break;
     case 'aila:mouth':     controller?.setMouth(d.value); break;
     case 'aila:gesture':   controller?.triggerGesture(d.value); break;

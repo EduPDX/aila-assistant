@@ -8,6 +8,7 @@ export function toAvatar(msg) {
 export const avatarEmotion = (emotion, state, gesture) =>
   toAvatar({ type: 'aila:emotion', value: emotion, state, gesture });
 export const avatarStatus = (status) => toAvatar({ type: 'aila:status', value: status });
+export const avatarBehavior = (spec) => toAvatar({ type: 'aila:behavior', spec });
 export const avatarGesture = (name) => toAvatar({ type: 'aila:gesture', value: name });
 export const avatarMouth = (v) => toAvatar({ type: 'aila:mouth', value: v });
 export const avatarReload = () => toAvatar({ type: 'aila:reloadVRM' });
