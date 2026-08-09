@@ -22,9 +22,24 @@ async def status(request: Request) -> dict:
         "llm_online": await llm.health(),
         "model": getattr(engine.llm, "default_model", engine.settings.llm.model),
         "read_only": engine.settings.security.read_only,
+        "network_mode": engine.network.mode if engine.network else "hybrid",
         "agents": list(engine.agents.agents.keys()),
         "memory_count": engine.memory.count() if engine.memory else 0,
     }
+
+
+class NetworkBody(BaseModel):
+    mode: str   # "offline" | "hybrid"
+
+
+@router.post("/network")
+async def set_network(request: Request, body: NetworkBody) -> dict:
+    """Troca o modo de rede em tempo de execução (offline/híbrido)."""
+    engine = request.app.state.engine
+    if engine.network is None:
+        raise HTTPException(status_code=503, detail="Política de rede indisponível.")
+    mode = engine.network.set_mode(body.mode)
+    return {"network_mode": mode}
 
 
 @router.get("/metrics")

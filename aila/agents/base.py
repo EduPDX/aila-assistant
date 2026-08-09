@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from aila.core.config import Settings
 from aila.llm.base import LLMBackend
+from aila.security.network_policy import NetworkPolicy
 from aila.security.permissions import PermissionManager
 from aila.security.sandbox import PathSandbox
 from aila.tools.schema import Tool
@@ -32,6 +33,8 @@ class AgentDeps:
     sandbox: PathSandbox
     llm: LLMBackend
     memory: MemoryStore | None = None
+    # política de rede (offline/híbrido) — tools consultam antes de sair p/ a web
+    network: NetworkPolicy | None = None
     # callback opcional p/ o Avatar Agent acionar gestos no avatar 3D
     gesture_sink: Callable[[str], None] | None = None
 

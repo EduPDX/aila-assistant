@@ -212,6 +212,67 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_network_policy_modes():
+    """OFFLINE bloqueia egresso (mas localhost sempre passa); HYBRID libera."""
+    from aila.security.network_policy import NetworkBlocked, NetworkPolicy
+
+    p = NetworkPolicy("hybrid")
+    assert p.online_allowed and not p.is_offline
+    assert p.allow_egress("bing.com") is True
+    p.guard()  # não levanta
+
+    p.set_mode("offline")
+    assert p.is_offline and not p.online_allowed
+    assert p.allow_egress("bing.com") is False
+    assert p.allow_egress("127.0.0.1") is True        # local sempre ok (Ollama)
+    assert p.allow_egress("localhost") is True
+    with pytest.raises(NetworkBlocked):
+        p.guard("pesquisa web")
+
+    assert NetworkPolicy("lixo").mode == "hybrid"      # valor inválido → hybrid
+
+
+def test_web_agent_blocked_offline(tmp_path: Path):
+    """WebAgent recusa pesquisa/fetch quando a política está OFFLINE."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.web_agent import WebAgent
+    from aila.security.network_policy import NetworkPolicy
+    from aila.security.permissions import PermissionManager
+    from aila.security.sandbox import PathSandbox
+
+    s = get_settings()
+    deps = AgentDeps(
+        settings=s, permissions=PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl")),
+        sandbox=PathSandbox(tmp_path), llm=type("L", (), {})(),
+        network=NetworkPolicy("offline"),
+    )
+    agent = WebAgent(deps)
+
+    async def go():
+        r = await agent._search({"query": "x"})
+        assert not r.ok and "OFFLINE" in r.content
+        f = await agent._fetch({"url": "https://x.com"})
+        assert not f.ok and "OFFLINE" in f.content
+
+    asyncio.run(go())
+
+
+def test_voice_offline_falls_back_to_local():
+    """No modo offline, o TTS Edge (online) cai para SAPI (local)."""
+    from aila.security.network_policy import NetworkPolicy
+    from aila.voice.system import VoiceSystem
+
+    s = get_settings()
+    s.voice.tts.engine = "edge"
+    # não inicializa STT/modelos: usamos só o seletor de engine
+    vs = VoiceSystem.__new__(VoiceSystem)
+    vs.tts = type("T", (), {"engine": "edge"})()
+    vs.network = NetworkPolicy("offline")
+    assert vs._tts_engine() == "sapi"
+    vs.network = NetworkPolicy("hybrid")
+    assert vs._tts_engine() == "edge"
+
+
 def test_model_router_passthrough():
     """Fase 1: o Model Router é passthrough — sempre devolve o provedor padrão,
     sem mudar comportamento, mas com a estrutura p/ multimodelo."""

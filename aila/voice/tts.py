@@ -101,15 +101,16 @@ class TextToSpeech:
         log.info(f"TTS engine: {self.engine} (voz: {self.voice or 'auto'})")
 
     # ------------------------------------------------------------------ #
-    def synthesize(self, text: str, out_path: str | Path) -> Path:
+    def synthesize(self, text: str, out_path: str | Path, engine: str | None = None) -> Path:
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         text = (text or "").strip()
         if not text:
             raise ValueError("texto vazio para síntese")
-        if self.engine == "edge":
+        eng = engine or self.engine   # override opcional (ex.: fallback offline)
+        if eng == "edge":
             return self._edge(text, out)
-        if self.engine == "piper":
+        if eng == "piper":
             return self._piper(text, out)
         return self._sapi(text, out)
 

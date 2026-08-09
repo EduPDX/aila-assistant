@@ -160,6 +160,12 @@ class MemoryConfig(BaseModel):
 # --------------------------------------------------------------------------- #
 #  Settings raiz
 # --------------------------------------------------------------------------- #
+class NetworkConfig(BaseModel):
+    # "hybrid" = permite serviços online (pesquisa, APIs externas, TTS neural).
+    # "offline" = nada sai do PC (só modelos/ferramentas locais).
+    mode: str = "hybrid"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="AILA_",
@@ -176,6 +182,7 @@ class Settings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    network: NetworkConfig = Field(default_factory=NetworkConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)

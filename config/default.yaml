@@ -41,6 +41,11 @@ context:
   max_turns: 20               # janela de conversa mantida em memória
   summarize_after: 40         # resume histórico antigo após N turnos
 
+network:
+  # hybrid = permite online (pesquisa web, APIs externas, TTS neural Edge).
+  # offline = nada sai do PC (só modelos/ferramentas locais).
+  mode: "hybrid"
+
 security:
   read_only: false            # Aila PODE agir (rodar comandos, mexer no PC); a
                               # proteção fica por conta da confirmação abaixo

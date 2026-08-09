@@ -54,9 +54,14 @@ async def lifespan(app: FastAPI):
             f"Inicie o Ollama com 'ollama serve' e baixe um modelo."
         )
 
-    engine = build_engine(settings, llm)
+    # Política de rede (offline/híbrido): compartilhada entre engine e voz.
+    from aila.security.network_policy import NetworkPolicy
+
+    network = NetworkPolicy(settings.network.mode)
+    engine = build_engine(settings, llm, network=network)
     app.state.settings = settings
     app.state.engine = engine
+    app.state.network = network
 
     # Sistema de voz (STT/TTS). Falha aqui não deve derrubar o app.
     app.state.voice = None
@@ -64,13 +69,13 @@ async def lifespan(app: FastAPI):
         try:
             from aila.voice.system import VoiceSystem
 
-            app.state.voice = VoiceSystem(settings.voice)
+            app.state.voice = VoiceSystem(settings.voice, network=network)
             log.info(f"Voz habilitada — TTS: {app.state.voice.tts.engine}")
         except Exception as exc:  # noqa: BLE001
             log.warning(f"Sistema de voz indisponível: {exc!r}")
 
     log.info(f"Aila pronta em http://{settings.host}:{settings.port}")
-    log.info(f"Modo somente-leitura: {settings.security.read_only}")
+    log.info(f"Modo de rede: {network.mode} · somente-leitura: {settings.security.read_only}")
 
     yield
 

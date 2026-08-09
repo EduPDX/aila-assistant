@@ -17,7 +17,10 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from aila.security.network_policy import NetworkPolicy
 
 from aila.agents.base import AgentDeps
 from aila.agents.manager import AgentManager
@@ -57,6 +60,7 @@ class AilaEngine:
         self.store = store
         self.memory = memory
         self.session_id: int | None = None
+        self.network = None            # NetworkPolicy (definida por build_engine)
         self.emotions = EmotionEngine()
         # Behavior Planner: decide o comportamento do avatar pelo SIGNIFICADO
         # da resposta (emoção/postura/olhar/ritmo/gestos), antes do TTS.
@@ -363,15 +367,19 @@ def _tool_status(tool_name: str) -> str:
     return "TOOL_RUNNING"
 
 
-def build_engine(settings: Settings, llm: LLMBackend) -> AilaEngine:
+def build_engine(
+    settings: Settings, llm: LLMBackend, network: NetworkPolicy | None = None
+) -> AilaEngine:
     """Fábrica: instancia agentes + engine a partir da configuração."""
     from aila.security.audit import AuditLog
+    from aila.security.network_policy import NetworkPolicy
     from aila.security.permissions import PermissionManager
     from aila.security.sandbox import PathSandbox
 
     audit = AuditLog(_resolve(settings.security.audit_log))
     permissions = PermissionManager(settings.security, audit)
     sandbox = PathSandbox(settings.sandbox_path())
+    network = network or NetworkPolicy(settings.network.mode)
     store = ConversationStore()
 
     # Memória de longo prazo (RAG): embeddings via o próprio backend de LLM.
@@ -383,10 +391,12 @@ def build_engine(settings: Settings, llm: LLMBackend) -> AilaEngine:
         memory = MemoryStore(_resolve(settings.memory.db_path), _embed)
 
     deps = AgentDeps(
-        settings=settings, permissions=permissions, sandbox=sandbox, llm=llm, memory=memory
+        settings=settings, permissions=permissions, sandbox=sandbox, llm=llm,
+        memory=memory, network=network,
     )
     manager = AgentManager(deps)
     engine = AilaEngine(settings, llm, manager, store=store, memory=memory)
+    engine.network = network            # exposto p/ a API (status/troca de modo)
     # o AvatarAgent aciona gestos setando engine.pending_gesture (emitido no turno)
     deps.gesture_sink = lambda g: setattr(engine, "pending_gesture", g)
 

@@ -16,8 +16,9 @@ _OUT_DIR = DATA_ROOT / "data" / "voice"
 
 
 class VoiceSystem:
-    def __init__(self, cfg: VoiceConfig) -> None:
+    def __init__(self, cfg: VoiceConfig, network=None) -> None:
         self.cfg = cfg
+        self.network = network        # NetworkPolicy: offline → TTS local (sem Edge)
         self.stt = SpeechToText(
             model_size=cfg.stt.model, language=cfg.stt.language, device=cfg.stt.device
         )
@@ -29,6 +30,12 @@ class VoiceSystem:
             edge_rate=cfg.tts.edge_rate,
         )
         _OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _tts_engine(self) -> str:
+        """Engine efetivo: no modo offline, Edge (online) cai p/ SAPI local."""
+        if self.network is not None and self.network.is_offline and self.tts.engine == "edge":
+            return "sapi"
+        return self.tts.engine
 
     # ------------------------------------------------------------------ #
     def transcribe_bytes(self, data: bytes, suffix: str = ".webm") -> str:
@@ -46,13 +53,14 @@ class VoiceSystem:
         (pode ser .wav ou .mp3, dependendo do engine/PyAV)."""
         import hashlib
 
-        key = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
+        eng = self._tts_engine()               # respeita o modo de rede (offline→sapi)
+        key = hashlib.sha1(f"{eng}:{text}".encode()).hexdigest()[:16]  # cache por engine
         wav, mp3 = _OUT_DIR / f"{key}.wav", _OUT_DIR / f"{key}.mp3"
         if wav.exists():
             return wav
         if mp3.exists():
             return mp3
-        return self.tts.synthesize(text, wav)  # devolve o caminho de fato gerado
+        return self.tts.synthesize(text, wav, engine=eng)  # caminho de fato gerado
 
     def status(self) -> dict:
         return {

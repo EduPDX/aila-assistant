@@ -103,8 +103,16 @@ class WebAgent(BaseAgent):
         ]
 
     # ------------------------------------------------------------------ #
+    def _offline_block(self) -> ToolResult | None:
+        net = self.deps.network
+        if net is not None and net.is_offline:
+            return ToolResult.error("Pesquisa web indisponível: modo OFFLINE ativo.")
+        return None
+
     async def _search(self, args: dict) -> ToolResult:
         await self.authorize("web.search", args)  # leitura
+        if blocked := self._offline_block():
+            return blocked
         query = (args.get("query") or "").strip()
         if not query:
             return ToolResult.error("Informe o que pesquisar (query vazia).")
@@ -159,6 +167,8 @@ class WebAgent(BaseAgent):
     # ------------------------------------------------------------------ #
     async def _fetch(self, args: dict) -> ToolResult:
         await self.authorize("web.page.get", args)  # leitura
+        if blocked := self._offline_block():
+            return blocked
         url = (args.get("url") or "").strip()
         if not re.match(r"^https?://", url, re.I):
             return ToolResult.error("URL inválida — use http:// ou https://.")
