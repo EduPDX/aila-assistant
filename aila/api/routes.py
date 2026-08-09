@@ -26,7 +26,18 @@ async def status(request: Request) -> dict:
         "providers": list(engine.router.providers.keys()),   # local + externos habilitados
         "agents": list(engine.agents.agents.keys()),
         "memory_count": engine.memory.count() if engine.memory else 0,
+        "agent_state": getattr(request.app.state, "events", None).state
+        if getattr(request.app.state, "events", None) else "IDLE",
     }
+
+
+@router.get("/events")
+async def events(request: Request, n: int = 40) -> dict:
+    """Atividade recente do agente (via Event Bus) — observabilidade/debug."""
+    tracker = getattr(request.app.state, "events", None)
+    if tracker is None:
+        return {"events": [], "state": "IDLE"}
+    return {"events": tracker.events(n), "state": tracker.state, "provider": tracker.provider}
 
 
 class NetworkBody(BaseModel):

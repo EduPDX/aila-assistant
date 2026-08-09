@@ -63,6 +63,12 @@ async def lifespan(app: FastAPI):
     app.state.engine = engine
     app.state.network = network
 
+    # Event Bus como backbone: logging estruturado + tracker de estado/atividade.
+    from aila.core.event_bus import bus as event_bus
+    from aila.core.observability import attach_observability
+
+    app.state.events = attach_observability(event_bus)
+
     # Sistema de voz (STT/TTS). Falha aqui não deve derrubar o app.
     app.state.voice = None
     if settings.voice.enabled:

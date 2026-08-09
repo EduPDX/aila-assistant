@@ -28,6 +28,7 @@ from aila.avatar.behavior_planner import BehaviorPlanner
 from aila.avatar.emotion_engine import EmotionEngine
 from aila.core.config import Settings
 from aila.core.context import ConversationContext, Message
+from aila.core.event_bus import bus as event_bus
 from aila.core.logging import get_logger
 from aila.database.store import ConversationStore
 from aila.llm.base import LLMBackend
@@ -66,6 +67,7 @@ class AilaEngine:
         self.store = store
         self.memory = memory
         self.session_id: int | None = None
+        self.bus = event_bus          # backbone de eventos (subscribers desacoplados)
         self.emotions = EmotionEngine()
         # Behavior Planner: decide o comportamento do avatar pelo SIGNIFICADO
         # da resposta (emoção/postura/olhar/ritmo/gestos), antes do TTS.
@@ -138,6 +140,18 @@ class AilaEngine:
         self.ensure_session(content[:40] if role == "user" else "Nova conversa")
         self.store.add_message(self.session_id, role, content)
 
+    def _to_bus(self, client_emit: Emit) -> Emit:
+        """Envolve o ``emit`` do cliente para que cada evento também seja
+        publicado no Event Bus (subscribers internos: logging, tracker, etc.).
+        A entrega ao cliente (WebSocket) continua igual; o bus é best-effort."""
+        async def emit(event_type: str, payload: dict[str, Any]) -> None:
+            await client_emit(event_type, payload)
+            try:
+                await self.bus.emit(event_type, payload, source="engine")
+            except Exception as exc:  # noqa: BLE001 - o bus nunca deve quebrar o chat
+                log.warning(f"event bus falhou em '{event_type}': {exc!r}")
+        return emit
+
     # --------------------------- avatar -------------------------------- #
     async def _avatar(self, emit: Emit, payload: dict[str, Any]) -> None:
         """Emite o estado do avatar para a UI (WebSocket) e, se houver, para o
@@ -196,6 +210,7 @@ class AilaEngine:
         ``mode="auto"`` (padrão): a IA decide sozinha se usa ferramentas.
         ``mode="chat"``: força conversa pura (sem ferramentas), menor latência.
         """
+        emit = self._to_bus(emit)   # cada evento vai ao cliente E ao Event Bus
         await self._avatar(emit, self.emotions.thinking().to_event_payload())
         await emit("aila.state", {"status": "THINKING"})
 

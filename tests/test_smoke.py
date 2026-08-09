@@ -212,6 +212,33 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_event_bus_tracker_and_redaction():
+    """O Event Bus alimenta o tracker (estado + atividade), SEM vazar args
+    sensíveis; tokens não são rastreados."""
+    from aila.core.event_bus import EventBus
+    from aila.core.observability import attach_observability
+
+    async def go():
+        bus = EventBus()
+        tracker = attach_observability(bus)
+        await bus.emit("aila.state", {"status": "SEARCHING", "tool": "web.search"})
+        await bus.emit("agent.invoked", {"tool": "computer.run_command",
+                                         "args": {"command": "echo SEGREDO"}})
+        await bus.emit("model.selected", {"provider": "openai"})
+        await bus.emit("assistant.token", {"text": "spam"})   # não rastreado
+
+        assert tracker.state == "SEARCHING"
+        assert tracker.provider == "openai"
+        types = [e["type"] for e in tracker.events()]
+        assert {"aila.state", "agent.invoked", "model.selected"} <= set(types)
+        assert "assistant.token" not in types                 # token fora
+        inv = next(e for e in tracker.events() if e["type"] == "agent.invoked")
+        assert inv["tool"] == "computer.run_command"
+        assert "SEGREDO" not in str(inv) and "args" not in inv  # não vaza args
+
+    asyncio.run(go())
+
+
 def _fake_backend(nm, local=True, vision=False):
     from aila.llm.base import LLMBackend, ModelCapabilities
 
