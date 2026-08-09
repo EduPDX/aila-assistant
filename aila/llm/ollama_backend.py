@@ -14,12 +14,23 @@ from typing import Any
 import httpx
 
 from aila.core.logging import get_logger
-from aila.llm.base import ChatChunk, LLMBackend
+from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
 
 log = get_logger("ollama")
 
 
 class OllamaBackend(LLMBackend):
+    name = "ollama"
+
+    def capabilities(self, model: str | None = None) -> ModelCapabilities:
+        m = (model or self.default_model or "").lower()
+        # modelos de visão do Ollama (llava/vl/vision) aceitam imagem
+        vision = any(k in m for k in ("llava", "-vl", "vision", "bakllava", "moondream"))
+        return ModelCapabilities(
+            tools=True, vision=vision, streaming=True, structured=False,
+            context=8192, local=True,
+        )
+
     def __init__(
         self,
         base_url: str = "http://127.0.0.1:11434",

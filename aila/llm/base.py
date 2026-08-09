@@ -24,8 +24,31 @@ class ChatChunk:
     meta: dict[str, Any] | None = None
 
 
+@dataclass(slots=True)
+class ModelCapabilities:
+    """O que um provedor/modelo suporta — usado pelo Model Router p/ decidir.
+
+    Default conservador (só chat local). Cada provedor sobrescreve o que oferece.
+    """
+
+    tools: bool = True          # function/tool calling
+    vision: bool = False        # entrada de imagem
+    streaming: bool = True
+    structured: bool = False    # saída estruturada / JSON mode
+    context: int = 8192         # janela de contexto (tokens)
+    local: bool = True          # roda no PC (sem enviar dados p/ fora)
+
+
 class LLMBackend(abc.ABC):
     """Contrato mínimo de um backend de chat."""
+
+    #: identificador do provedor (ex.: "ollama", "openai") — usado em logs/router
+    name: str = "llm"
+
+    def capabilities(self, model: str | None = None) -> ModelCapabilities:
+        """Capacidades do provedor (opcionalmente por modelo). Default conservador;
+        provedores externos/multimodais sobrescrevem."""
+        return ModelCapabilities()
 
     @abc.abstractmethod
     async def chat(

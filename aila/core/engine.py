@@ -28,6 +28,7 @@ from aila.core.context import ConversationContext, Message
 from aila.core.logging import get_logger
 from aila.database.store import ConversationStore
 from aila.llm.base import LLMBackend
+from aila.llm.router import ModelRouter, RouteTask
 from aila.memory.store import MemoryStore
 
 log = get_logger("engine")
@@ -49,6 +50,9 @@ class AilaEngine:
     ) -> None:
         self.settings = settings
         self.llm = llm
+        # Model Router: decide o provedor/modelo por tarefa (Fase 1: passthrough
+        # p/ o backend local atual; cresce p/ multimodelo/fallback/offline).
+        self.router = ModelRouter(default=llm)
         self.agents = agents
         self.store = store
         self.memory = memory
@@ -196,11 +200,14 @@ class AilaEngine:
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
+        # Model Router escolhe o provedor pela tarefa (Fase 1: sempre o local).
+        task = RouteTask(kind="chat", needs_tools=(mode != "chat"))
+        backend = self.router.select(task)
         final_text = ""
         for _ in range(MAX_TOOL_ITERS):
             collected: list[str] = []
             tool_calls: list[dict] = []
-            async for chunk in self.llm.chat(
+            async for chunk in backend.chat(
                 self._messages_with_memory(mem_block), stream=True, tools=tools,
                 options=opts,
             ):

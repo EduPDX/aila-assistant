@@ -212,6 +212,43 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_model_router_passthrough():
+    """Fase 1: o Model Router é passthrough — sempre devolve o provedor padrão,
+    sem mudar comportamento, mas com a estrutura p/ multimodelo."""
+    from aila.llm.base import LLMBackend
+    from aila.llm.router import ModelRouter, RouteTask
+
+    class FakeBackend(LLMBackend):
+        name = "fake"
+        async def chat(self, messages, **kw):  # pragma: no cover
+            yield
+        async def complete(self, messages, **kw):
+            return ""
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+
+    be = FakeBackend()
+    router = ModelRouter(default=be)
+    assert router.select(RouteTask(kind="chat", needs_tools=True)) is be  # passthrough
+    assert router.select() is be
+    assert "fake" in router.providers                                     # registrado por nome
+    # capacidades: default conservador
+    caps = LLMBackend.capabilities(be)
+    assert caps.tools and caps.local and isinstance(caps.context, int)
+
+
+def test_ollama_capabilities_reports_vision_by_model():
+    """O backend Ollama reporta visão conforme o modelo (llava/vl)."""
+    from aila.llm.ollama_backend import OllamaBackend
+
+    be = OllamaBackend(default_model="qwen2.5-coder:7b")
+    assert be.name == "ollama"
+    assert be.capabilities().vision is False              # modelo de texto
+    assert be.capabilities("llava:7b").vision is True     # modelo de visão
+
+
 def test_behavior_planner_reads_meaning():
     """O Behavior Planner deriva intenção/gesto/olhar do SIGNIFICADO + tools."""
     from aila.avatar.behavior_planner import BehaviorPlanner
