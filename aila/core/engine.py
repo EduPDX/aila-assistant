@@ -50,12 +50,13 @@ class AilaEngine:
         agents: AgentManager,
         store: ConversationStore | None = None,
         memory: MemoryStore | None = None,
+        providers: dict[str, LLMBackend] | None = None,
     ) -> None:
         self.settings = settings
         self.llm = llm
         # Model Router: decide o provedor/modelo por tarefa (Fase 1: passthrough
-        # p/ o backend local atual; cresce p/ multimodelo/fallback/offline).
-        self.router = ModelRouter(default=llm)
+        # p/ o local; providers externos já registrados p/ a Fase 4 rotear).
+        self.router = ModelRouter(default=llm, providers=providers)
         self.agents = agents
         self.store = store
         self.memory = memory
@@ -380,6 +381,10 @@ def build_engine(
     permissions = PermissionManager(settings.security, audit)
     sandbox = PathSandbox(settings.sandbox_path())
     network = network or NetworkPolicy(settings.network.mode)
+    # Provedores externos habilitados (OpenAI/Gemini/Grok/DeepSeek) → router.
+    from aila.llm.openai_compat import build_external_providers
+
+    providers = build_external_providers(settings, network)
     store = ConversationStore()
 
     # Memória de longo prazo (RAG): embeddings via o próprio backend de LLM.
@@ -395,7 +400,7 @@ def build_engine(
         memory=memory, network=network,
     )
     manager = AgentManager(deps)
-    engine = AilaEngine(settings, llm, manager, store=store, memory=memory)
+    engine = AilaEngine(settings, llm, manager, store=store, memory=memory, providers=providers)
     engine.network = network            # exposto p/ a API (status/troca de modo)
     # o AvatarAgent aciona gestos setando engine.pending_gesture (emitido no turno)
     deps.gesture_sink = lambda g: setattr(engine, "pending_gesture", g)

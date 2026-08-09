@@ -212,6 +212,63 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_external_providers_build_and_route():
+    """Provedores externos habilitados (com key) são criados e registrados no
+    router por nome; desabilitados/sem-key são ignorados."""
+    from aila.llm.openai_compat import build_external_providers
+    from aila.llm.router import ModelRouter
+
+    s = get_settings()
+    s.providers.openai.enabled = True
+    s.providers.openai.api_key = "sk-test"
+    s.providers.deepseek.enabled = True
+    s.providers.deepseek.api_key = ""          # sem key → ignorado
+    s.providers.gemini.enabled = False         # desligado → ignorado
+
+    provs = build_external_providers(s)
+    assert set(provs) == {"openai"}
+    assert provs["openai"].name == "openai"
+    assert provs["openai"].capabilities().local is False
+    assert provs["openai"].capabilities().vision is True   # openai tem visão
+
+    # registra no router junto com o local
+    class LocalStub:
+        name = "ollama"
+    router = ModelRouter(default=LocalStub(), providers=provs)
+    assert set(router.providers) == {"ollama", "openai"}
+
+
+def test_external_provider_blocked_offline():
+    """No modo OFFLINE, o provedor externo se recusa a sair para a rede."""
+    from aila.llm.openai_compat import OpenAICompatBackend
+    from aila.security.network_policy import NetworkBlocked, NetworkPolicy
+
+    be = OpenAICompatBackend(
+        name="openai", base_url="https://api.openai.com/v1", api_key="sk-x",
+        default_model="gpt-4o-mini", network=NetworkPolicy("offline"),
+    )
+
+    async def go():
+        with pytest.raises(NetworkBlocked):
+            async for _ in be.chat([{"role": "user", "content": "oi"}]):
+                pass
+        assert await be.health() is False
+        await be.aclose()
+
+    asyncio.run(go())
+
+
+def test_openai_tool_call_finalize():
+    """Os deltas de tool_call (streaming SSE) viram o formato que o engine lê."""
+    from aila.llm.openai_compat import _finalize_tools
+
+    acc = {0: {"id": "call_1", "name": "web.search", "arguments": '{"query":"ia"}'}}
+    out = _finalize_tools(acc)
+    assert out[0]["function"]["name"] == "web.search"
+    assert out[0]["function"]["arguments"] == '{"query":"ia"}'
+    assert _finalize_tools({0: {"id": "", "name": "", "arguments": ""}}) == []  # sem nome → ignora
+
+
 def test_network_policy_modes():
     """OFFLINE bloqueia egresso (mas localhost sempre passa); HYBRID libera."""
     from aila.security.network_policy import NetworkBlocked, NetworkPolicy

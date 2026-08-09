@@ -23,6 +23,7 @@ async def status(request: Request) -> dict:
         "model": getattr(engine.llm, "default_model", engine.settings.llm.model),
         "read_only": engine.settings.security.read_only,
         "network_mode": engine.network.mode if engine.network else "hybrid",
+        "providers": list(engine.router.providers.keys()),   # local + externos habilitados
         "agents": list(engine.agents.agents.keys()),
         "memory_count": engine.memory.count() if engine.memory else 0,
     }

@@ -166,6 +166,36 @@ class NetworkConfig(BaseModel):
     mode: str = "hybrid"
 
 
+class ProviderConfig(BaseModel):
+    """Provedor externo de LLM (compatível com a API OpenAI).
+
+    Só ``enabled`` + ``api_key`` são necessários; base_url/modelo/capacidades
+    têm defaults por provedor no código (aila/llm/openai_compat.py) — os campos
+    abaixo são OVERRIDES opcionais (vazio/0 = usa o default do provedor).
+
+    A ``api_key`` NUNCA deve ficar no default.yaml (versionado). Use env:
+    ``AILA_PROVIDERS__OPENAI__API_KEY=...`` ou config/local.yaml (gitignored).
+    """
+
+    enabled: bool = False
+    api_key: str = ""
+    model: str = ""       # vazio → default do provedor
+    base_url: str = ""    # vazio → default do provedor
+    vision: bool = False  # só força True; o default do provedor pode já ser True
+    context: int = 0      # 0 → default do provedor
+
+
+class ProvidersConfig(BaseModel):
+    openai: ProviderConfig = Field(default_factory=ProviderConfig)
+    gemini: ProviderConfig = Field(default_factory=ProviderConfig)
+    grok: ProviderConfig = Field(default_factory=ProviderConfig)
+    deepseek: ProviderConfig = Field(default_factory=ProviderConfig)
+
+    def items(self) -> list[tuple[str, ProviderConfig]]:
+        return [("openai", self.openai), ("gemini", self.gemini),
+                ("grok", self.grok), ("deepseek", self.deepseek)]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="AILA_",
@@ -183,6 +213,7 @@ class Settings(BaseSettings):
     context: ContextConfig = Field(default_factory=ContextConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     network: NetworkConfig = Field(default_factory=NetworkConfig)
+    providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)

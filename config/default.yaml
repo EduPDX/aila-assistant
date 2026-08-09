@@ -46,6 +46,27 @@ network:
   # offline = nada sai do PC (só modelos/ferramentas locais).
   mode: "hybrid"
 
+# Provedores EXTERNOS de LLM (compatíveis c/ a API OpenAI). Desligados por
+# padrão. NUNCA ponha api_key aqui (arquivo versionado) — use variável de
+# ambiente, ex.: AILA_PROVIDERS__OPENAI__API_KEY=sk-...  ou config/local.yaml.
+providers:
+  openai:
+    enabled: false
+    api_key: ""
+    model: "gpt-4o-mini"
+  gemini:
+    enabled: false
+    api_key: ""
+    model: "gemini-2.0-flash"
+  grok:
+    enabled: false
+    api_key: ""
+    model: "grok-2-latest"
+  deepseek:
+    enabled: false
+    api_key: ""
+    model: "deepseek-chat"
+
 security:
   read_only: false            # Aila PODE agir (rodar comandos, mexer no PC); a
                               # proteção fica por conta da confirmação abaixo
