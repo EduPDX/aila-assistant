@@ -67,6 +67,14 @@ providers:
     api_key: ""
     model: "deepseek-chat"
 
+# Roteamento de modelo por tarefa. enabled:false = sempre o local (passthrough).
+# Quando ligado, cada tarefa tem uma ORDEM de provedores (fallback). "local" é
+# o modelo local. Ex.: reasoning: ["openai", "local"] · vision: ["gemini", "local"]
+routing:
+  enabled: false
+  default: "local"
+  rules: {}
+
 security:
   read_only: false            # Aila PODE agir (rodar comandos, mexer no PC); a
                               # proteção fica por conta da confirmação abaixo

@@ -31,6 +31,7 @@ from aila.core.context import ConversationContext, Message
 from aila.core.logging import get_logger
 from aila.database.store import ConversationStore
 from aila.llm.base import LLMBackend
+from aila.llm.messages import to_provider_messages
 from aila.llm.router import ModelRouter, RouteTask
 from aila.memory.store import MemoryStore
 
@@ -51,17 +52,20 @@ class AilaEngine:
         store: ConversationStore | None = None,
         memory: MemoryStore | None = None,
         providers: dict[str, LLMBackend] | None = None,
+        network: NetworkPolicy | None = None,
     ) -> None:
         self.settings = settings
         self.llm = llm
-        # Model Router: decide o provedor/modelo por tarefa (Fase 1: passthrough
-        # p/ o local; providers externos já registrados p/ a Fase 4 rotear).
-        self.router = ModelRouter(default=llm, providers=providers)
+        self.network = network
+        # Model Router: escolhe o provedor por tarefa (regras em settings.routing;
+        # respeita capacidade/offline; passthrough p/ o local quando desligado).
+        self.router = ModelRouter(
+            default=llm, providers=providers, config=settings.routing, network=network,
+        )
         self.agents = agents
         self.store = store
         self.memory = memory
         self.session_id: int | None = None
-        self.network = None            # NetworkPolicy (definida por build_engine)
         self.emotions = EmotionEngine()
         # Behavior Planner: decide o comportamento do avatar pelo SIGNIFICADO
         # da resposta (emoção/postura/olhar/ritmo/gestos), antes do TTS.
@@ -205,22 +209,37 @@ class AilaEngine:
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
-        # Model Router escolhe o provedor pela tarefa (Fase 1: sempre o local).
+        # Model Router: cadeia de provedores (o 1º; os demais são fallback).
         task = RouteTask(kind="chat", needs_tools=(mode != "chat"))
-        backend = self.router.select(task)
+        chain = self.router.chain(task)
+        backend = chain[0]
+        if backend is not self.llm:
+            await emit("model.selected", {"provider": backend.name})
         final_text = ""
         for _ in range(MAX_TOOL_ITERS):
             collected: list[str] = []
             tool_calls: list[dict] = []
-            async for chunk in backend.chat(
-                self._messages_with_memory(mem_block), stream=True, tools=tools,
-                options=opts,
-            ):
-                if chunk.content:
-                    collected.append(chunk.content)
-                    await emit("assistant.token", {"text": chunk.content})
-                if chunk.tool_calls:
-                    tool_calls = chunk.tool_calls
+            # adapta o histórico ao provedor (externo: tool-history vira texto)
+            msgs = to_provider_messages(
+                self._messages_with_memory(mem_block), backend.capabilities().local
+            )
+            try:
+                async for chunk in backend.chat(
+                    msgs, stream=True, tools=tools, options=opts,
+                ):
+                    if chunk.content:
+                        collected.append(chunk.content)
+                        await emit("assistant.token", {"text": chunk.content})
+                    if chunk.tool_calls:
+                        tool_calls = chunk.tool_calls
+            except Exception as exc:  # noqa: BLE001 - provedor falhou → fallback
+                nxt = next((b for b in chain if b is not backend), None)
+                if nxt is not None and not collected:
+                    log.warning(f"provedor '{backend.name}' falhou ({exc!r}); fallback → '{nxt.name}'")
+                    backend = nxt
+                    await emit("model.selected", {"provider": backend.name, "fallback": True})
+                    continue
+                raise
 
             text = "".join(collected)
 
@@ -400,8 +419,10 @@ def build_engine(
         memory=memory, network=network,
     )
     manager = AgentManager(deps)
-    engine = AilaEngine(settings, llm, manager, store=store, memory=memory, providers=providers)
-    engine.network = network            # exposto p/ a API (status/troca de modo)
+    engine = AilaEngine(
+        settings, llm, manager, store=store, memory=memory,
+        providers=providers, network=network,
+    )
     # o AvatarAgent aciona gestos setando engine.pending_gesture (emitido no turno)
     deps.gesture_sink = lambda g: setattr(engine, "pending_gesture", g)
 

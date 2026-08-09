@@ -166,6 +166,20 @@ class NetworkConfig(BaseModel):
     mode: str = "hybrid"
 
 
+class RoutingConfig(BaseModel):
+    """Regras do Model Router (qual provedor por tipo de tarefa).
+
+    ``enabled: false`` = sempre o provedor padrão (passthrough, comportamento
+    atual). Quando ligado, ``rules`` mapeia o tipo de tarefa (chat/code/vision/
+    reasoning) para uma ORDEM de provedores preferidos (fallback). "local" é o
+    provedor padrão local. Nomes desconhecidos/indisponíveis são pulados.
+    """
+
+    enabled: bool = False
+    default: str = "local"
+    rules: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class ProviderConfig(BaseModel):
     """Provedor externo de LLM (compatível com a API OpenAI).
 
@@ -214,6 +228,7 @@ class Settings(BaseSettings):
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     network: NetworkConfig = Field(default_factory=NetworkConfig)
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)

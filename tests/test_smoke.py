@@ -212,6 +212,77 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def _fake_backend(nm, local=True, vision=False):
+    from aila.llm.base import LLMBackend, ModelCapabilities
+
+    class F(LLMBackend):
+        name = nm
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=local, vision=vision)
+        async def chat(self, m, **k):  # pragma: no cover
+            yield
+        async def complete(self, m, **k):
+            return ""
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+    return F()
+
+
+def test_router_intelligent_selection():
+    """Router liga/desliga; escolhe por tarefa/capacidade; offline pula externos."""
+    from aila.core.config import RoutingConfig
+    from aila.llm.router import ModelRouter, RouteTask
+    from aila.security.network_policy import NetworkPolicy
+
+    local = _fake_backend("ollama", local=True)
+    openai = _fake_backend("openai", local=False, vision=True)
+    gemini = _fake_backend("gemini", local=False, vision=True)
+
+    # desligado → passthrough (só o local)
+    r = ModelRouter(local, {"openai": openai}, RoutingConfig(enabled=False))
+    assert r.chain(RouteTask()) == [local]
+
+    cfg = RoutingConfig(enabled=True, rules={
+        "reasoning": ["openai", "local"], "vision": ["gemini", "local"]})
+    r = ModelRouter(local, {"openai": openai, "gemini": gemini}, cfg)
+    assert r.select(RouteTask(kind="reasoning")).name == "openai"
+    assert r.select(RouteTask(kind="vision", needs_vision=True)).name == "gemini"
+    assert r.select(RouteTask(kind="chat")).name == "ollama"           # sem regra → default
+    # cadeia de fallback termina no local
+    assert r.chain(RouteTask(kind="reasoning"))[-1].name == "ollama"
+
+    # OFFLINE → externos pulados, cai no local
+    r2 = ModelRouter(local, {"openai": openai}, cfg, network=NetworkPolicy("offline"))
+    assert r2.select(RouteTask(kind="reasoning")).name == "ollama"
+
+    # needs_vision mas provedor sem visão é pulado
+    novis = _fake_backend("novis", local=False, vision=False)
+    cfg2 = RoutingConfig(enabled=True, rules={"vision": ["novis", "local"]})
+    r3 = ModelRouter(local, {"novis": novis}, cfg2)
+    assert r3.select(RouteTask(kind="vision", needs_vision=True)).name == "ollama"
+
+
+def test_provider_message_adaptation():
+    """Externo: tool-history vira texto neutro; local: inalterado."""
+    from aila.llm.messages import to_provider_messages
+
+    msgs = [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "oi"},
+        {"role": "assistant", "content": "vou buscar",
+         "tool_calls": [{"function": {"name": "web.search", "arguments": '{"q":"x"}'}}]},
+        {"role": "tool", "name": "web.search", "content": "resultado aqui"},
+    ]
+    assert to_provider_messages(msgs, local=True) is msgs                  # local: inalterado
+    out = to_provider_messages(msgs, local=False)
+    assert all("tool_calls" not in m for m in out)                         # sem tool_calls
+    assert not any(m["role"] == "tool" for m in out)                       # sem role:tool
+    assert any("[resultado de web.search]" in m["content"] for m in out)
+    assert any("[chamando ferramenta: web.search" in m["content"] for m in out)
+
+
 def test_external_providers_build_and_route():
     """Provedores externos habilitados (com key) são criados e registrados no
     router por nome; desabilitados/sem-key são ignorados."""
