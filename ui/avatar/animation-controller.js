@@ -17,6 +17,8 @@ import { createLookAtLayer } from './layers/lookat.js';
 import { createEmotionLayer } from './layers/emotion.js';
 import { createLipSyncLayer } from './layers/lipsync.js';
 import { createBlinkLayer } from './layers/blink.js';
+import { createJointLimits } from './solvers/joint-limits.js';
+import { createArmIK } from './solvers/ik.js';
 
 const GESTURE_HOLD = 2.8;   // seg que um gesto fica antes de voltar ao rest
 
@@ -34,6 +36,9 @@ export class AnimationController {
       createLipSyncLayer(),
       createBlinkLayer(),
     ];
+    // solvers: clampam/corrigem a pose antes do commit final
+    this.bufferSolver = createJointLimits();  // opera no PoseBuffer (antes de aplicar)
+    this.ikSolver = createArmIK();            // opera nos ossos posados (após aplicar)
     this.ctx = {
       t: 0,
       camera,
@@ -47,9 +52,16 @@ export class AnimationController {
       mouth: 0,                                 // alvo instantâneo da boca (lip-sync)
       speech: 0,                                // envelope 0..1 "está falando"
       gesture: 'rest',
+      handTarget: null,                         // {side,x,y,z,weight} → braço via IK
     };
     this._gestureTimer = 0;
   }
+
+  /** move só a MÃO (mundo); o IK resolve o braço. null desliga. */
+  setHandTarget(side, x, y, z, weight = 1) {
+    this.ctx.handTarget = side ? { side, x, y, z, weight } : null;
+  }
+  clearHandTarget() { this.ctx.handTarget = null; }
 
   // -------- API pública (a UI / WS chamam isto) -------- //
   setStatus(status) { if (STATES[status]) this.ctx.status = status; }
@@ -86,9 +98,20 @@ export class AnimationController {
     // envelope de fala (sobe rápido, desce suave)
     ctx.speech = damp(ctx.speech, ctx.mouth > 0.05 ? 1 : 0, 3, dt);
 
-    // roda as camadas -> PoseBuffer, depois aplica no VRM
-    this.rig.buffer.reset();
-    for (const layer of this.layers) layer.update(this.rig, this.rig.buffer, ctx, dt);
-    this.rig.commit(dt);
+    // 1) camadas escrevem no PoseBuffer
+    const buf = this.rig.buffer;
+    buf.reset();
+    for (const layer of this.layers) layer.update(this.rig, buf, ctx, dt);
+    if (ctx.handTarget) {                        // gesto por IK (alvo de mão)
+      const t = ctx.handTarget;
+      buf.setHandTarget(t.side, t.x, t.y, t.z, t.weight);
+    }
+    // 2) limites anatômicos (clampa o buffer FK) e aplica no esqueleto
+    this.bufferSolver.solve(this.rig, buf);
+    this.rig.applyBones();
+    // 3) IK (se houver alvo de mão): opera sobre a pose já aplicada
+    if (buf.ik.size) { this.rig.updateMatrices(); this.ikSolver.solve(this.rig, buf); }
+    // 4) blendshapes + olhar + física secundária
+    this.rig.finalize(dt);
   }
 }

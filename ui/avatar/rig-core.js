@@ -29,11 +29,17 @@ export class PoseBuffer {
     this.rot = new Map();     // bone -> [x,y,z] (rad, ADITIVO no frame)
     this.expr = new Map();    // expressão -> valor 0..1 (último a escrever vence)
     this.gaze = { x: 0, y: 0, z: 0, active: false };  // alvo de olhar (mundo)
+    this.ik = new Map();      // side('left'/'right') -> {x,y,z,weight} alvo da mão (mundo)
   }
   reset() {
     for (const v of this.rot.values()) { v[0] = 0; v[1] = 0; v[2] = 0; }
     this.expr.clear();
     this.gaze.active = false;
+    this.ik.clear();
+  }
+  /** define o alvo de mundo da MÃO (side='left'|'right'); o IK resolve o braço */
+  setHandTarget(side, x, y, z, weight = 1) {
+    this.ik.set(side, { x, y, z, weight });
   }
   /** soma rotação (rad) num osso */
   addRot(bone, x, y, z) {
@@ -79,21 +85,23 @@ export class Rig {
     return out.setFromMatrixPosition(n.matrixWorld);
   }
 
-  /** aplica o PoseBuffer no VRM e roda a física secundária */
-  commit(dt) {
-    const buf = this.buffer;
-    // 1) rotações dos ossos (absolutas = soma das contribuições do frame)
-    for (const [name, v] of buf.rot) {
+  /** FASE 1 do commit: aplica as rotações FK dos ossos (do PoseBuffer). */
+  applyBones() {
+    for (const [name, v] of this.buffer.rot) {
       const n = this.bone(name);
       if (n) n.rotation.set(v[0], v[1], v[2]);
     }
-    // 2) blendshapes
-    if (this.expr) {
-      for (const [name, value] of buf.expr) this.expr.setValue(name, value);
-    }
-    // 3) alvo do olhar
+  }
+
+  /** atualiza as matrizes de mundo (necessário entre applyBones e os solvers
+   *  que operam em posição, como o IK e a colisão). */
+  updateMatrices() { this.vrm.scene.updateMatrixWorld(true); }
+
+  /** FASE 2 do commit: blendshapes, alvo do olhar e física secundária. */
+  finalize(dt) {
+    const buf = this.buffer;
+    if (this.expr) { for (const [name, value] of buf.expr) this.expr.setValue(name, value); }
     if (buf.gaze.active) this.gazeTarget.position.set(buf.gaze.x, buf.gaze.y, buf.gaze.z);
-    // 4) física secundária (spring bones: cabelo/saia) + lookAt applier
-    this.vrm.update(dt);
+    this.vrm.update(dt);   // spring bones (cabelo/saia) + lookAt applier
   }
 }
