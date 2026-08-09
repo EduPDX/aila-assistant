@@ -46,13 +46,17 @@ _STYLE: dict[str, tuple[str, str, float, float, float]] = {
     "error":          ("closed",   "down",   0.70, 0.90, 0.90),
 }
 
-# gesto por trecho (F4: cue no início; F5 sincroniza por palavra)
+# gesto por trecho — F5: vários gestos numa TIMELINE, cada um no tempo em que
+# a palavra-gatilho é falada (estimado pela posição no texto).
 _GESTURE_CUES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"^\s*(ol[áa]|oi+|e a[íi]|bom dia|boa tarde|boa noite)\b", re.I), "wave"),
     (re.compile(r"\b(tchau|at[ée] (mais|logo|breve)|falou|abra[çc]o)\b", re.I), "wave"),
     (re.compile(r"\b(recomendo|proponho|sugiro|a melhor|veja|observe|repara|note)\b", re.I), "hand_explain"),
-    (re.compile(r"\b(perfeito|isso mesmo|exato|excelente|consegui|funcionou|resolvido)\b", re.I), "thumbs_up"),
-    (re.compile(r"\b(deixa eu pensar|hmm+|analisando|talvez|n[ãa]o sei ao certo)\b", re.I), "think"),
+    (re.compile(r"\b(perfeito|excelente|consegui|funcionou|resolvido|show)\b", re.I), "thumbs_up"),
+    (re.compile(r"\b(aqui|isto|isso aqui|este|esse ponto|olha (isso|aqui))\b", re.I), "point"),
+    (re.compile(r"\b(sim|claro|com certeza|certo|exatamente|isso mesmo)\b", re.I), "nod"),
+    (re.compile(r"\b(n[ãa]o|jamais|nunca|de jeito nenhum|de forma alguma)\b", re.I), "shake"),
+    (re.compile(r"\b(deixa eu pensar|hmm+|talvez|n[ãa]o sei ao certo)\b", re.I), "think"),
 ]
 
 _GREETING = re.compile(r"^\s*(ol[áa]|oi+|e a[íi]|bom dia|boa tarde|boa noite)\b", re.I)
@@ -73,6 +77,7 @@ class BehaviorPlanner:
         intent = self._intent(text, list(tools_used))
         posture, gaze, amp, speed, breath = _STYLE.get(intent, _STYLE["conversation"])
         intensity = 0.85 if emotion in ("happy", "confident", "surprised") else 0.6
+        est = round(max(1.0, len(text) / 15.0), 1)   # ~15 chars/s pt-BR
         return BehaviorSpec(
             state="SPEAKING" if speaking else "IDLE",
             emotion=emotion,
@@ -81,8 +86,8 @@ class BehaviorPlanner:
             posture=posture,
             gaze=gaze,
             motion=Motion(amplitude=amp, speed=speed, breath=breath),
-            gestures=self._gestures(text, str(emo.gesture)),
-            est_speech_seconds=round(max(1.0, len(text) / 15.0), 1),  # ~15 chars/s pt-BR
+            gestures=self._gestures(text, str(emo.gesture), est),
+            est_speech_seconds=est,
             text=text[:200],
         )
 
@@ -103,10 +108,20 @@ class BehaviorPlanner:
             return "explanation"
         return "conversation"
 
-    def _gestures(self, text: str, emo_gesture: str) -> list[GestureCue]:
+    def _gestures(self, text: str, emo_gesture: str, est_seconds: float) -> list[GestureCue]:
+        """Timeline de gestos: cada cue no tempo em que a palavra é falada
+        (estimado pela posição do texto × duração da fala)."""
+        n = max(1, len(text))
+        found: dict[str, tuple[float, str]] = {}
         for pat, g in _GESTURE_CUES:
-            if pat.search(text):
-                return [GestureCue(type=g, at_time=0.0)]
-        if emo_gesture and emo_gesture != "none":
-            return [GestureCue(type=emo_gesture, at_time=0.0)]
-        return []
+            m = pat.search(text)
+            if m and g not in found:
+                at = round(m.start() / n * est_seconds, 2)
+                found[g] = (at, m.group(0).strip()[:24])
+        cues = [
+            GestureCue(type=g, at_time=at, at_word=word)
+            for g, (at, word) in sorted(found.items(), key=lambda kv: kv[1][0])
+        ]
+        if not cues and emo_gesture and emo_gesture != "none":
+            cues = [GestureCue(type=emo_gesture, at_time=0.0)]
+        return cues[:4]

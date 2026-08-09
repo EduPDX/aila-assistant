@@ -16,12 +16,14 @@ import { createEyeLayer } from './layers/eye.js';
 import { createLookAtLayer } from './layers/lookat.js';
 import { createEmotionLayer } from './layers/emotion.js';
 import { createLipSyncLayer } from './layers/lipsync.js';
+import { createGestureAnimLayer } from './layers/gesture-anim.js';
 import { createBlinkLayer } from './layers/blink.js';
 import { createJointLimits } from './solvers/joint-limits.js';
 import { createArmIK } from './solvers/ik.js';
 import { createSelfCollision } from './solvers/self-collision.js';
 
-const GESTURE_HOLD = 2.8;   // seg que um gesto fica antes de voltar ao rest
+const GESTURE_HOLD = 2.8;   // seg que um gesto de pose fica antes de voltar ao rest
+const ANIM_GESTURES = new Set(['nod', 'shake']);   // gestos ANIMADOS (cabeça)
 
 export class AnimationController {
   constructor(vrm, scene, camera) {
@@ -35,6 +37,7 @@ export class AnimationController {
       createLookAtLayer(),   // lê ctx.gaze escrito pela EyeLayer
       createEmotionLayer(),
       createLipSyncLayer(),
+      createGestureAnimLayer(),   // nod/shake (cabeça) — F5
       createBlinkLayer(),
     ];
     // solvers: clampam/corrigem a pose antes do commit final
@@ -54,11 +57,14 @@ export class AnimationController {
       mouth: 0,                                 // alvo instantâneo da boca (lip-sync)
       speech: 0,                                // envelope 0..1 "está falando"
       gesture: 'rest',
+      anim: null,                               // gesto ANIMADO ativo (nod/shake) — F5
       handTarget: null,                         // {side,x,y,z,weight} → braço via IK
       intensity: 1,                             // reservado (força de expressão)
     };
     this._gestureTimer = 0;
     this._behavior = null;                      // overlay do BehaviorSpec (F4)
+    this._queue = [];                           // timeline de gestos (F5)
+    this._clock = 0;                            // relógio da fala (p/ a timeline)
   }
 
   /** aplica um BehaviorSpec (do Behavior Planner): decide emoção/olhar/ritmo/
@@ -74,8 +80,21 @@ export class AnimationController {
       amp: m.amplitude ?? 1, speed: m.speed ?? 1, breath: m.breath ?? 1,
       timer: (spec.est_speech_seconds || 2) + 1.2,   // renovado enquanto fala
     };
-    const g = spec.gestures && spec.gestures[0];      // F5: timeline por at_time
-    if (g && g.type) this.triggerGesture(g.type);
+    // F5: timeline de gestos — cada um dispara no seu at_time (relativo à fala)
+    this._queue = (spec.gestures || [])
+      .map((g) => ({ type: g.type, at: g.at_time || 0 }))
+      .sort((a, b) => a.at - b.at);
+    this._clock = 0;
+  }
+
+  triggerGesture(name) {
+    if (!name) return;
+    if (ANIM_GESTURES.has(name)) {          // gesto animado (cabeça): nod/shake
+      this.ctx.anim = { type: name, t: 0, dur: name === 'shake' ? 0.9 : 0.8 };
+      return;
+    }
+    this.ctx.gesture = name;                // gesto de pose (braço): wave/point/…
+    this._gestureTimer = name === 'rest' || name === 'none' ? 0 : GESTURE_HOLD;
   }
 
   /** move só a MÃO (mundo); o IK resolve o braço. null desliga. */
@@ -88,11 +107,6 @@ export class AnimationController {
   setStatus(status) { if (STATES[status]) this.ctx.status = status; }
   setEmotion(name) { const k = resolveEmotion(name); this.ctx.emotionKey = k; this.ctx.emotion = EMOTIONS[k]; }
   setMouth(v) { this.ctx.mouth = Math.max(0, Math.min(1, v || 0)); }
-  triggerGesture(name) {
-    if (!name) return;
-    this.ctx.gesture = name;
-    this._gestureTimer = name === 'rest' || name === 'none' ? 0 : GESTURE_HOLD;
-  }
 
   // -------- loop -------- //
   update(dt) {
@@ -103,6 +117,14 @@ export class AnimationController {
     if (this._gestureTimer > 0) {
       this._gestureTimer -= dt;
       if (this._gestureTimer <= 0) ctx.gesture = 'rest';
+    }
+
+    // timeline de gestos (F5): dispara cada gesto no seu at_time (relativo à fala)
+    if (this._queue.length) {
+      this._clock += dt;
+      while (this._queue.length && this._queue[0].at <= this._clock) {
+        this.triggerGesture(this._queue.shift().type);
+      }
     }
 
     const st = STATES[ctx.status] || STATES.IDLE, em = ctx.emotion;

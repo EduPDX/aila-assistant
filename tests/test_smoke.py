@@ -232,6 +232,15 @@ def test_behavior_planner_reads_meaning():
     # duração estimada cresce com o tamanho do texto
     assert p.plan("x" * 300).est_speech_seconds > p.plan("oi").est_speech_seconds
 
+    # F5: timeline — vários gestos, cada um no tempo da palavra (crescente)
+    tl = p.plan("Olá! Recomendo isso. Perfeito, funcionou!")
+    types = [g.type for g in tl.gestures]
+    assert "wave" in types and "hand_explain" in types and "thumbs_up" in types
+    times = [g.at_time for g in tl.gestures]
+    assert times == sorted(times) and times[0] == 0.0  # ordenados; saudação em t=0
+    assert p.plan("Não, de jeito nenhum.").gestures[0].type == "shake"
+    assert p.plan("Sim, com certeza.").gestures[0].type == "nod"
+
 
 def test_clip_tool_result_for_context():
     """Resultados grandes de ferramenta são cortados (cabeça+cauda) p/ não
