@@ -3,21 +3,22 @@
 //  gesto aqui NÃO exige mexer nas camadas. Este é o "conteúdo" do sistema.
 // ============================================================
 
-// -------- perfil por EMOÇÃO: face + postura + ritmo + viés de olhar --------
-//  face: expressão VRM alvo · spine/head: postura base (graus)
-//  amp/speed/breath: multiplicadores de amplitude/velocidade/respiração
-//  gaze: viés do olhar · brow: intensidade (reservado p/ nuance)
+// -------- perfil por EMOÇÃO: a emoção altera o CORPO INTEIRO --------
+//  face: expressão VRM · spine/head: postura base (graus) · gaze: viés do olhar
+//  amp/speed/breath: multiplicadores de ritmo
+//  arms: [dUpperZ, dLowerX] (graus) — abre/fecha os braços na postura idle:
+//    dUpperZ>0 fecha (braço mais junto ao corpo); dLowerX<0 dobra o cotovelo.
 export const EMOTIONS = {
-  neutral:   { face: 'neutral',   amp: 1.00, speed: 1.00, breath: 1.00, spine: [0, 0, 0],  head: [0, 0, 0],  gaze: 'soft' },
-  happy:     { face: 'happy',     amp: 1.35, speed: 1.25, breath: 1.15, spine: [-2, 0, 0], head: [-2, 0, 0], gaze: 'soft' },
-  confident: { face: 'happy',     amp: 1.20, speed: 1.10, breath: 1.05, spine: [-3, 0, 0], head: [-3, 0, 0], gaze: 'soft' },
-  relaxed:   { face: 'relaxed',   amp: 0.85, speed: 0.85, breath: 0.92, spine: [1, 0, 0],  head: [2, 0, 0],  gaze: 'soft' },
-  focused:   { face: 'relaxed',   amp: 0.80, speed: 0.90, breath: 0.95, spine: [-1, 0, 0], head: [-1, 0, 0], gaze: 'lock' },
-  thinking:  { face: 'relaxed',   amp: 0.80, speed: 0.80, breath: 0.90, spine: [2, 0, 0],  head: [6, -6, 0], gaze: 'wander' },
-  confused:  { face: 'sad',       amp: 0.85, speed: 0.90, breath: 0.95, spine: [1, 0, 0],  head: [4, 5, 0],  gaze: 'wander' },
-  sad:       { face: 'sad',       amp: 0.55, speed: 0.70, breath: 0.82, spine: [6, 0, 0],  head: [9, 0, 0],  gaze: 'down' },
-  angry:     { face: 'angry',     amp: 1.20, speed: 1.30, breath: 1.20, spine: [-3, 0, 0], head: [-4, 0, 0], gaze: 'lock' },
-  surprised: { face: 'surprised', amp: 1.30, speed: 1.40, breath: 1.10, spine: [-4, 0, 0], head: [-5, 0, 0], gaze: 'lock' },
+  neutral:   { face: 'neutral',   amp: 1.00, speed: 1.00, breath: 1.00, spine: [0, 0, 0],  head: [0, 0, 0],  gaze: 'soft',   arms: [0, 0] },
+  happy:     { face: 'happy',     amp: 1.35, speed: 1.25, breath: 1.15, spine: [-2, 0, 0], head: [-2, 0, 0], gaze: 'soft',   arms: [-6, -2] },
+  confident: { face: 'happy',     amp: 1.20, speed: 1.10, breath: 1.05, spine: [-3, 0, 0], head: [-3, 0, 0], gaze: 'soft',   arms: [-8, 0] },
+  relaxed:   { face: 'relaxed',   amp: 0.85, speed: 0.85, breath: 0.92, spine: [1, 0, 0],  head: [2, 0, 0],  gaze: 'soft',   arms: [-2, -6] },
+  focused:   { face: 'relaxed',   amp: 0.80, speed: 0.90, breath: 0.95, spine: [-1, 0, 0], head: [-1, 0, 0], gaze: 'lock',   arms: [3, -8] },
+  thinking:  { face: 'relaxed',   amp: 0.80, speed: 0.80, breath: 0.90, spine: [2, 0, 0],  head: [6, -6, 0], gaze: 'wander', arms: [4, -10] },
+  confused:  { face: 'sad',       amp: 0.85, speed: 0.90, breath: 0.95, spine: [1, 0, 0],  head: [4, 5, 0],  gaze: 'wander', arms: [3, -8] },
+  sad:       { face: 'sad',       amp: 0.55, speed: 0.70, breath: 0.82, spine: [6, 0, 0],  head: [9, 0, 0],  gaze: 'down',   arms: [8, -12] },
+  angry:     { face: 'angry',     amp: 1.20, speed: 1.30, breath: 1.20, spine: [-3, 0, 0], head: [-4, 0, 0], gaze: 'lock',   arms: [-3, -18] },
+  surprised: { face: 'surprised', amp: 1.30, speed: 1.40, breath: 1.10, spine: [-4, 0, 0], head: [-5, 0, 0], gaze: 'lock',   arms: [-6, -6] },
 };
 
 // mapeia a emoção "crua" do backend p/ uma chave de EMOTIONS

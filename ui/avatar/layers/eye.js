@@ -5,14 +5,15 @@ export function createEyeLayer() {
   const g = { yaw: 0, pitch: 0, tYaw: 0, tPitch: 0, saccade: 0 };
   const r = () => Math.random();
 
+  // escreve o alvo direto em g (sem alocar array por sacada)
   function pickTarget(mode) {
     switch (mode) {
-      case 'user':   return [(r() - 0.5) * 0.12, (r() - 0.5) * 0.08];   // encara o usuário, quase parado
-      case 'lock':   return [(r() - 0.5) * 0.06, (r() - 0.5) * 0.05];   // travado
-      case 'wander': return [(r() - 0.3) * 0.5, -0.14 - r() * 0.20];    // pensativo: vagueia p/ cima/lado
-      case 'down':   return [(r() - 0.5) * 0.15, 0.24 + r() * 0.14];    // olhar baixo
-      case 'screen': return [(r() - 0.4) * 0.22, 0.08 + r() * 0.10];    // "tela": levemente pra baixo/frente
-      default:       return [(r() - 0.5) * 0.28, (r() - 0.5) * 0.16];   // soft
+      case 'user':   g.tYaw = (r() - 0.5) * 0.12; g.tPitch = (r() - 0.5) * 0.08; break;   // encara o usuário
+      case 'lock':   g.tYaw = (r() - 0.5) * 0.06; g.tPitch = (r() - 0.5) * 0.05; break;   // travado
+      case 'wander': g.tYaw = (r() - 0.3) * 0.5;  g.tPitch = -0.14 - r() * 0.20;  break;  // pensativo
+      case 'down':   g.tYaw = (r() - 0.5) * 0.15; g.tPitch = 0.24 + r() * 0.14;   break;  // olhar baixo
+      case 'screen': g.tYaw = (r() - 0.4) * 0.22; g.tPitch = 0.08 + r() * 0.10;   break;  // "tela"
+      default:       g.tYaw = (r() - 0.5) * 0.28; g.tPitch = (r() - 0.5) * 0.16;  break;  // soft
     }
   }
 
@@ -22,7 +23,7 @@ export function createEyeLayer() {
       g.saccade -= dt;
       if (g.saccade <= 0) {
         g.saccade = 0.8 + r() * 3.4;                 // nova sacada
-        [g.tYaw, g.tPitch] = pickTarget(ctx.gazeMode);
+        pickTarget(ctx.gazeMode);
       }
       // sacadas são rápidas
       const k = Math.min(1, dt * 9);

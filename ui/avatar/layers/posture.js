@@ -18,16 +18,25 @@ export function createPostureLayer() {
       const pose = POSES[gname] ? { ...POSES.rest, ...POSES[gname] } : POSES.rest;
       const emo = ctx.emotion;
       const k = 6;                    // velocidade de assentamento da pose
+      // postura de braço da EMOÇÃO (corpo inteiro) — só na idle; gesto sobrepõe
+      const gActive = gname !== 'rest';
+      const [aZ, aX] = emo.arms || [0, 0];
 
       for (const bone of CTRL_BONES) {
         const t = pose[bone] || [0, 0, 0];
         const c = cur[bone];
-        // postura da emoção soma na cabeça (inclinação) — em graus
-        const ex = bone === 'head' ? emo.head[0] : 0;
-        const ey = bone === 'head' ? emo.head[1] : 0;
-        c[0] = damp(c[0], (t[0] + ex) * DEG, k, dt);
-        c[1] = damp(c[1], (t[1] + ey) * DEG, k, dt);
-        c[2] = damp(c[2], t[2] * DEG, k, dt);
+        // deltas da emoção: cabeça (inclinação) + braços (abrir/fechar/dobrar)
+        let dx = bone === 'head' ? emo.head[0] : 0;
+        let dy = bone === 'head' ? emo.head[1] : 0;
+        let dz = 0;
+        if (!gActive) {
+          if (bone === 'rightUpperArm') dz = aZ;
+          else if (bone === 'leftUpperArm') dz = -aZ;
+          else if (bone === 'rightLowerArm' || bone === 'leftLowerArm') dx += aX;
+        }
+        c[0] = damp(c[0], (t[0] + dx) * DEG, k, dt);
+        c[1] = damp(c[1], (t[1] + dy) * DEG, k, dt);
+        c[2] = damp(c[2], (t[2] + dz) * DEG, k, dt);
         buf.addRot(bone, c[0], c[1], c[2]);
       }
       // inclinação base da coluna pela emoção (postura aberta/caída)
