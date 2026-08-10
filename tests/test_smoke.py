@@ -212,6 +212,58 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_memory_multitype(tmp_path: Path):
+    """Memória multi-tipo: busca por kind, perfil fixo (preferência/projeto),
+    recall multi-tipo, normalização de kind, delete/update."""
+    from aila.memory.manager import (
+        EPISODIC,
+        PREFERENCE,
+        PROJECT,
+        MemoryManager,
+        normalize_kind,
+    )
+    from aila.memory.store import MemoryStore
+
+    vocab = ["python", "gato", "projeto", "prefere", "escuro", "aila"]
+    async def fake_embed(texts):
+        out = []
+        for t in texts:
+            tl = t.lower()
+            out.append([float(tl.count(w)) + 0.01 for w in vocab])
+        return out
+
+    async def go():
+        store = MemoryStore(tmp_path / "m.db", fake_embed)
+        mgr = MemoryManager(store)
+        await mgr.save("o usuário prefere tema escuro", kind="preference")
+        await mgr.save("o projeto aila usa python", kind="project")
+        fid = await mgr.save("gato é legal", kind="fact")
+        await mgr.remember_exchange("como vai o projeto?", "vai bem", session_id=1)
+
+        # busca filtrada por kind
+        pref = await store.search("prefere escuro", kinds={PREFERENCE})
+        assert pref and all(h.kind == PREFERENCE for h in pref)
+        # perfil fixo = preferência + projeto (não episódico)
+        prof = mgr.profile_block()
+        assert "tema escuro" in prof and "python" in prof and "vai bem" not in prof
+        # recall multi-tipo traz o conhecimento durável
+        hits = await mgr.recall("projeto python")
+        assert any(h.kind == PROJECT for h in hits)
+        # normalização de kind
+        assert normalize_kind("user") == PREFERENCE
+        assert normalize_kind("conversation") == EPISODIC
+        assert normalize_kind("desconhecido") == "fact"
+        # delete + update
+        store.delete(fid)
+        assert all(h.id != fid for h in await store.search("gato"))
+        await mgr.save("nota", kind="fact")
+        by = store.by_kind("fact")
+        await store.update(by[0]["id"], "nota editada")
+        assert store.by_kind("fact")[0]["text"] == "nota editada"
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from aila.agents.base import BaseAgent
 from aila.core.logging import get_logger
+from aila.memory.manager import KINDS, normalize_kind
 from aila.tools.schema import Tool, ToolParam, ToolResult
 
 log = get_logger("memory_agent")
@@ -17,17 +18,20 @@ log = get_logger("memory_agent")
 class MemoryAgent(BaseAgent):
     name = "memory"
     description = (
-        "Memória de longo prazo: salvar fatos importantes para lembrar em "
-        "conversas futuras e buscar o que já foi aprendido."
+        "Memória de longo prazo MULTI-TIPO: salvar fatos (fact), preferências do "
+        "usuário (preference), info do projeto (project) ou conhecimento "
+        "(semantic); buscar; e esquecer."
     )
 
     def tools(self) -> list[Tool]:
+        kinds = ", ".join(sorted(KINDS))
         return [
             Tool(
                 name="memory.save",
-                description="Salva um fato/preferência importante na memória de longo prazo.",
+                description="Salva algo na memória de longo prazo para lembrar depois.",
                 params=[
-                    ToolParam("text", "string", "O fato a lembrar (conciso e completo)")
+                    ToolParam("text", "string", "O que lembrar (conciso e completo)"),
+                    ToolParam("kind", "string", f"Tipo: {kinds} (padrão fact)", required=False),
                 ],
                 handler=self._save,
                 agent=self.name,
@@ -42,6 +46,13 @@ class MemoryAgent(BaseAgent):
                 handler=self._search,
                 agent=self.name,
             ),
+            Tool(
+                name="memory.forget",
+                description="Esquece (apaga) uma memória pelo id.",
+                params=[ToolParam("id", "integer", "id da memória a apagar")],
+                handler=self._forget,
+                agent=self.name,
+            ),
         ]
 
     def _store(self):
@@ -52,11 +63,12 @@ class MemoryAgent(BaseAgent):
         # não é bloqueada pelo modo somente-leitura — apenas auditada.
         if self._store() is None:
             return ToolResult.error("Memória de longo prazo desabilitada.")
-        mid = await self._store().add(args["text"], kind="fact")
+        kind = normalize_kind(args.get("kind"))
+        mid = await self._store().add(args["text"], kind=kind)
         self.deps.permissions.audit.record(
-            "memory.save", self.name, args, f"saved:#{mid}", allowed=True
+            "memory.save", self.name, args, f"saved:#{mid}:{kind}", allowed=True
         )
-        return ToolResult.success(f"Memória salva (#{mid}).", id=mid)
+        return ToolResult.success(f"Memória salva (#{mid}, {kind}).", id=mid, kind=kind)
 
     async def _search(self, args: dict) -> ToolResult:
         await self.authorize("memory.search", args)
@@ -65,5 +77,12 @@ class MemoryAgent(BaseAgent):
         hits = await self._store().search(args["query"], top_k=int(args.get("top_k", 4)))
         if not hits:
             return ToolResult.success("Nada relevante na memória.")
-        lines = [f"[{h.score:.2f}] {h.text}" for h in hits]
+        lines = [f"#{h.id} [{h.kind} · {h.score:.2f}] {h.text}" for h in hits]
         return ToolResult.success("\n".join(lines), count=len(hits))
+
+    async def _forget(self, args: dict) -> ToolResult:
+        await self.authorize("memory.forget", args)   # escrita → gate de autonomia/permissão
+        if self._store() is None:
+            return ToolResult.error("Memória de longo prazo desabilitada.")
+        self._store().delete(int(args["id"]))
+        return ToolResult.success(f"Memória #{args['id']} esquecida.")

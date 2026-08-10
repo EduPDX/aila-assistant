@@ -111,28 +111,60 @@ class MemoryStore:
         return self._cache
 
     async def search(
-        self, query: str, top_k: int = 4, min_score: float = 0.0
+        self, query: str, top_k: int = 4, min_score: float = 0.0,
+        kinds: set[str] | None = None,
     ) -> list[MemoryHit]:
         loaded = self._load_matrix()
         if loaded is None:
             return []
-        ids, texts, kinds, matrix = loaded
+        ids, texts, kind_arr, matrix = loaded
         qvecs = await self.embed_fn([query])
         if not qvecs:
             return []
         q = self._normalize(np.asarray(qvecs[0], dtype=np.float32).reshape(1, -1))[0]
         scores = matrix @ q  # cosseno (vetores já normalizados)
-        order = np.argsort(scores)[::-1][:top_k]
+        order = np.argsort(scores)[::-1]   # todos, desc — filtramos por kind depois
         hits: list[MemoryHit] = []
         for i in order:
+            if len(hits) >= top_k:
+                break
             score = float(scores[i])
             if score < min_score:
+                break                       # ordenado desc: os próximos são menores
+            if kinds and kind_arr[i] not in kinds:
                 continue
             hits.append(
-                MemoryHit(id=ids[i], text=texts[i], kind=kinds[i], score=score,
+                MemoryHit(id=ids[i], text=texts[i], kind=kind_arr[i], score=score,
                           created_at="")
             )
         return hits
+
+    def delete(self, mem_id: int) -> None:
+        self.conn.execute("DELETE FROM memories WHERE id = ?", (mem_id,))
+        self.conn.commit()
+        self._invalidate()
+
+    async def update(self, mem_id: int, text: str) -> None:
+        """Edita o texto de uma memória e reembeda."""
+        text = (text or "").strip()
+        if not text:
+            return
+        vecs = await self.embed_fn([text])
+        vec = np.asarray(vecs[0], dtype=np.float32)
+        self.conn.execute(
+            "UPDATE memories SET text = ?, embedding = ?, dim = ? WHERE id = ?",
+            (text, vec.tobytes(), len(vec), mem_id),
+        )
+        self.conn.commit()
+        self._invalidate()
+
+    def by_kind(self, kind: str, n: int = 20) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT id, text, kind, created_at FROM memories WHERE kind = ? "
+            "ORDER BY id DESC LIMIT ?",
+            (kind, n),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def recent(self, n: int = 20) -> list[dict]:
         rows = self.conn.execute(

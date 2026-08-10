@@ -34,6 +34,7 @@ from aila.database.store import ConversationStore
 from aila.llm.base import LLMBackend
 from aila.llm.messages import to_provider_messages
 from aila.llm.router import ModelRouter, RouteTask
+from aila.memory.manager import MemoryManager
 from aila.memory.store import MemoryStore
 
 log = get_logger("engine")
@@ -65,7 +66,8 @@ class AilaEngine:
         )
         self.agents = agents
         self.store = store
-        self.memory = memory
+        self.memory = memory                          # store (count / MemoryAgent)
+        self.mem = MemoryManager(memory) if memory else None   # fachada multi-tipo
         self.session_id: int | None = None
         self.bus = event_bus          # backbone de eventos (subscribers desacoplados)
         self.emotions = EmotionEngine()
@@ -164,35 +166,39 @@ class AilaEngine:
             except Exception as exc:  # noqa: BLE001
                 log.warning(f"avatar_sink falhou: {exc!r}")
 
-    # -------------------------- memória (RAG) -------------------------- #
+    # -------------------------- memória (multi-tipo) ------------------- #
     async def _recall(self, query: str, emit: Emit) -> str | None:
-        """Recupera memórias relevantes e retorna um bloco de contexto (ou None)."""
-        if self.memory is None:
+        """Bloco de contexto = PERFIL (preferências/projeto, sempre) + memórias
+        relevantes (conhecimento durável + episódico), via MemoryManager."""
+        if self.mem is None:
             return None
         cfg = self.settings.memory
+        profile = self.mem.profile_block()
         try:
-            hits = await self.memory.search(query, top_k=cfg.top_k, min_score=cfg.min_score)
+            hits = await self.mem.recall(query, top_k=cfg.top_k, min_score=cfg.min_score)
         except Exception as exc:  # noqa: BLE001 - memória nunca deve quebrar o chat
             log.warning(f"recuperação de memória falhou: {exc!r}")
+            hits = []
+        if not profile and not hits:
             return None
-        if not hits:
-            return None
-        await emit("memory.recalled", {"items": [{"text": h.text, "score": round(h.score, 2)} for h in hits]})
-        linhas = "\n".join(f"- {h.text}" for h in hits)
-        return f"Memórias relevantes de conversas anteriores:\n{linhas}"
+        blocks: list[str] = []
+        if profile:
+            blocks.append(profile)
+        if hits:
+            await emit("memory.recalled",
+                       {"items": [{"text": h.text, "score": round(h.score, 2)} for h in hits]})
+            linhas = "\n".join(f"- [{h.kind}] {h.text}" for h in hits)
+            blocks.append(f"Memórias relevantes:\n{linhas}")
+        return "\n\n".join(blocks)
 
     async def _remember(self, user_text: str, answer: str) -> None:
-        """Grava a troca na memória de longo prazo (best-effort)."""
-        if self.memory is None or not self.settings.memory.store_conversations:
+        """Grava a troca como memória EPISÓDICA (best-effort)."""
+        if self.mem is None or not self.settings.memory.store_conversations:
             return
         if len(user_text.strip()) < 8:  # ignora saudações triviais
             return
         try:
-            await self.memory.add(
-                f"Usuário: {user_text}\nAila: {answer}",
-                kind="chat",
-                session_id=self.session_id,
-            )
+            await self.mem.remember_exchange(user_text, answer, self.session_id)
         except Exception as exc:  # noqa: BLE001
             log.warning(f"gravação de memória falhou: {exc!r}")
 
