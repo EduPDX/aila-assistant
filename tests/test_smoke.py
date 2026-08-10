@@ -337,6 +337,7 @@ def test_run_task_end_to_end(tmp_path: Path):
     s = get_settings()
     s.security.autonomy_level = 4      # tarefas autônomas exigem L4
     s.memory.enabled = False          # evita embeddings
+    s.routing.enabled = False         # hermético: usa o FakeLLM local (ignora provedores do local.yaml)
     eng = build_engine(s, FakeLLM())
 
     async def go():
