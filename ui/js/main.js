@@ -9,7 +9,9 @@ import * as sidebar from './sidebar.js';
 import * as avatar from './avatar.js';
 import * as voice from './voice.js';
 import { initSettings, openSettings, closeSettings, settingsTab, loadStatus, setLlm } from './settings.js';
-import { initStatusPanel } from './statuspanel.js';
+import { ingest } from './core/events.js';
+import { initTopbar, refreshStatus } from './shell/topbar.js';
+import { initInspector } from './shell/inspector.js';
 
 /* ---------- abas ---------- */
 function showTab(t) {
@@ -98,9 +100,13 @@ function setDrawer(open) {
 
 /* ---------- start ---------- */
 initSettings();
-initStatusPanel();
+initTopbar();
+initInspector();
 wireUI();
-connectWS({ onMessage: route, onClose: () => setLlm(false) });
+connectWS({
+  onMessage: (m) => { ingest(m); route(m); },   // ingest = estado/atividade; route = UI (chat/avatar)
+  onOpen: () => { State.set({ connection: 'online' }); refreshStatus(); },
+  onClose: () => { State.set({ connection: 'offline', llmOnline: false }); setLlm(false); },
+});
 sidebar.loadSessions();
-loadStatus();
-setInterval(loadStatus, 8000);
+loadStatus();   // status de voz (uma vez); a topbar cuida do poll de /api/status

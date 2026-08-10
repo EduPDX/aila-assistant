@@ -7,11 +7,11 @@ const fmtUptime = (s) => {
   return h ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
 };
 
-export function initStatusPanel() {
-  const box = byId('statuspanel');
+export function initStatusPanel(target) {
+  const box = target || byId('statuspanel');
   if (!box) return;
   box.innerHTML = `
-    <div class="sp-title">AILA STATUS</div>
+    <div class="sp-title">SISTEMA</div>
     <div class="sp-state" id="sp-state"><span class="sp-dot"></span><span id="sp-state-label">Ocioso</span></div>
     <div class="sp-tool" id="sp-tool"></div>
     <div class="sp-grid">

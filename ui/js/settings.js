@@ -24,13 +24,22 @@ export function settingsTab(p) {
 export function setLlm(on) {
   byId('s-llm').innerHTML = `<span class="dot ${on ? 'on' : 'off'}"></span>${on ? 'online' : 'offline'}`;
 }
+// status de VOZ (a topbar cuida do /api/status → State; aqui só a voz).
 export async function loadStatus() {
   try {
-    const s = await (await fetch('/api/status')).json();
-    setLlm(s.llm_online); byId('s-model').textContent = s.model; byId('s-mem').textContent = s.memory_count ?? 0;
     const v = await (await fetch('/api/voice/status')).json();
     byId('s-voice').textContent = v.enabled ? (v.tts_engine + ' · ' + (v.tts_voice || '')) : 'off';
-  } catch (e) { setLlm(false); }
+  } catch (e) { /* offline */ }
+}
+
+// espelha o estado global (modelo/llm/memória) nas linhas do painel de Status.
+function bindStatusRows() {
+  const paint = (s) => {
+    setLlm(s.llmOnline);
+    byId('s-model').textContent = s.model || '—';
+    byId('s-mem').textContent = s.memoryCount ?? 0;
+  };
+  State.on(paint); paint(State.get());
 }
 
 export function initSettings() {
@@ -65,4 +74,6 @@ export function initSettings() {
     const on = !State.get('voiceOut'); State.set({ voiceOut: on });
     byId('tg-voice').classList.toggle('on', on);
   };
+
+  bindStatusRows();   // linhas do painel de Status espelham o State global
 }
