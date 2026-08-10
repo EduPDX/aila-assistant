@@ -20,9 +20,10 @@ Set-Location $root
 
 function Step($n, $msg) { Write-Host "`n== $n  $msg ==" -ForegroundColor Cyan }
 function Fail($msg) { Write-Host "`nFALHOU: $msg" -ForegroundColor Red; exit 1 }
-# roda um comando nativo e aborta se o exit code != 0 (mais confiável que só ErrorAction)
-function Native($file, $args) {
-  & $file @args
+# roda um comando nativo e aborta se o exit code != 0. NÃO usar $args como nome
+# de parâmetro: é variável automática do PowerShell e quebra o splatting (@arglist).
+function Native($file, $arglist) {
+  & $file @arglist
   if ($LASTEXITCODE -ne 0) { Fail "$file (exit $LASTEXITCODE)" }
 }
 
