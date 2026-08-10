@@ -133,6 +133,8 @@ button, input, textarea { font-family: inherit; color: inherit; }
 .tchip b { font-weight: 600; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
 .tchip .tk { font-size: 9px; letter-spacing: .8px; font-weight: 700; padding: 2px 5px; border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.tchip.clickable { cursor: pointer; }
+.tchip.clickable:hover { border-color: var(--glass-border); background: color-mix(in srgb, var(--accent) 8%, var(--panel-2)); }
 .tchip[data-kind="cloud"] { border-color: color-mix(in srgb, var(--accent-2) 34%, var(--border)); }
 .tchip[data-kind="cloud"] .tk { background: color-mix(in srgb, var(--accent-2) 18%, transparent); color: var(--accent-2); }
 .tchip.offline { opacity: .5; }

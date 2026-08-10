@@ -1,7 +1,11 @@
 // Componentes de UI reutilizáveis: menu de contexto e diálogos (confirm/prompt).
 import { el } from './dom.js';
 
-function closeMenu() { document.querySelector('.ctx-menu')?.remove(); }
+let _menuCleanup = null;
+function closeMenu() {
+  document.querySelector('.ctx-menu')?.remove();
+  if (_menuCleanup) { _menuCleanup(); _menuCleanup = null; }   // remove listeners do menu anterior
+}
 
 /** Menu de contexto ancorado a um elemento. items: [{icon,label,danger,onClick}] */
 export function contextMenu(anchor, items) {
@@ -15,10 +19,17 @@ export function contextMenu(anchor, items) {
   const r = anchor.getBoundingClientRect();
   menu.style.top = Math.min(r.bottom + 4, innerHeight - menu.offsetHeight - 8) + 'px';
   menu.style.left = Math.min(r.left, innerWidth - menu.offsetWidth - 8) + 'px';
-  setTimeout(() => document.addEventListener('click', closeMenu, { once: true }), 0);
-  document.addEventListener('keydown', function esc(e) {
-    if (e.key === 'Escape') { closeMenu(); document.removeEventListener('keydown', esc); }
-  });
+
+  const onDocClick = () => closeMenu();
+  const onEsc = (e) => { if (e.key === 'Escape') closeMenu(); };
+  setTimeout(() => {                                  // após o clique atual, fecha no próximo
+    document.addEventListener('click', onDocClick);
+    document.addEventListener('keydown', onEsc);
+  }, 0);
+  _menuCleanup = () => {
+    document.removeEventListener('click', onDocClick);
+    document.removeEventListener('keydown', onEsc);
+  };
 }
 
 function overlay(build) {
