@@ -122,6 +122,104 @@ async def set_autonomy(request: Request, body: AutonomyBody) -> dict:
     return {"autonomy_level": lvl}
 
 
+_PROVIDER_LABELS = {"openai": "OpenAI", "gemini": "Gemini",
+                    "grok": "Grok (xAI)", "deepseek": "DeepSeek"}
+
+
+def _providers_snapshot(engine) -> dict:
+    """Estado dos provedores (NUNCA devolve a api_key — só has_key)."""
+    from aila.llm.openai_compat import PROVIDER_DEFAULTS
+
+    s = engine.settings
+    routing = s.routing
+    local_pref = (not routing.enabled) or routing.default in ("local", "default")
+    provs = [{
+        "name": "local", "label": f"Local · {s.llm.model}", "kind": "local",
+        "has_key": True, "enabled": True, "active": True, "preferred": local_pref,
+    }]
+    for name, cfg in s.providers.items():
+        d = PROVIDER_DEFAULTS.get(name, {})
+        provs.append({
+            "name": name, "label": _PROVIDER_LABELS.get(name, name), "kind": "cloud",
+            "model": cfg.model or d.get("model", ""),
+            "vision": bool(cfg.vision or d.get("vision", False)),
+            "has_key": bool(cfg.api_key),
+            "enabled": bool(cfg.enabled and cfg.api_key),
+            "preferred": bool(routing.enabled and routing.default == name),
+            "active": name in engine.router.providers,
+        })
+    return {"providers": provs, "routing_enabled": routing.enabled,
+            "routing_default": routing.default, "network_mode": engine.network.mode
+            if engine.network else "hybrid"}
+
+
+@router.get("/providers")
+async def list_providers(request: Request) -> dict:
+    """Provedores de LLM (local + nuvem) e qual é o preferido. Sem expor chaves."""
+    return _providers_snapshot(request.app.state.engine)
+
+
+class ProviderBody(BaseModel):
+    name: str
+    api_key: str | None = None   # nova chave (None = mantém a atual)
+    enabled: bool = True         # ativar/desativar o provedor
+    preferred: bool = True       # usar como modelo preferido (roteia p/ ele)
+    clear_key: bool = False      # remover a chave salva
+
+
+@router.post("/providers")
+async def set_provider(request: Request, body: ProviderBody) -> dict:
+    """Salva/ativa/desativa um provedor de LLM em runtime e persiste no local.yaml
+    (gravável, gitignored). A chave nunca é logada nem devolvida."""
+    from aila.core.config import update_local_yaml
+    from aila.llm.openai_compat import build_external_providers
+
+    engine = request.app.state.engine
+    s = engine.settings
+    verified: bool | None = None
+
+    if body.name == "local":
+        s.routing.enabled = False              # preferir o local = desliga roteamento p/ nuvem
+        s.routing.default = "local"
+    elif body.name in _PROVIDER_LABELS:
+        cfg = getattr(s.providers, body.name)
+        if body.clear_key:
+            cfg.api_key = ""
+        elif body.api_key is not None and body.api_key.strip():
+            cfg.api_key = body.api_key.strip()
+        cfg.enabled = bool(body.enabled and cfg.api_key)
+        if cfg.enabled and body.preferred:
+            s.routing.enabled = True
+            s.routing.default = body.name
+        elif not cfg.enabled and s.routing.default == body.name:
+            s.routing.enabled = False
+            s.routing.default = "local"
+    else:
+        raise HTTPException(status_code=400, detail=f"provedor desconhecido: {body.name}")
+
+    # aplica AO VIVO (reconstrói os provedores externos do router)
+    externals = build_external_providers(s, engine.network)
+    engine.router.providers = {engine.router.default.name: engine.router.default, **externals}
+    engine.router.config = s.routing
+
+    # valida a chave (best-effort) quando um provedor de nuvem foi ativado
+    if body.name != "local" and body.name in externals:
+        try:
+            verified = await externals[body.name].health()
+        except Exception:  # noqa: BLE001 - verificação é informativa
+            verified = False
+
+    # persiste (chaves ficam só no local.yaml gravável, nunca no repositório)
+    update_local_yaml({
+        "providers": {n: {"enabled": bool(c.enabled), "api_key": c.api_key or "",
+                          "model": c.model or ""} for n, c in s.providers.items()},
+        "routing": {"enabled": bool(s.routing.enabled), "default": s.routing.default},
+    })
+    snap = _providers_snapshot(engine)
+    snap["verified"] = verified
+    return snap
+
+
 @router.get("/metrics")
 async def metrics(request: Request) -> dict:
     """Métricas reais do sistema (CPU/RAM/GPU/VRAM/tokens-s/uptime) para o painel."""

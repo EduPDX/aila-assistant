@@ -2,6 +2,7 @@
 import { byId, $$ } from './dom.js';
 import { State } from './state.js';
 import { avatarReload } from './avatar.js';
+import { renderProviders } from './views/providers.js';
 
 const THEMES = [
   { id: 'aqua', c: '#38e1d0' }, { id: 'cyber', c: '#c257ff' }, { id: 'rose', c: '#ff6fae' },
@@ -19,6 +20,7 @@ export const closeSettings = () => byId('settings-overlay').classList.remove('sh
 export function settingsTab(p) {
   $$('.snav').forEach((b) => b.classList.toggle('active', b.dataset.p === p));
   $$('.spane').forEach((s) => s.classList.toggle('active', s.id === 'sp-' + p));
+  if (p === 'modelos') renderProviders();   // carrega o estado dos provedores ao abrir
 }
 
 export function setLlm(on) {

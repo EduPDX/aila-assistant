@@ -68,6 +68,7 @@
       <div class="settings-side" id="settings-nav">
         <div class="settings-title">⚙️ Configurações</div>
         <button class="snav active" data-p="tema">🎨 Tema</button>
+        <button class="snav" data-p="modelos">🧠 Modelos de IA</button>
         <button class="snav" data-p="vrm">🧍 Modelos VRM</button>
         <button class="snav" data-p="voz">🔊 Voz</button>
         <button class="snav" data-p="user">👤 Usuário</button>
@@ -79,6 +80,15 @@
         <section class="spane active" id="sp-tema">
           <h3>Tema</h3><p class="muted">Escolha a aparência do app.</p>
           <div class="themes" id="themes"></div>
+        </section>
+        <section class="spane" id="sp-modelos">
+          <h3>Modelos de IA</h3>
+          <p class="muted">A Aila roda <b>local</b> por padrão (grátis, nada sai do PC). Adicione uma
+            chave de API para usar modelos na <b>nuvem</b> — nesse caso seus prompts vão para o provedor.</p>
+          <div id="providers-list" class="prov-list"></div>
+          <p class="muted" id="prov-help" style="margin-top:14px">
+            As chaves ficam só neste computador (<code>config/local.yaml</code>), nunca no repositório.
+          </p>
         </section>
         <section class="spane" id="sp-vrm">
           <h3>Modelos VRM</h3>

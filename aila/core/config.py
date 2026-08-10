@@ -290,14 +290,38 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return out
 
 
+def writable_local_yaml() -> Path:
+    """Arquivo de overrides GRAVÁVEL (onde a UI salva chaves/preferências).
+
+    Em dev é o próprio ``config/local.yaml``. No ``.exe`` empacotado o ``config/``
+    do bundle é somente-leitura, então vai para a pasta gravável do usuário.
+    """
+    if getattr(sys, "frozen", False):
+        return DATA_ROOT / "local.yaml"
+    return CONFIG_DIR / "local.yaml"
+
+
+def update_local_yaml(patch: dict[str, Any]) -> Path:
+    """Mescla ``patch`` no local.yaml gravável (preserva o resto). Usado para
+    persistir configurações da UI (ex.: chaves de API dos provedores)."""
+    path = writable_local_yaml()
+    merged = _deep_merge(_load_yaml(path), patch)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as fh:
+        yaml.safe_dump(merged, fh, allow_unicode=True, sort_keys=False)
+    return path
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Retorna a configuração efetiva (cacheada).
 
     Camadas (maior precedência primeiro): variáveis de ambiente ``AILA_*`` e
-    ``.env`` > ``config/local.yaml`` > ``config/default.yaml``.
+    ``.env`` > ``config/local.yaml`` (+ overrides graváveis no .exe) > ``config/default.yaml``.
     """
     global _YAML_LAYER
     data = _load_yaml(CONFIG_DIR / "default.yaml")
     _YAML_LAYER = _deep_merge(data, _load_yaml(CONFIG_DIR / "local.yaml"))
+    if getattr(sys, "frozen", False):   # overrides graváveis do usuário (.exe)
+        _YAML_LAYER = _deep_merge(_YAML_LAYER, _load_yaml(DATA_ROOT / "local.yaml"))
     return Settings()

@@ -25,6 +25,8 @@ export const api = {
   tools: () => j('/api/tools'),
   audit: (n = 50) => j(`/api/audit?n=${n}`),
   voiceStatus: () => j('/api/voice/status'),
+  providers: () => j('/api/providers'),                          // local + nuvem (sem expor chaves)
+  setProvider: (body) => jsonPost('/api/providers', body),        // salvar/ativar/desativar
 
   // --- controles runtime SUPORTADOS pelo backend ---
   setAutonomy: (level) => jsonPost('/api/autonomy', { level }),   // 1..5
