@@ -194,7 +194,8 @@ PROVIDER_DEFAULTS: dict[str, dict[str, Any]] = {
     "openai": {"base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini",
                "vision": True, "context": 128000},
     "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-               "model": "gemini-2.0-flash", "vision": True, "context": 1000000},
+               # -latest funciona no free tier; gemini-2.0-flash costuma vir com limit:0
+               "model": "gemini-flash-latest", "vision": True, "context": 1000000},
     "grok": {"base_url": "https://api.x.ai/v1", "model": "grok-2-latest",
              "vision": False, "context": 131072},
     "deepseek": {"base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat",
