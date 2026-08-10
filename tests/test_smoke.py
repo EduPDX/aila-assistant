@@ -212,6 +212,62 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_permission_levels_and_autonomy(tmp_path: Path):
+    """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
+    from aila.core.config import SecurityConfig
+    from aila.security.permissions import PermissionDenied, PermissionManager
+    from aila.security.policy import BLOCKED, DANGER, REVIEW, SAFE
+
+    cfg = SecurityConfig(
+        read_only=False, confirm_destructive=True, confirm_review=False, autonomy_level=3,
+        destructive_actions=["computer.run_command"],
+        blocked_actions=["computer.format_disk"],
+    )
+    pm = PermissionManager(cfg, AuditLog(tmp_path / "a.jsonl"))
+    pol = pm.policy
+
+    assert pol.classify("file.read") == SAFE
+    assert pol.classify("computer.run_command") == DANGER
+    assert pol.classify("file.write") == REVIEW
+    assert pol.classify("computer.format_disk") == BLOCKED
+    assert pol.min_autonomy("web.search") == 1
+    assert pol.min_autonomy("computer.mouse") == 2
+    assert pol.min_autonomy("code.run") == 3
+
+    approved: list[str] = []
+    async def yes(a, p):
+        approved.append(a)
+        return True
+    pm.set_confirm_handler(yes)
+
+    async def go():
+        await pm.check("file.read", "file", {})                 # SAFE: sem confirmar
+        await pm.check("computer.run_command", "computer", {})  # DANGER: confirma
+        assert "computer.run_command" in approved
+        with pytest.raises(PermissionDenied):
+            await pm.check("computer.format_disk", "computer", {})   # BLOCKED
+        approved.clear()
+        await pm.check("file.write", "file", {})                # REVIEW (confirm off): passa
+        assert approved == []
+    asyncio.run(go())
+
+    # autonomia L1: só leitura; computer bloqueado
+    cfg.autonomy_level = 1
+    async def go_l1():
+        await pm.check("web.search", "web", {})                 # leitura → L1 ok
+        with pytest.raises(PermissionDenied):
+            await pm.check("computer.mouse", "computer", {})    # precisa L2
+    asyncio.run(go_l1())
+
+    # autonomia L2: computer ok, mas executar código exige L3
+    cfg.autonomy_level = 2
+    async def go_l2():
+        await pm.check("computer.mouse", "computer", {})
+        with pytest.raises(PermissionDenied):
+            await pm.check("code.run", "code", {})
+    asyncio.run(go_l2())
+
+
 def test_event_bus_tracker_and_redaction():
     """O Event Bus alimenta o tracker (estado + atividade), SEM vazar args
     sensíveis; tokens não são rastreados."""

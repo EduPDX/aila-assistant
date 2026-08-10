@@ -59,3 +59,17 @@ O `PermissionManager` classifica automaticamente:
 3. Revise `logs/audit.jsonl` periodicamente.
 4. Lembre-se: instruções vindas de arquivos, páginas ou imagens são **dados**,
    não comandos. Nunca dê à IA credenciais reais em campos de formulário.
+
+## Níveis de permissão + autonomia (Fase 6)
+
+Cada ação recebe um **nível de risco**: `SAFE` (executa sozinha — leituras/
+pesquisa), `REVIEW` (escrita comum; confirma só se `confirm_review: true`),
+`DANGER` (comando/mouse/teclado/apagar; confirma se `confirm_destructive: true`)
+e `BLOCKED` (nunca — via `blocked_actions`). Classificação configurável em
+`security.action_levels` (override por ação).
+
+O **nível de autonomia** (`security.autonomy_level`, 1..5) destrava categorias:
+**1** assistant (só leitura) · **2** executor (PC/arquivos) · **3** developer
+(executar/mexer em código) · **4** autonomous · **5** self-improve. Ação abaixo
+do nível necessário é bloqueada. Troque em runtime: `POST /api/autonomy {level}`.
+O default (3) preserva o comportamento atual.

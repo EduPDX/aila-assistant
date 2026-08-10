@@ -78,7 +78,11 @@ routing:
 security:
   read_only: false            # Aila PODE agir (rodar comandos, mexer no PC); a
                               # proteção fica por conta da confirmação abaixo
-  confirm_destructive: true   # toda ação perigosa pede confirmação na UI (overlay ⚠️)
+  confirm_destructive: true   # ações DANGER pedem confirmação na UI (overlay ⚠️)
+  confirm_review: false       # ações REVIEW (escrita comum) pedem confirmação?
+  # Autonomia (1..5): 1 assistant(só leitura) · 2 executor(PC/arquivos) ·
+  # 3 developer(código) · 4 autonomous · 5 self-improve. Default 3 preserva tudo.
+  autonomy_level: 3
   sandbox_root: "./workspace" # raiz permitida para o File Agent
   # Ações classificadas como perigosas (exigem confirmação):
   destructive_actions:

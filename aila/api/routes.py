@@ -22,6 +22,7 @@ async def status(request: Request) -> dict:
         "llm_online": await llm.health(),
         "model": getattr(engine.llm, "default_model", engine.settings.llm.model),
         "read_only": engine.settings.security.read_only,
+        "autonomy_level": engine.permissions.policy.autonomy,
         "network_mode": engine.network.mode if engine.network else "hybrid",
         "providers": list(engine.router.providers.keys()),   # local + externos habilitados
         "agents": list(engine.agents.agents.keys()),
@@ -52,6 +53,19 @@ async def set_network(request: Request, body: NetworkBody) -> dict:
         raise HTTPException(status_code=503, detail="Política de rede indisponível.")
     mode = engine.network.set_mode(body.mode)
     return {"network_mode": mode}
+
+
+class AutonomyBody(BaseModel):
+    level: int   # 1..5
+
+
+@router.post("/autonomy")
+async def set_autonomy(request: Request, body: AutonomyBody) -> dict:
+    """Troca o nível de autonomia (1..5) em tempo de execução."""
+    engine = request.app.state.engine
+    engine.settings.security.autonomy_level = max(1, min(5, body.level))
+    lvl = engine.permissions.policy.autonomy
+    return {"autonomy_level": lvl}
 
 
 @router.get("/metrics")

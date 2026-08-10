@@ -93,10 +93,16 @@ class ContextConfig(BaseModel):
 
 class SecurityConfig(BaseModel):
     read_only: bool = True
-    confirm_destructive: bool = True
+    confirm_destructive: bool = True    # ações DANGER pedem confirmação
+    confirm_review: bool = False        # ações REVIEW pedem confirmação (default: não)
     sandbox_root: str = "./workspace"
-    destructive_actions: list[str] = Field(default_factory=list)
+    destructive_actions: list[str] = Field(default_factory=list)  # → nível DANGER
     audit_log: str = "./logs/audit.jsonl"
+    # ----- Fase 6: níveis de permissão + autonomia -----
+    autonomy_level: int = 3             # 1..5 (ver docs). Default preserva o atual.
+    blocked_actions: list[str] = Field(default_factory=list)      # nunca executadas
+    action_levels: dict[str, str] = Field(default_factory=dict)   # override: ação→nível
+    min_autonomy: dict[str, int] = Field(default_factory=dict)    # override: prefixo→nível
 
 
 class AgentsConfig(BaseModel):
