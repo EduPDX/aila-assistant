@@ -212,6 +212,113 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_task_manager_and_planner():
+    """TaskManager (estado/progresso/cancelamento) + Planner (parse de plano)."""
+    from aila.core.planner import Planner, parse_steps
+    from aila.core.tasks import Step, TaskManager, TaskState
+
+    assert parse_steps('["a", "b", "c"]', "g") == ["a", "b", "c"]
+    assert parse_steps("1. primeiro\n2) segundo\n- terceiro", "g") == \
+        ["primeiro", "segundo", "terceiro"]
+    assert parse_steps("", "obj") == ["obj"]        # fallback
+
+    class FakeBackend:
+        async def complete(self, msgs, **k):
+            return 'plano: ["analisar", "implementar", "testar"]'
+    class FakeRouter:
+        def select(self, task=None):
+            return FakeBackend()
+
+    async def go():
+        tm = TaskManager(bus=None)
+        t = await tm.create("fazer algo")
+        assert t.state == TaskState.PENDING and t.progress == 0.0
+        assert tm.get(t.id) is t and tm.list() == [t]
+        await tm.set_state(t, TaskState.RUNNING)
+        assert t.state == TaskState.RUNNING
+        assert await tm.cancel(t.id) is True and t.state == TaskState.CANCELLED
+        assert await tm.cancel(t.id) is False       # já terminal
+
+        p = Planner(FakeRouter())
+        assert await p.plan("construir X") == ["analisar", "implementar", "testar"]
+
+        t2 = await tm.create("g2")
+        t2.plan = [Step("a"), Step("b")]
+        t2.plan[0].status = "done"
+        assert t2.progress == 0.5
+
+    asyncio.run(go())
+
+
+def test_run_task_end_to_end(tmp_path: Path):
+    """run_task: plano → executa passos → conclui. Exige autonomia L4."""
+    from aila.core.config import get_settings
+    from aila.core.engine import build_engine
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+
+    class FakeLLM(LLMBackend):
+        name = "ollama"
+        default_model = "fake"
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+        async def chat(self, messages, **k):
+            yield ChatChunk(content="passo executado.", done=True)
+        async def complete(self, messages, **k):
+            return '["passo um", "passo dois"]'
+        async def list_models(self):
+            return ["fake"]
+        async def health(self):
+            return True
+
+    s = get_settings()
+    s.security.autonomy_level = 4      # tarefas autônomas exigem L4
+    s.memory.enabled = False          # evita embeddings
+    eng = build_engine(s, FakeLLM())
+
+    async def go():
+        task = await eng.start_task("construir algo")   # roda em background
+        for _ in range(100):
+            if str(task.state) in ("completed", "failed", "cancelled"):
+                break
+            await asyncio.sleep(0.02)
+        assert str(task.state) == "completed"
+        assert len(task.plan) == 2 and all(st.status == "done" for st in task.plan)
+        assert "passo executado" in task.result
+
+    asyncio.run(go())
+
+
+def test_task_requires_autonomy_l4():
+    """start_task é bloqueado abaixo da autonomia L4."""
+    from aila.core.config import get_settings
+    from aila.core.engine import build_engine
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+    from aila.security.permissions import PermissionDenied
+
+    class FakeLLM(LLMBackend):
+        name = "ollama"
+        async def chat(self, messages, **k):
+            yield ChatChunk(content="x", done=True)
+        async def complete(self, messages, **k):
+            return "[]"
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+
+    s = get_settings()
+    s.security.autonomy_level = 3      # abaixo de L4
+    s.memory.enabled = False
+    eng = build_engine(s, FakeLLM())
+
+    async def go():
+        with pytest.raises(PermissionDenied):
+            await eng.start_task("algo")
+    asyncio.run(go())
+
+
 def test_memory_multitype(tmp_path: Path):
     """Memória multi-tipo: busca por kind, perfil fixo (preferência/projeto),
     recall multi-tipo, normalização de kind, delete/update."""

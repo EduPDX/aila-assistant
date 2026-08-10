@@ -22,6 +22,7 @@ log = get_logger("events")
 _TRACK = (
     "aila.state", "agent.invoked", "agent.result", "model.selected",
     "permission.request", "permission.response", "avatar.behavior", "error",
+    "task.created", "task.state",
 )
 
 
@@ -39,6 +40,8 @@ def _summarize(etype: str, p: dict[str, Any]) -> dict[str, Any]:
         return {"emotion": p.get("emotion"), "intent": p.get("intent")}
     if etype == "permission.request":
         return {"action": p.get("action")}
+    if etype in ("task.created", "task.state"):
+        return {"id": p.get("id"), "state": p.get("state"), "progress": p.get("progress")}
     if etype == "error":
         return {"message": str(p.get("message", ""))[:120]}
     return {}

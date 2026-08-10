@@ -41,6 +41,44 @@ async def events(request: Request, n: int = 40) -> dict:
     return {"events": tracker.events(n), "state": tracker.state, "provider": tracker.provider}
 
 
+class TaskBody(BaseModel):
+    goal: str
+
+
+@router.post("/tasks")
+async def create_task(request: Request, body: TaskBody) -> dict:
+    """Cria e executa (em background) uma tarefa autônoma. Exige autonomia L4."""
+    from aila.security.permissions import PermissionDenied
+
+    engine = request.app.state.engine
+    if not body.goal.strip():
+        raise HTTPException(status_code=400, detail="Objetivo vazio.")
+    try:
+        task = await engine.start_task(body.goal)
+    except PermissionDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return task.to_dict()
+
+
+@router.get("/tasks")
+async def list_tasks(request: Request) -> dict:
+    return {"tasks": [t.to_dict() for t in request.app.state.engine.tasks.list()]}
+
+
+@router.get("/tasks/{task_id}")
+async def get_task(request: Request, task_id: str) -> dict:
+    task = request.app.state.engine.tasks.get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
+    return task.to_dict()
+
+
+@router.post("/tasks/{task_id}/cancel")
+async def cancel_task(request: Request, task_id: str) -> dict:
+    ok = await request.app.state.engine.tasks.cancel(task_id)
+    return {"cancelled": ok}
+
+
 class NetworkBody(BaseModel):
     mode: str   # "offline" | "hybrid"
 

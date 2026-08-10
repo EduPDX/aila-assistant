@@ -14,6 +14,7 @@ WebSocket), então a engine não conhece a camada de transporte.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
@@ -30,12 +31,15 @@ from aila.core.config import Settings
 from aila.core.context import ConversationContext, Message
 from aila.core.event_bus import bus as event_bus
 from aila.core.logging import get_logger
+from aila.core.planner import Planner
+from aila.core.tasks import Step, TaskManager, TaskState
 from aila.database.store import ConversationStore
 from aila.llm.base import LLMBackend
 from aila.llm.messages import to_provider_messages
 from aila.llm.router import ModelRouter, RouteTask
 from aila.memory.manager import MemoryManager
 from aila.memory.store import MemoryStore
+from aila.security.permissions import PermissionDenied
 
 log = get_logger("engine")
 
@@ -74,6 +78,9 @@ class AilaEngine:
         # Behavior Planner: decide o comportamento do avatar pelo SIGNIFICADO
         # da resposta (emoção/postura/olhar/ritmo/gestos), antes do TTS.
         self.planner = BehaviorPlanner(self.emotions)
+        # Task Manager + Planner de tarefas (tarefas longas autônomas — L4+).
+        self.tasks = TaskManager(self.bus)
+        self.task_planner = Planner(self.router)
         # Canal opcional para um motor 3D (ex.: ponte OSC -> Unreal).
         self.avatar_sink: Callable[[dict[str, Any]], None] | None = None
         self.last_avatar_state: dict[str, Any] | None = None
@@ -324,6 +331,125 @@ class AilaEngine:
             self.pending_gesture = None
         await emit("aila.state", {"status": "IDLE"})
         return final_text
+
+    # ======================= tarefas longas (Fase 8) =================== #
+    @staticmethod
+    async def _noop_emit(event_type: str, payload: dict[str, Any]) -> None:
+        pass
+
+    async def _execute_prompt(self, prompt: str, emit: Emit, task) -> str:
+        """Executa UM passo: laço de ferramentas autocontido (sistema + prompt),
+        reusando o router e o registry. Não toca o contexto da conversa."""
+        msgs: list[dict[str, Any]] = [
+            {"role": "system", "content": self._system_prompt()},
+            {"role": "user", "content": prompt},
+        ]
+        tools = self.agents.registry.schemas()
+        opts = {"num_ctx": self.settings.llm.num_ctx}
+        backend = self.router.select(RouteTask(kind="chat", needs_tools=True))
+        task.provider = backend.name
+        final = ""
+        for _ in range(MAX_TOOL_ITERS):
+            if task.cancelled:
+                break
+            collected: list[str] = []
+            tool_calls: list[dict] = []
+            m = to_provider_messages(msgs, backend.capabilities().local)
+            async for chunk in backend.chat(m, stream=True, tools=tools, options=opts):
+                if chunk.content:
+                    collected.append(chunk.content)
+                    await emit("assistant.token", {"text": chunk.content})
+                if chunk.tool_calls:
+                    tool_calls = chunk.tool_calls
+            text = "".join(collected)
+            if not tool_calls:
+                parsed = extract_text_tool_calls(text, self.agents.registry)
+                if parsed:
+                    tool_calls = parsed
+                    text = strip_tool_call_text(text)
+            if not tool_calls:
+                final = text.strip()
+                break
+            msgs.append({"role": "assistant", "content": text, "tool_calls": tool_calls})
+            for call in tool_calls:
+                fn = call.get("function", {})
+                name = fn.get("name", "")
+                args = fn.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {}
+                task.tools_used.append(name)
+                await emit("agent.invoked", {"tool": name, "args": args})
+                result = await self.agents.registry.execute(name, args)
+                await emit("agent.result",
+                           {"tool": name, "ok": result.ok, "content": result.content[:2000]})
+                msgs.append({"role": "tool", "name": name,
+                             "content": _clip_for_context(result.content)})
+        return final
+
+    async def start_task(self, goal: str, emit: Emit | None = None):
+        """Cria uma tarefa e a executa em BACKGROUND. Exige autonomia L4+
+        (execução autônoma multi-etapa). Devolve a Task imediatamente."""
+        if self.agents.deps.permissions.policy.autonomy < 4:
+            raise PermissionDenied(
+                "Tarefas autônomas exigem autonomia nível 4 (autonomous). "
+                "Ajuste em security.autonomy_level ou POST /api/autonomy."
+            )
+        task = await self.tasks.create(goal)
+        asyncio.create_task(self.run_task(task, emit or self._noop_emit))
+        return task
+
+    async def run_task(self, task, emit: Emit, max_replans: int = 2) -> None:
+        """Plano → executa cada passo → replaneja em falha → conclui. Cancelável."""
+        emit = self._to_bus(emit)
+        await self.tasks.set_state(task, TaskState.RUNNING)
+        self.tasks.log(task, f"objetivo: {task.goal}")
+        try:
+            steps = await self.task_planner.plan(task.goal)
+            task.plan = [Step(s) for s in steps]
+            await self.tasks.set_state(task, TaskState.RUNNING)   # publica com o plano
+
+            replans, i = 0, 0
+            while i < len(task.plan):
+                if task.cancelled:
+                    return
+                step = task.plan[i]
+                step.status = "running"
+                await emit("aila.state",
+                           {"status": "TOOL_RUNNING", "tool": f"passo {i + 1}/{len(task.plan)}"})
+                try:
+                    step.result = await self._execute_prompt(step.description, emit, task)
+                    step.status = "done"
+                    self.tasks.log(task, f"passo {i + 1} concluído")
+                except Exception as exc:  # noqa: BLE001 - passo falhou → replan
+                    step.status = "failed"
+                    step.result = str(exc)
+                    self.tasks.log(task, f"passo {i + 1} falhou: {exc}")
+                    if replans < max_replans:
+                        replans += 1
+                        done = [s.description for s in task.plan[:i + 1] if s.status == "done"]
+                        new = await self.task_planner.replan(task.goal, done, str(exc))
+                        task.plan = task.plan[:i + 1] + [Step(s) for s in new]
+                        self.tasks.log(task, f"replanejou (#{replans})")
+                i += 1
+
+            if task.cancelled:
+                return
+            done_steps = [s for s in task.plan if s.status == "done"]
+            if not done_steps:
+                await self.tasks.set_state(task, TaskState.FAILED, error="nenhum passo concluído")
+            else:
+                task.result = "\n".join(
+                    f"[{s.description}]\n{s.result}" for s in done_steps
+                )[:2000]
+                await self.tasks.set_state(task, TaskState.COMPLETED)
+        except Exception as exc:  # noqa: BLE001
+            self.tasks.log(task, f"erro fatal: {exc}")
+            await self.tasks.set_state(task, TaskState.FAILED, error=str(exc))
+        finally:
+            await emit("aila.state", {"status": "IDLE"})
 
 
 #: teto de caracteres de um resultado de ferramenta REinjetado no contexto do
