@@ -30,7 +30,10 @@ _READ_SUFFIXES = (".read", ".list", ".search", ".get", ".info", ".analyze")
 
 # nível MÍNIMO de autonomia por prefixo de ação (escrita). Leituras = 1 sempre.
 _MIN_AUTONOMY: list[tuple[str, int]] = [
-    ("code.run", 3), ("code.execute", 3),          # executar código → L3
+    ("code.write", 5),                             # auto-modificar o próprio código → L5
+    ("code.run", 3), ("code.execute", 3), ("code.test", 3),   # executar/testar código → L3
+    ("git.branch", 3), ("git.checkout", 3),        # git (backup/rollback) → L3
+    ("git.commit", 3), ("git.stash", 3),
     ("computer.", 2),                              # controlar o PC → L2
     ("file.write", 2), ("file.move", 2),
     ("file.delete", 2), ("file.overwrite", 2),

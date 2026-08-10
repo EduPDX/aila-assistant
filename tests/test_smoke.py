@@ -212,6 +212,70 @@ def test_text_tool_call_fallback():
     assert strip_tool_call_text(txt) == "Vou buscar."
 
 
+def test_code_repo_path_safety():
+    """code.read_file/write_file ficam DENTRO do repositório (sem escapar)."""
+    from aila.agents.code_agent import _repo_resolve
+    from aila.core.config import PROJECT_ROOT
+
+    ok = _repo_resolve("aila/core/engine.py")
+    assert ok is not None and str(ok).startswith(str(PROJECT_ROOT.resolve()))
+    assert _repo_resolve("../../../etc/passwd") is None       # escapa → bloqueado
+    assert _repo_resolve("../../secret.txt") is None
+
+
+def test_policy_dev_autonomy_levels():
+    """Auto-modificação exige L5; git/testar exigem L3; leituras git são L1."""
+    from aila.core.config import SecurityConfig
+    from aila.security.policy import PermissionPolicy
+
+    pol = PermissionPolicy(SecurityConfig())
+    assert pol.min_autonomy("code.write") == 5           # editar o próprio código
+    assert pol.min_autonomy("code.test") == 3
+    assert pol.min_autonomy("git.branch.create") == 3
+    assert pol.min_autonomy("git.checkout") == 3
+    assert pol.min_autonomy("git.status.get") == 1       # leitura git
+
+
+def test_dev_task_requires_l5():
+    """start_dev_task (self-improvement) é bloqueado abaixo de L5."""
+    from aila.core.config import get_settings
+    from aila.core.engine import build_engine
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+    from aila.security.permissions import PermissionDenied
+
+    class FakeLLM(LLMBackend):
+        name = "ollama"
+        async def chat(self, messages, **k):
+            yield ChatChunk(content="x", done=True)
+        async def complete(self, messages, **k):
+            return "[]"
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+
+    s = get_settings()
+    s.security.autonomy_level = 4      # L4 permite tarefas, mas NÃO self-improvement
+    s.memory.enabled = False
+    eng = build_engine(s, FakeLLM())
+
+    async def go():
+        with pytest.raises(PermissionDenied):
+            await eng.start_dev_task("refatore o engine")
+    asyncio.run(go())
+
+
+def test_git_agent_registered():
+    """O GitAgent está registrado e expõe leitura (SAFE) + backup/rollback."""
+    from aila.agents.git_agent import GitAgent
+
+    names = {t.name for t in GitAgent.__new__(GitAgent).tools()}
+    assert {"git.status", "git.diff", "git.branch_create", "git.checkout",
+            "git.commit", "git.current_branch"} <= names
+
+
 def test_task_manager_and_planner():
     """TaskManager (estado/progresso/cancelamento) + Planner (parse de plano)."""
     from aila.core.planner import Planner, parse_steps

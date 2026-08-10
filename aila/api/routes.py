@@ -60,6 +60,22 @@ async def create_task(request: Request, body: TaskBody) -> dict:
     return task.to_dict()
 
 
+@router.post("/dev-task")
+async def create_dev_task(request: Request, body: TaskBody) -> dict:
+    """SELF-IMPROVEMENT: a Aila trabalha no próprio código (branch de backup,
+    valida com testes). Exige autonomia L5."""
+    from aila.security.permissions import PermissionDenied
+
+    engine = request.app.state.engine
+    if not body.goal.strip():
+        raise HTTPException(status_code=400, detail="Objetivo vazio.")
+    try:
+        task = await engine.start_dev_task(body.goal)
+    except PermissionDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return task.to_dict()
+
+
 @router.get("/tasks")
 async def list_tasks(request: Request) -> dict:
     return {"tasks": [t.to_dict() for t in request.app.state.engine.tasks.list()]}

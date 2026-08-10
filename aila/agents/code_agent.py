@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from pathlib import Path
 
 from aila.agents.base import AgentDeps, BaseAgent
+from aila.core.config import PROJECT_ROOT
 from aila.core.logging import get_logger
 from aila.tools.schema import Tool, ToolParam, ToolResult
 
@@ -25,6 +27,26 @@ def _find_python() -> str | None:
         if exe:
             return exe
     return None
+
+
+def _venv_python() -> str | None:
+    """Python do PROJETO (venv) — necessário p/ rodar os testes (tem as deps).
+    Cai para o Python do sistema se não houver venv."""
+    for rel in (Path(".venv") / "Scripts" / "python.exe", Path(".venv") / "bin" / "python"):
+        cand = PROJECT_ROOT / rel
+        if cand.exists():
+            return str(cand)
+    return _find_python()
+
+
+def _repo_resolve(rel: str) -> Path | None:
+    """Resolve um caminho DENTRO do repositório (bloqueia escapar do PROJECT_ROOT)."""
+    root = PROJECT_ROOT.resolve()
+    try:
+        p = (root / rel).resolve()
+    except (OSError, ValueError):
+        return None
+    return p if str(p).startswith(str(root)) else None
 
 
 class CodeAgent(BaseAgent):
@@ -76,6 +98,33 @@ class CodeAgent(BaseAgent):
                 ),
                 params=[ToolParam("code", "string", "Código Python a executar")],
                 handler=self._run,
+                agent=self.name,
+            ),
+            Tool(
+                name="code.test",
+                description="Roda a suíte de testes do projeto (pytest) e devolve o resultado.",
+                params=[ToolParam("path", "string", "arquivo/pasta de teste", required=False)],
+                handler=self._test,
+                agent=self.name,
+            ),
+            Tool(
+                name="code.read_file",
+                description="Lê um arquivo do repositório do projeto (caminho relativo à raiz).",
+                params=[ToolParam("path", "string", "ex.: aila/core/engine.py")],
+                handler=self._read_file,
+                agent=self.name,
+            ),
+            Tool(
+                name="code.write_file",
+                description=(
+                    "ESCREVE um arquivo no repositório (auto-modificação; faz backup .bak). "
+                    "Exige autonomia L5 (self-improve)."
+                ),
+                params=[
+                    ToolParam("path", "string", "caminho relativo à raiz do repo"),
+                    ToolParam("content", "string", "novo conteúdo completo do arquivo"),
+                ],
+                handler=self._write_file,
                 agent=self.name,
             ),
         ]
@@ -142,3 +191,58 @@ class CodeAgent(BaseAgent):
             path.unlink(missing_ok=True)
         out = ((proc.stdout or "") + (proc.stderr or "")).strip()
         return ToolResult.success(out or "(sem saída)", returncode=proc.returncode)
+
+    async def _test(self, args: dict) -> ToolResult:
+        await self.authorize("code.test", args)   # roda a suíte (L3; sem confirmar a cada run)
+        exe = _venv_python()   # precisa do Python do projeto (com as deps)
+        if not exe:
+            return ToolResult.error("Python não encontrado (venv/PATH).")
+        target = args.get("path") or "tests"
+        try:
+            proc = subprocess.run(
+                [exe, "-m", "pytest", "-q", "--no-header", target],
+                cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            return ToolResult.error("Testes excederam o tempo limite (180s).")
+        out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        passed = proc.returncode == 0
+        tail = out[-1500:]
+        return ToolResult.success(
+            f"{'✓ PASSOU' if passed else '✗ FALHOU'}\n{tail}",
+            passed=passed, returncode=proc.returncode,
+        )
+
+    async def _read_file(self, args: dict) -> ToolResult:
+        await self.authorize("code.read", args)      # leitura → SAFE
+        p = _repo_resolve(args["path"])
+        if p is None or not p.is_file():
+            return ToolResult.error(f"Arquivo não encontrado no repo: {args['path']}")
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            return ToolResult.error(f"Falha ao ler: {exc}")
+        return ToolResult.success(text[:20000], path=args["path"])
+
+    async def _write_file(self, args: dict) -> ToolResult:
+        # auto-modificação do próprio código → gate de autonomia L5 (self-improve)
+        await self.authorize("code.write", args)
+        p = _repo_resolve(args["path"])
+        if p is None:
+            return ToolResult.error("Caminho fora do repositório.")
+        content = args.get("content", "")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if p.exists():                                # backup .bak antes de sobrescrever
+            try:
+                shutil.copyfile(p, p.with_suffix(p.suffix + ".bak"))
+            except OSError:
+                pass
+        try:
+            p.write_text(content, encoding="utf-8")
+        except OSError as exc:
+            return ToolResult.error(f"Falha ao escrever: {exc}")
+        self.deps.permissions.audit.record(
+            "code.write", self.name, {"path": args["path"], "bytes": len(content)},
+            "written", allowed=True,
+        )
+        return ToolResult.success(f"Escrito {args['path']} ({len(content)} bytes; backup .bak).")

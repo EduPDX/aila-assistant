@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from aila.security.network_policy import NetworkPolicy
 
 from aila.agents.base import AgentDeps
+from aila.agents.git_agent import _git as _git_repo
 from aila.agents.manager import AgentManager
 from aila.avatar.behavior_planner import BehaviorPlanner
 from aila.avatar.emotion_engine import EmotionEngine
@@ -398,6 +399,35 @@ class AilaEngine:
                 "Ajuste em security.autonomy_level ou POST /api/autonomy."
             )
         task = await self.tasks.create(goal)
+        asyncio.create_task(self.run_task(task, emit or self._noop_emit))
+        return task
+
+    async def start_dev_task(self, goal: str, emit: Emit | None = None):
+        """SELF-IMPROVEMENT: a Aila trabalha no PRÓPRIO código. Exige autonomia
+        L5. Cria uma BRANCH de trabalho (a principal nunca é tocada) — o usuário
+        revisa e mescla; nunca mescla sozinha. Roda em background."""
+        if self.agents.deps.permissions.policy.autonomy < 5:
+            raise PermissionDenied(
+                "Editar o próprio código (self-improvement) exige autonomia "
+                "nível 5. Ajuste em security.autonomy_level ou POST /api/autonomy."
+            )
+        task = await self.tasks.create(goal)
+        branch = f"aila/dev-{task.id}"
+        try:
+            proc = _git_repo("checkout", "-b", branch)
+            if proc.returncode == 0:
+                self.tasks.log(task, f"branch de trabalho criada: {branch}")
+            else:
+                self.tasks.log(task, f"aviso: sem branch ({(proc.stderr or '').strip()})")
+        except Exception as exc:  # noqa: BLE001
+            self.tasks.log(task, f"aviso: git indisponível ({exc!r})")
+        # instrui o fluxo seguro no próprio objetivo
+        task.goal = (
+            f"{goal}\n\n[Modo desenvolvimento no repositório, branch '{branch}'. "
+            "Fluxo: leia os arquivos com code.read_file, faça a MENOR mudança com "
+            "code.write_file, valide com code.test; se falhar, corrija. Não "
+            "invente — baseie-se no código real.]"
+        )
         asyncio.create_task(self.run_task(task, emit or self._noop_emit))
         return task
 
