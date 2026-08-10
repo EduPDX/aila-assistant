@@ -89,6 +89,9 @@ class AilaEngine:
         self.last_avatar_state: dict[str, Any] | None = None
         # gesto pedido pela IA (AvatarAgent) durante o turno atual
         self.pending_gesture: str | None = None
+        # confirmações de permissão pendentes (id -> Future). Vive no engine (não
+        # na conexão WS) p/ sobreviver a reconexões: qualquer conexão resolve.
+        self.perm_pending: dict[str, Any] = {}
         self.context = ConversationContext(
             system_prompt=self._system_prompt(),
             max_turns=settings.context.max_turns,

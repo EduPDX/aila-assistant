@@ -227,6 +227,25 @@ button, input, textarea { font-family: inherit; color: inherit; }
 .modal-actions { display: flex; gap: var(--s-2); justify-content: flex-end; margin-top: var(--s-3); }
 .modal-actions .btn { width: auto; padding: 8px 18px; }
 
+/* ---------- Permission Center ---------- */
+.modal.perm { width: 460px; border-color: var(--glass-border); }
+.modal.perm[data-risk="danger"] { border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 30%, transparent), var(--shadow-2); }
+.perm-head { display: flex; align-items: flex-start; gap: var(--s-3); }
+.perm-icon { font-size: 22px; line-height: 1.2; }
+.perm-headtext { flex: 1; min-width: 0; }
+.perm-headtext h3 { margin: 0; font-size: var(--fs-lg); }
+.perm-human { color: var(--text); font-size: var(--fs-md); margin-top: 4px; line-height: 1.4; }
+.perm-risk { flex-shrink: 0; font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  padding: 4px 9px; border-radius: var(--r-pill); }
+.perm-risk[data-risk="review"] { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+.perm-risk[data-risk="danger"] { color: var(--danger); background: color-mix(in srgb, var(--danger) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent); }
+.perm-code { margin-top: var(--s-3); font-size: var(--fs-sm); color: var(--muted); }
+.perm-code code { color: var(--accent); font-family: var(--font-mono); }
+#perm-params:empty { display: none; }
+
 .collapsed { margin-left: -280px; }
 .sidebar { transition: margin-left var(--dur-2) var(--ease); }
 

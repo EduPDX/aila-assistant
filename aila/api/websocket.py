@@ -12,7 +12,7 @@ Protocolo (JSON por mensagem):
     {"type": "agent.invoked",    "tool": "...", "args": {...}}
     {"type": "agent.result",     "tool": "...", "ok": true, "content": "..."}
     {"type": "avatar.state",     ...AvatarState...}
-    {"type": "permission.request","id": "...", "action": "...", "params": {...}}
+    {"type": "permission.request","id": "...", "action": "...", "params": {...}, "risk": "review"|"danger"}
     {"type": "error",            "message": "..."}
 """
 
@@ -35,7 +35,11 @@ class WSSession:
     def __init__(self, ws: WebSocket, engine: Any) -> None:
         self.ws = ws
         self.engine = engine
-        self._pending: dict[str, asyncio.Future[bool]] = {}
+
+    @property
+    def _pending(self) -> dict[str, asyncio.Future[bool]]:
+        # registro COMPARTILHADO no engine → sobrevive a reconexões do WebSocket
+        return self.engine.perm_pending
 
     async def emit(self, event_type: str, payload: dict[str, Any]) -> None:
         await self.ws.send_json({"type": event_type, **payload})
@@ -45,8 +49,14 @@ class WSSession:
         req_id = uuid.uuid4().hex
         fut: asyncio.Future[bool] = asyncio.get_event_loop().create_future()
         self._pending[req_id] = fut
+        # nível de risco (a policy classifica; só REVIEW/DANGER chegam aqui) → UI mostra
+        try:
+            risk = self.engine.permissions.policy.classify(action)
+        except Exception:  # noqa: BLE001 - risco é informativo; nunca deve travar a confirmação
+            risk = "review"
         await self.emit(
-            "permission.request", {"id": req_id, "action": action, "params": params}
+            "permission.request",
+            {"id": req_id, "action": action, "params": params, "risk": risk},
         )
         try:
             return await asyncio.wait_for(fut, timeout=120)
@@ -70,6 +80,17 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     engine.permissions.set_confirm_handler(session.confirm)
     await session.emit("system.status", {"message": "conectado"})
 
+    async def run_message(text: str, mode: str) -> None:
+        try:
+            await engine.process(text, session.emit, mode=mode)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("erro ao processar mensagem")
+            try:
+                await session.emit("error", {"message": str(exc)})
+            except Exception:  # noqa: BLE001 - conexão pode ter caído
+                pass
+
+    tasks: set[asyncio.Task] = set()
     try:
         while True:
             data = await ws.receive_json()
@@ -80,11 +101,11 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 mode = data.get("mode", "chat")
                 if not text:
                     continue
-                try:
-                    await engine.process(text, session.emit, mode=mode)
-                except Exception as exc:  # noqa: BLE001
-                    log.exception("erro ao processar mensagem")
-                    await session.emit("error", {"message": str(exc)})
+                # roda em BACKGROUND: o loop precisa continuar recebendo (senão o
+                # permission.response que o process() espera nunca chega → deadlock).
+                task = asyncio.create_task(run_message(text, mode))
+                tasks.add(task)
+                task.add_done_callback(tasks.discard)
 
             elif mtype == "permission.response":
                 session.resolve_permission(data.get("id", ""), bool(data.get("approved")))
@@ -109,3 +130,6 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             await session.emit("error", {"message": str(exc)})
         except Exception:  # noqa: BLE001
             pass
+    finally:
+        for task in tasks:               # cancela processamentos em voo desta conexão
+            task.cancel()

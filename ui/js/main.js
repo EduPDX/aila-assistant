@@ -10,6 +10,7 @@ import * as avatar from './avatar.js';
 import * as voice from './voice.js';
 import { initSettings, openSettings, closeSettings, settingsTab, loadStatus, setLlm } from './settings.js';
 import { ingest } from './core/events.js';
+import { humanizeTool } from './core/humanize.js';
 import { initTopbar, refreshStatus } from './shell/topbar.js';
 import { initInspector } from './shell/inspector.js';
 
@@ -24,8 +25,17 @@ function showTab(t) {
 /* ---------- permissão ---------- */
 let permId = null;
 function showPerm(m) {
-  permId = m.id; byId('perm-action').textContent = m.action;
-  byId('perm-params').textContent = JSON.stringify(m.params, null, 2);
+  permId = m.id;
+  const risk = (m.risk || 'review').toLowerCase();
+  byId('perm-human').textContent = humanizeTool(m.action, m.params);
+  byId('perm-action').textContent = m.action;
+  const hasParams = m.params && Object.keys(m.params).length;
+  byId('perm-params').textContent = hasParams ? JSON.stringify(m.params, null, 2) : '';
+  const badge = byId('perm-risk');
+  badge.textContent = risk === 'danger' ? 'RISCO ALTO' : 'REVISÃO';
+  badge.dataset.risk = risk;
+  byId('perm-modal').dataset.risk = risk;
+  byId('perm-allow').className = 'btn ' + (risk === 'danger' ? 'danger' : 'accent');
   byId('perm-overlay').classList.add('show');
 }
 function respondPerm(ok) { wsSend({ type: 'permission.response', id: permId, approved: ok }); byId('perm-overlay').classList.remove('show'); }

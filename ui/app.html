@@ -112,9 +112,16 @@
 
   <!-- ========== MODAL DE PERMISSÃO ========== -->
   <div class="overlay" id="perm-overlay">
-    <div class="modal">
-      <h3 style="color:var(--danger)">⚠ Confirmação necessária</h3>
-      <p>A Aila quer executar <code id="perm-action"></code>.</p>
+    <div class="modal perm" id="perm-modal">
+      <div class="perm-head">
+        <span class="perm-icon">🔒</span>
+        <div class="perm-headtext">
+          <h3>A Aila pediu permissão</h3>
+          <div class="perm-human" id="perm-human"></div>
+        </div>
+        <span class="perm-risk" id="perm-risk"></span>
+      </div>
+      <div class="perm-code">ferramenta: <code id="perm-action"></code></div>
       <pre id="perm-params"></pre>
       <div class="modal-actions">
         <button class="btn" id="perm-deny">Negar</button>
