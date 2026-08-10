@@ -266,6 +266,21 @@ class ComputerAgent(BaseAgent):
         return ToolResult.success(f"Solicitado abrir: {args['app']}")
 
     async def _run_command(self, args: dict) -> ToolResult:
+        command = (args.get("command") or "").strip()
+        # Guard de terminal (defesa em profundidade): comandos catastróficos são
+        # BLOQUEADOS antes de qualquer confirmação/autorização.
+        from aila.security.command_guard import CommandGuard
+
+        blocked, why = CommandGuard(self.deps.settings.security).is_blocked(command)
+        if blocked:
+            self.deps.permissions.audit.record(
+                "computer.run_command", self.name, {"command": command[:200]},
+                f"blocked: {why}", allowed=False,
+            )
+            return ToolResult.error(
+                f"Comando BLOQUEADO por segurança ({why}). Se for realmente "
+                "necessário, o usuário deve executá-lo manualmente."
+            )
         await self.authorize("computer.run_command", args)
         try:
             proc = subprocess.run(

@@ -94,6 +94,14 @@ security:
     - "computer.mouse"
     - "code.execute"
   audit_log: "./logs/audit.jsonl"
+  # ----- Hardening (Fase 10) -----
+  tool_timeout: 180.0         # backstop: nenhuma ferramenta trava o agente p/ sempre (0=off)
+  max_tool_calls: 20          # orçamento de ferramentas por tarefa autônoma (anti-loop)
+  max_repeated_calls: 3       # mesma ferramenta+args repetida N vezes = loop → corta
+  # Terminal: além dos padrões embutidos (formatar disco, desligar Defender,
+  # baixar-e-executar, apagar backups, etc. → BLOQUEADOS), dá p/ acrescentar:
+  command_denylist: []        # regex extra a bloquear no computer.run_command
+  command_allowlist: []       # prefixos extra a tratar como leitura segura
 
 agents:
   enabled:

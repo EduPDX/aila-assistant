@@ -103,6 +103,12 @@ class SecurityConfig(BaseModel):
     blocked_actions: list[str] = Field(default_factory=list)      # nunca executadas
     action_levels: dict[str, str] = Field(default_factory=dict)   # override: ação→nível
     min_autonomy: dict[str, int] = Field(default_factory=dict)    # override: prefixo→nível
+    # ----- Fase 10: hardening -----
+    tool_timeout: float = 180.0         # backstop global por tool (0 = desliga)
+    max_tool_calls: int = 20            # orçamento de tools por tarefa autônoma
+    max_repeated_calls: int = 3         # mesma tool+args repetida N vezes = loop
+    command_denylist: list[str] = Field(default_factory=list)  # regex extra p/ terminal
+    command_allowlist: list[str] = Field(default_factory=list)  # prefixos seguros extra
 
 
 class AgentsConfig(BaseModel):

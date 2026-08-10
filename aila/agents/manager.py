@@ -35,7 +35,7 @@ class AgentManager:
     def __init__(self, deps: AgentDeps) -> None:
         self.deps = deps
         self.agents: dict[str, BaseAgent] = {}
-        self.registry = ToolRegistry()
+        self.registry = ToolRegistry(timeout=deps.settings.security.tool_timeout)
         self._build()
 
     def _build(self) -> None:
