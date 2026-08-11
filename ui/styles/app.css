@@ -733,8 +733,10 @@ body::before {
 /* ---- ABAS do inspector: sublinhado que brilha ---- */
 .insp-tab.active { text-shadow: var(--glow-text); }
 
-/* ---- barras de medidor: leve brilho na ponta ---- */
-.sp-bar i, .task-bar i { box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent); }
+/* ---- barras de dados (medidores): QUADRADAS (coerência com o HUD angular)
+        + leve brilho na ponta ---- */
+.sp-bar, .sp-bar i, .hud-bar-tr, .hud-bar-tr i, .task-bar, .task-bar i { border-radius: 0; }
+.sp-bar i, .hud-bar-tr i, .task-bar i { box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent); }
 
 /* respeita quem prefere menos movimento (a varredura para) */
 @media (prefers-reduced-motion: reduce) {
