@@ -16,6 +16,7 @@ import { initTopbar, refreshStatus } from './shell/topbar.js';
 import { initInspector } from './shell/inspector.js';
 import { initDrawer } from './shell/drawer.js';
 import { initHud } from './shell/hud.js';
+import { initBoot } from './shell/boot.js';
 
 /* ---------- abas ---------- */
 function showTab(t) {
@@ -115,6 +116,7 @@ function setDrawer(open) {
 }
 
 /* ---------- start ---------- */
+initBoot();         // splash HUD de inicialização (sai ao conectar)
 initSettings();
 initDirector();     // camada adaptativa: Agent State → data-mode no shell
 initTopbar();

@@ -615,6 +615,46 @@ body[data-drawer="open"] .statuspanel.inspector {
   .emochip { display: none; }         /* já aparece no HUD do avatar */
 }
 
+/* ============================================================
+   BOOT — splash HUD de inicialização ("ligando a nave").
+   Aparece antes do JS (CSS render-blocking) e sai via boot.js;
+   @keyframes bootFail é a rede de segurança se o JS falhar.
+   ============================================================ */
+.boot {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 38%, var(--bg-2), var(--bg));
+  font-family: var(--font-mono); color: var(--accent);
+  transition: opacity .5s var(--ease);
+  animation: bootFail .1s linear 4.6s forwards;   /* fallback: some mesmo sem JS */
+}
+.boot.done { opacity: 0; pointer-events: none; }
+@keyframes bootFail { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+.boot-inner { width: min(360px, 82vw); padding: 30px 28px; text-align: center; }
+.boot-inner::after { --l: 20px; opacity: .8; }   /* colchetes um pouco maiores */
+.boot-title { font-size: 34px; font-weight: 600; letter-spacing: 12px; text-indent: 12px;
+  text-shadow: var(--glow-text); }
+.boot-sub { font-size: 9px; letter-spacing: 3px; color: var(--muted); margin-top: 8px; }
+.boot-lines { margin: 24px 0 16px; display: flex; flex-direction: column; gap: 5px;
+  text-align: left; font-size: 11px; min-height: 96px; }
+.boot-line { display: flex; justify-content: space-between; align-items: center;
+  color: var(--muted); opacity: 0; animation: bootLineIn .22s var(--ease-out) forwards; }
+.boot-line span { letter-spacing: 2px; }
+.boot-line b { color: var(--muted); font-weight: 700; }
+.boot-line.ok { color: var(--text); }
+.boot-line.ok b { color: var(--ok); text-shadow: var(--glow-text); }
+@keyframes bootLineIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.boot-bar { height: 3px; background: var(--hud-line-soft); overflow: hidden; }
+.boot-bar i { display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: bootBar 1.7s var(--ease) forwards; }
+@keyframes bootBar { to { width: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .boot-bar i { animation: none; width: 100%; }
+  .boot { animation: none; }
+}
+
 /* scrim da gaveta (mobile) — camada real acima do iframe, clicável p/ fechar */
 .scrim { position: fixed; inset: 0; z-index: 54; background: rgba(0, 0, 0, .5);
   backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
@@ -641,9 +681,9 @@ body::before {
 }
 
 /* ---- utilitário de COLCHETES DE CANTO (a assinatura do HUD) ---- */
-.content.stage, .statuspanel.inspector, .settings, .modal, .cbox, .sidebar { position: relative; }
+.content.stage, .statuspanel.inspector, .settings, .modal, .cbox, .sidebar, .boot-inner { position: relative; }
 .content.stage::after, .statuspanel.inspector::after,
-.settings::after, .modal::after, .cbox::after, .sidebar::after {
+.settings::after, .modal::after, .cbox::after, .sidebar::after, .boot-inner::after {
   content: ""; position: absolute; pointer-events: none; z-index: 5;
   inset: 6px; border-radius: inherit;
   --c: var(--hud-corner); --l: 15px; --w: 1.5px;
