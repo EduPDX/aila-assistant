@@ -785,14 +785,18 @@ body::before {
 .hg-c b { font-size: 13px; color: var(--text); text-shadow: var(--glow-text); }
 .hg-c span { font-size: 8px; letter-spacing: 1px; color: var(--muted); }
 
-/* barras finas (VRAM/RAM) */
+/* barras SEGMENTADAS (VRAM/RAM) — blocos tipo telemetria, retas por natureza.
+   Trilha = segmentos apagados; preenchimento = mesmos blocos acesos. Em fase
+   (período 6px) p/ alinharem. */
 .hud-bars { display: flex; flex-direction: column; gap: 9px; width: 116px; }
 .hud-bar-top { display: flex; justify-content: space-between; font-size: 9px; letter-spacing: 1px; color: var(--muted); }
 .hud-bar-top span:last-child { color: var(--text); }
-.hud-bar-tr { height: 4px; margin-top: 4px; border-radius: 3px; background: var(--hud-line-soft); overflow: hidden; }
-.hud-bar-tr i { display: block; height: 100%; width: 0; border-radius: 3px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
+.hud-bar-tr { height: 7px; margin-top: 4px; overflow: hidden;
+  background: repeating-linear-gradient(90deg,
+    color-mix(in srgb, var(--accent) 16%, transparent) 0 4px, transparent 4px 6px); }
+.hud-bar-tr i { display: block; height: 100%; width: 0;
+  background: repeating-linear-gradient(90deg, var(--accent) 0 4px, transparent 4px 6px);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 60%, transparent));
   transition: width var(--dur-2) var(--ease); }
 
 /* leituras de texto (modelo/rede/autonomia/tokens/uptime/emoção) */
