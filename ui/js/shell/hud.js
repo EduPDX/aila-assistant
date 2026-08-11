@@ -44,10 +44,6 @@ export function initHud() {
   el.className = 'hud-overlay';
   el.id = 'hud';
   el.innerHTML = `
-    <svg class="hud-ring" id="hud-ring" viewBox="0 0 100 100" aria-hidden="true">
-      <circle class="hr-track" cx="50" cy="50" r="46"></circle>
-      <circle class="hr-arc" id="hr-arc" cx="50" cy="50" r="46"></circle>
-    </svg>
     <div class="hud-head">
       <span class="hud-brand">AILA</span><span class="hud-sep">/</span>
       <span class="hud-status" id="hud-status" data-tone="online">ONLINE</span>
@@ -105,41 +101,8 @@ function renderStatus(s) {
   el.dataset.tone = tone;
 }
 
-/* Anel de atividade ao redor da avatar: gira quando ela processa; preenche
-   conforme o progresso quando há tarefa; cor pelo estado (via --mode-accent). */
-const RING_SPIN = new Set(['THINKING', 'SEARCHING', 'READING_FILE', 'CODING', 'ANALYZING_IMAGE', 'TOOL_RUNNING']);
-const RING_C = 2 * Math.PI * 46;   // circunferência (r=46 no viewBox)
-
-function activeTask(tasks) {
-  if (!tasks) return null;
-  return Object.values(tasks).find((t) => t && t.state === 'running') || null;
-}
-
-function renderRing(s) {
-  const ring = document.getElementById('hud-ring');
-  const arc = document.getElementById('hr-arc');
-  if (!ring || !arc) return;
-  let active = false, mode = '';
-  if (s.pendingPermission) { active = true; mode = 'perm'; }
-  else if (s.status === 'ERROR') { active = true; mode = 'error'; }
-  else if (RING_SPIN.has(s.status)) { active = true; mode = 'work'; }
-  ring.classList.toggle('on', active);
-  ring.dataset.mode = mode;
-
-  const t = mode === 'work' ? activeTask(s.tasks) : null;
-  if (t && t.progress != null) {
-    const p = Math.max(0, Math.min(1, t.progress > 1 ? t.progress / 100 : t.progress));
-    ring.classList.add('determinate');
-    arc.style.strokeDasharray = `${(RING_C * p).toFixed(1)} ${RING_C.toFixed(1)}`;
-  } else {
-    ring.classList.remove('determinate');
-    arc.style.strokeDasharray = '';   // volta ao indeterminado (CSS)
-  }
-}
-
 function render(s) {
   renderStatus(s);
-  renderRing(s);
   setText('hud-model', s.model || '—');
   setText('hud-net', s.networkMode === 'offline' ? 'LOCAL' : 'HÍBRIDO');
   setText('hud-auton', 'L' + (s.autonomy ?? '—'));

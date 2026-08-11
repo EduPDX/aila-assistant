@@ -213,22 +213,6 @@ body[data-mode="error"]        { --mode-accent: var(--danger); }
    ESTADOS ADAPTATIVOS (F4) — presença · Focus Mode · permissão
    O director aplica data-mode/status; aqui a UI reage com sutileza.
    ============================================================ */
-/* linha de presença: "Pensando…" / "Rodando um comando…" / "Aguardando autorização" */
-.presence { display: inline-flex; align-items: center; gap: 8px; align-self: center;
-  margin: 0 auto var(--s-2); padding: 5px 14px; border-radius: var(--r-pill);
-  font-size: var(--fs-sm); color: var(--text); white-space: nowrap; pointer-events: none;
-  background: color-mix(in srgb, var(--bg) 72%, transparent); border: 1px solid var(--glass-border);
-  backdrop-filter: blur(6px);
-  opacity: 0; transform: translateY(8px);
-  transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease), color var(--dur-1); }
-.presence.show { opacity: 1; transform: none; }
-.presence-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mode-accent);
-  box-shadow: 0 0 10px var(--mode-accent); animation: pulse 1.3s ease-in-out infinite; }
-.presence[data-tone="permission"] { color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 45%, var(--glass-border)); }
-.presence[data-tone="error"] { color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--glass-border)); }
-
 /* microinterações: o que muda por modo transita suave */
 .sidebar, #pane-chat { transition: opacity var(--dur-3) var(--ease); }
 
@@ -761,11 +745,6 @@ body::before {
 .icon-btn:hover { box-shadow: var(--glow-sm); }
 .tchip.clickable:hover { box-shadow: var(--glow-sm); }
 
-/* ---- PRESENÇA como leitura de telemetria ---- */
-.presence { font-family: var(--font-mono); letter-spacing: .5px;
-  border-color: var(--hud-line); text-transform: uppercase; font-size: var(--fs-xs); }
-.presence-dot { box-shadow: 0 0 12px var(--mode-accent); }
-
 /* ---- COMPOSER: campo emoldurado, foco com brilho de estado ---- */
 .cbox { border-color: var(--hud-line-soft); }
 .stage .cbox:focus-within { box-shadow: var(--glow-sm); }
@@ -806,23 +785,6 @@ body::before {
 .hud-status[data-tone="busy"]    { color: var(--accent-2); }
 .hud-status[data-tone="offline"] { color: var(--danger); }
 .hud-status[data-tone="error"]   { color: var(--danger); }
-
-/* anel de atividade ao redor da avatar — "processando" (gira) / progresso de
-   tarefa (preenche) / atenção / erro. Cor via --mode-accent (director). */
-.hud-ring { position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%);
-  width: min(58vh, 62%); aspect-ratio: 1; z-index: 3; pointer-events: none; overflow: visible;
-  opacity: 0; transition: opacity var(--dur-3) var(--ease); }
-.hud-ring.on { opacity: .5; }
-.hr-track { fill: none; stroke: var(--mode-accent); stroke-width: .4; opacity: .16; }
-.hr-arc { fill: none; stroke: var(--mode-accent); stroke-width: .8; stroke-linecap: round;
-  stroke-dasharray: 66 224; transform-origin: 50% 50%;
-  filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--mode-accent) 60%, transparent)); }
-.hud-ring.on .hr-arc { animation: hud-ring-spin 2.4s linear infinite; }
-.hud-ring.determinate .hr-arc { animation: none; transition: stroke-dasharray var(--dur-2) var(--ease); }
-.hud-ring[data-mode="perm"] .hr-arc { animation-duration: 4.5s; }
-.hud-ring[data-mode="error"] .hr-arc { animation: none; stroke-dasharray: none; opacity: .5; }
-@keyframes hud-ring-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .hud-ring .hr-arc { animation: none !important; } }
 
 /* rails laterais (centralizados na vertical, longe do rosto e do chat) */
 .hud-rail { position: absolute; top: 50%; transform: translateY(-50%);
