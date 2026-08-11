@@ -60,3 +60,24 @@
   --glass-bg: color-mix(in srgb, #ffffff 70%, transparent);
   --shadow-2: 0 12px 40px rgba(20, 40, 70, .15);
 }
+
+/* ============================================================
+   HUD / FUI — camada estética sci-fi (ref.: telemetria de interface).
+   Linhas finas que brilham, colchetes de canto, grid técnico.
+   TODAS as variáveis derivam de --accent → o TEMA repinta o HUD.
+   (color-mix resolve no ponto de uso, então herda o --accent do tema.)
+   ============================================================ */
+:root {
+  --hud-line:      color-mix(in srgb, var(--accent) 52%, var(--border));
+  --hud-line-soft: color-mix(in srgb, var(--accent) 24%, var(--border));
+  --hud-grid:      color-mix(in srgb, var(--accent) 7%, transparent);
+  --hud-corner:    color-mix(in srgb, var(--accent) 88%, transparent);
+  --hud-fill:      color-mix(in srgb, var(--panel) 46%, transparent);
+  --glow-sm: 0 0 8px  color-mix(in srgb, var(--accent) 45%, transparent);
+  --glow-lg: 0 0 26px color-mix(in srgb, var(--accent) 38%, transparent);
+  --glow-text: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+[data-theme="light"] {
+  --hud-grid:  color-mix(in srgb, var(--accent) 11%, transparent);
+  --glow-text: none;
+}

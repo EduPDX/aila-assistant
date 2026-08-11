@@ -613,3 +613,123 @@ body[data-drawer="open"] .statuspanel.inspector { transform: translateX(0); }
   backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
   opacity: 0; pointer-events: none; transition: opacity var(--dur-2) var(--ease); }
 .scrim.show { opacity: 1; pointer-events: auto; }
+
+/* ============================================================
+   HUD / FUI SKIN — reveste o que já existe com estética sci-fi.
+   Aditivo e reversível (bloco único). Cor sempre via --accent → o
+   tema troca o HUD inteiro. Ref.: telemetria "LUCY/ONLINE".
+   ============================================================ */
+
+/* ---- fundo: grid técnico + vinheta atrás de toda a UI (z-index:-1 pinta
+        acima do bg do body, abaixo de todo conteúdo → não atrapalha cliques) ---- */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(var(--hud-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hud-grid) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(130% 105% at 50% 0%, #000 52%, transparent 100%);
+          mask-image: radial-gradient(130% 105% at 50% 0%, #000 52%, transparent 100%);
+  opacity: .7;
+}
+
+/* ---- utilitário de COLCHETES DE CANTO (a assinatura do HUD) ---- */
+.content.stage, .statuspanel.inspector, .settings, .modal, .cbox { position: relative; }
+.content.stage::after, .statuspanel.inspector::after,
+.settings::after, .modal::after, .cbox::after {
+  content: ""; position: absolute; pointer-events: none; z-index: 5;
+  inset: 6px; border-radius: inherit;
+  --c: var(--hud-corner); --l: 15px; --w: 1.5px;
+  background:
+    linear-gradient(var(--c), var(--c)) top left    / var(--l) var(--w),
+    linear-gradient(var(--c), var(--c)) top left    / var(--w) var(--l),
+    linear-gradient(var(--c), var(--c)) top right    / var(--l) var(--w),
+    linear-gradient(var(--c), var(--c)) top right    / var(--w) var(--l),
+    linear-gradient(var(--c), var(--c)) bottom left  / var(--l) var(--w),
+    linear-gradient(var(--c), var(--c)) bottom left  / var(--w) var(--l),
+    linear-gradient(var(--c), var(--c)) bottom right / var(--l) var(--w),
+    linear-gradient(var(--c), var(--c)) bottom right / var(--w) var(--l);
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 55%, transparent));
+  opacity: .8;
+}
+/* cantos do composer/modais menores: mais discretos */
+.cbox::after, .modal::after { --l: 12px; inset: 4px; opacity: .7; }
+
+/* ---- PALCO como "viewport" (o LUCY/ONLINE): moldura + scanlines suaves ---- */
+.content.stage::after { inset: 10px; --l: 22px; --w: 2px; opacity: .55; }
+#pane-avatar::after {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: repeating-linear-gradient(to bottom,
+    transparent 0 3px, color-mix(in srgb, var(--accent) 8%, transparent) 3px 4px);
+  opacity: .5; mix-blend-mode: screen;
+}
+/* faixa de varredura lenta descendo o palco — "sensor ativo" */
+.content.stage::before {
+  content: ""; position: absolute; left: 0; right: 0; height: 22%; z-index: 3;
+  pointer-events: none; opacity: .5;
+  background: linear-gradient(to bottom, transparent,
+    color-mix(in srgb, var(--accent) 10%, transparent) 60%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000, transparent);
+          mask-image: linear-gradient(to bottom, transparent, #000, transparent);
+  animation: hud-scan 7s linear infinite;
+}
+@keyframes hud-scan { 0% { top: -22%; } 100% { top: 100%; } }
+
+/* ---- TIPOGRAFIA TÉCNICA: rótulos em mono maiúsculo com brilho ---- */
+.brand h1 {
+  font-family: var(--font-mono); font-weight: 600; letter-spacing: 4px;
+  text-shadow: var(--glow-text); color: var(--accent);
+}
+.sec-title, .sp-title, .act-title, .sp-mrow, .sp-k, .cb-lang,
+.insp-tab, .settings-title, .mem-kind, .sessions .day, .task-state {
+  font-family: var(--font-mono);
+}
+.emochip {
+  font-family: var(--font-mono); text-shadow: var(--glow-text);
+  border-color: var(--hud-line); background: var(--hud-fill);
+}
+
+/* ---- NÚMEROS de métrica (telemetria): mono + brilho, como os 142.0 / 261.4 ---- */
+.sp-v, .task-pct, .act-time, .sp-mrow, .conn-dot + *, .tchip .tk { font-family: var(--font-mono); }
+.sp-v { text-shadow: var(--glow-text); }
+.sp-v.sm { text-shadow: none; }
+
+/* ---- PAINÉIS: bordas finas que brilham + leve preenchimento técnico ---- */
+.sidebar, .statuspanel, .statuspanel.inspector, .settings, .modal {
+  border-color: var(--hud-line-soft);
+}
+.card, .sp-card, .prov, .auto-item, .net-item, .mem-item, .risk-item,
+.task-card, .act-item, .tchip, .search, .field {
+  border-color: var(--hud-line-soft);
+}
+.settings, .modal { box-shadow: var(--shadow-2), inset 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* ---- BOTÕES estilo HUD: brilho no hover, accent em maiúsculas técnicas ---- */
+.btn.accent {
+  text-transform: uppercase; letter-spacing: 1.5px; font-size: var(--fs-sm);
+  box-shadow: var(--glow-sm); border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.btn.accent:hover { box-shadow: var(--glow-lg); }
+.icon-btn:hover { box-shadow: var(--glow-sm); }
+.tchip.clickable:hover { box-shadow: var(--glow-sm); }
+
+/* ---- PRESENÇA como leitura de telemetria ---- */
+.presence { font-family: var(--font-mono); letter-spacing: .5px;
+  border-color: var(--hud-line); text-transform: uppercase; font-size: var(--fs-xs); }
+.presence-dot { box-shadow: 0 0 12px var(--mode-accent); }
+
+/* ---- COMPOSER: campo emoldurado, foco com brilho de estado ---- */
+.cbox { border-color: var(--hud-line-soft); }
+.stage .cbox:focus-within { box-shadow: var(--glow-sm); }
+
+/* ---- ABAS do inspector: sublinhado que brilha ---- */
+.insp-tab.active { text-shadow: var(--glow-text); }
+
+/* ---- barras de medidor: leve brilho na ponta ---- */
+.sp-bar i, .task-bar i { box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent); }
+
+/* respeita quem prefere menos movimento (a varredura para) */
+@media (prefers-reduced-motion: reduce) {
+  .content.stage::before { animation: none; opacity: .3; top: 40%; }
+}
