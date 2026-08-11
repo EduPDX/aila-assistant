@@ -308,6 +308,34 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .auto-desc, .net-desc { font-size: var(--fs-xs); margin-top: 2px; line-height: 1.45; }
 .auto-check { color: var(--accent); flex-shrink: 0; font-size: 12px; }
 
+/* ---------- Memória (Settings Center) ---------- */
+.mem-list { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-3); }
+.mem-item { display: flex; align-items: flex-start; gap: var(--s-3); padding: 10px 12px; border-radius: var(--r-md);
+  border: 1px solid var(--border); border-left: 2px solid var(--accent-2);
+  background: color-mix(in srgb, var(--panel) 55%, transparent); }
+.mem-item[data-kind="fact"] { border-left-color: var(--accent); }
+.mem-item[data-kind="preference"] { border-left-color: var(--ok); }
+.mem-item[data-kind="project"] { border-left-color: var(--warn); }
+.mem-kind { flex-shrink: 0; font-size: 9px; text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
+  padding: 3px 7px; border-radius: var(--r-pill); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+.mem-text { font-size: var(--fs-sm); line-height: 1.45; word-break: break-word; color: var(--text); }
+
+/* ---------- Permissões (níveis de risco) ---------- */
+.risk-list { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-3); }
+.risk-item { display: flex; align-items: center; gap: var(--s-3); padding: 12px; border-radius: var(--r-md);
+  border: 1px solid var(--border); border-left: 3px solid var(--muted);
+  background: color-mix(in srgb, var(--panel) 55%, transparent); }
+.risk-item[data-risk="safe"]    { border-left-color: var(--ok); }
+.risk-item[data-risk="review"]  { border-left-color: var(--warn); }
+.risk-item[data-risk="danger"]  { border-left-color: var(--danger); }
+.risk-item[data-risk="blocked"] { border-left-color: var(--muted); opacity: .85; }
+.risk-badge { flex-shrink: 0; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .5px; width: 74px; }
+.risk-item[data-risk="safe"] .risk-badge    { color: var(--ok); }
+.risk-item[data-risk="review"] .risk-badge  { color: var(--warn); }
+.risk-item[data-risk="danger"] .risk-badge  { color: var(--danger); }
+.risk-item[data-risk="blocked"] .risk-badge { color: var(--muted); }
+.risk-desc { flex: 1; font-size: var(--fs-xs); line-height: 1.45; }
+
 .modal { width: 440px; padding: var(--s-5); border-radius: var(--r-lg); background: var(--panel); border: 1px solid var(--glass-border); box-shadow: var(--shadow-2); }
 .modal h3 { margin-bottom: var(--s-2); }
 .modal pre { background: var(--panel-2); padding: 10px; border-radius: var(--r-sm); font-size: var(--fs-sm); color: var(--muted); overflow-x: auto; margin: var(--s-2) 0; }

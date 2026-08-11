@@ -76,7 +76,9 @@
         <button class="snav" data-p="modelos">🧠 Modelos e IA</button>
         <button class="snav" data-p="voz">🔊 Voz</button>
         <button class="snav" data-p="avatar">🧍 Avatar</button>
+        <button class="snav" data-p="memoria">📓 Memória</button>
         <button class="snav" data-p="autonomia">🎚️ Autonomia</button>
+        <button class="snav" data-p="permissoes">🔒 Permissões</button>
         <button class="snav" data-p="rede">🌐 Rede &amp; Privacidade</button>
         <button class="snav" data-p="sistema">📊 Sistema</button>
         <div class="spacer"></div>
@@ -119,10 +121,22 @@
             Escala, câmera, gestos, olhar e IK são controlados pelo motor de animação — ajustes pela interface em breve.
           </p>
         </section>
+        <section class="spane" id="sp-memoria">
+          <h3>Memória</h3>
+          <p class="muted">O que a Aila lembra — fatos, preferências e trechos de conversas guardados na memória de longo prazo (<b id="memory-count">0</b> itens).</p>
+          <div id="memory-list" class="mem-list"></div>
+          <p class="muted" style="margin-top:12px">Buscar, editar e apagar memórias — pela conversa hoje; controle direto na interface em breve.</p>
+        </section>
         <section class="spane" id="sp-autonomia">
           <h3>Autonomia</h3>
           <p class="muted">O quanto a Aila pode agir sozinha. Cada nível destrava mais capacidades — você escolhe.</p>
           <div id="autonomy-list" class="auto-list"></div>
+        </section>
+        <section class="spane" id="sp-permissoes">
+          <h3>Permissões</h3>
+          <p class="muted">Toda ação da Aila é classificada por risco. Ações sensíveis pedem sua autorização — o pedido aparece na tela, com o nível de risco.</p>
+          <div id="perm-levels" class="risk-list"></div>
+          <div class="card" id="perm-state" style="margin-top:14px"></div>
         </section>
         <section class="spane" id="sp-rede">
           <h3>Rede &amp; Privacidade</h3>

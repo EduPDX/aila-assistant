@@ -25,8 +25,50 @@ export function settingsTab(p) {
   $$('.spane').forEach((s) => s.classList.toggle('active', s.id === 'sp-' + p));
   if (p === 'modelos') renderProviders();     // provedores (local + nuvem)
   if (p === 'autonomia') renderAutonomy();
+  if (p === 'permissoes') renderPermissions();
+  if (p === 'memoria') renderMemory();
   if (p === 'rede') renderNetwork();
   if (p === 'voz') loadStatus();              // refaz o status de voz
+}
+
+/* ---------- Memória (/api/memory — leitura) ---------- */
+const KIND_LABEL = { chat: 'Conversa', fact: 'Fato', preference: 'Preferência',
+                     project: 'Projeto', semantic: 'Semântica' };
+async function renderMemory() {
+  const box = byId('memory-list'); if (!box) return;
+  box.textContent = 'carregando…';
+  try {
+    const d = await api.memory(25);
+    byId('memory-count').textContent = d.count ?? 0;
+    box.innerHTML = '';
+    if (!d.enabled) { box.append(el('div', { class: 'act-empty' }, 'Memória desativada na configuração.')); return; }
+    if (!d.recent || !d.recent.length) { box.append(el('div', { class: 'act-empty' }, 'Nenhuma memória ainda.')); return; }
+    d.recent.forEach((m) => box.append(el('div', { class: 'mem-item', 'data-kind': m.kind },
+      el('span', { class: 'mem-kind' }, KIND_LABEL[m.kind] || m.kind || 'memória'),
+      el('div', { class: 'mem-text' }, (m.text || '').replace(/\s+/g, ' ').slice(0, 220)),
+    )));
+  } catch { box.textContent = 'não foi possível carregar a memória.'; }
+}
+
+/* ---------- Permissões (explicador + estado atual) ---------- */
+const RISK = [
+  ['safe', 'SAFE', 'Executa automaticamente — leituras, pesquisa, análise.'],
+  ['review', 'REVIEW', 'Escrita comum. Confirma só se você pedir.'],
+  ['danger', 'DANGER', 'Ações destrutivas (rodar comando, apagar, executar código) — pedem confirmação.'],
+  ['blocked', 'BLOCKED', 'Nunca executadas pela Aila (ex.: comandos catastróficos no terminal).'],
+];
+function renderPermissions() {
+  const box = byId('perm-levels'); if (!box) return;
+  box.innerHTML = '';
+  RISK.forEach(([k, name, desc]) => box.append(el('div', { class: 'risk-item', 'data-risk': k },
+    el('span', { class: 'risk-badge' }, name),
+    el('div', { class: 'risk-desc muted' }, desc),
+  )));
+  const s = State.get();
+  const st = byId('perm-state');
+  if (st) st.innerHTML = `
+    <div class="row"><span>Somente-leitura</span><span class="muted">${s.readOnly ? 'ligado (bloqueia escrita)' : 'desligado'}</span></div>
+    <div class="row"><span>Autonomia atual</span><span class="muted">L${s.autonomy || 3}</span></div>`;
 }
 
 /* ---------- Autonomia (L1–L5) — set via /api/autonomy ---------- */
