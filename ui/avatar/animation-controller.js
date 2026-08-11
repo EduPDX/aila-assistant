@@ -18,6 +18,7 @@ import { createEmotionLayer } from './layers/emotion.js';
 import { createLipSyncLayer } from './layers/lipsync.js';
 import { createGestureAnimLayer } from './layers/gesture-anim.js';
 import { createBlinkLayer } from './layers/blink.js';
+import { createHandPoseLayer } from './hand-poses.js';
 import { createJointLimits } from './solvers/joint-limits.js';
 import { createArmIK } from './solvers/ik.js';
 import { createSelfCollision } from './solvers/self-collision.js';
@@ -38,6 +39,7 @@ export class AnimationController {
       createEmotionLayer(),
       createLipSyncLayer(),
       createGestureAnimLayer(),   // nod/shake (cabeça) — F5
+      createHandPoseLayer(),      // dedos: poses de mão (Fase B)
       createBlinkLayer(),
     ];
     // solvers: clampam/corrigem a pose antes do commit final
@@ -57,6 +59,7 @@ export class AnimationController {
       mouth: 0,                                 // alvo instantâneo da boca (lip-sync)
       speech: 0,                                // envelope 0..1 "está falando"
       gesture: 'rest',
+      handPose: { left: 'relaxed', right: 'relaxed' },   // pose dos dedos por lado (Fase B)
       anim: null,                               // gesto ANIMADO ativo (nod/shake) — F5
       handTarget: null,                         // {side,x,y,z,weight} → braço via IK
       intensity: 1,                             // reservado (força de expressão)
@@ -107,6 +110,11 @@ export class AnimationController {
   setStatus(status) { if (STATES[status]) this.ctx.status = status; }
   setEmotion(name) { const k = resolveEmotion(name); this.ctx.emotionKey = k; this.ctx.emotion = EMOTIONS[k]; }
   setMouth(v) { this.ctx.mouth = Math.max(0, Math.min(1, v || 0)); }
+  /** pose dos dedos por lado. side='left'|'right'|'both'. Ex.: setHandPose('both','open') */
+  setHandPose(side, name) {
+    if (side === 'both' || !side) { this.ctx.handPose.left = name; this.ctx.handPose.right = name; }
+    else this.ctx.handPose[side] = name;
+  }
 
   // -------- loop -------- //
   update(dt) {
