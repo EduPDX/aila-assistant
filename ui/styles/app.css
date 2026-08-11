@@ -733,3 +733,68 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .content.stage::before { animation: none; opacity: .3; top: 40%; }
 }
+
+/* ============================================================
+   HUD DO PALCO — telemetria REAL ao redor da avatar (ref. "LUCY/ONLINE").
+   Camada não-interativa (pointer-events:none) sobre o avatar, abaixo dos
+   colchetes de canto. Dados via State (shell/hud.js). Cor = --accent (tema).
+   ============================================================ */
+.hud-overlay { position: absolute; inset: 0; z-index: 4; pointer-events: none;
+  font-family: var(--font-mono); color: var(--muted); }
+.hud-overlay * { pointer-events: none; }
+
+/* header central: "AILA / <ESTADO>" */
+.hud-head { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs);
+  letter-spacing: 3px; text-transform: uppercase; }
+.hud-brand { color: var(--accent); font-weight: 600; text-shadow: var(--glow-text); }
+.hud-sep { opacity: .45; }
+.hud-status { color: var(--accent); position: relative; padding-left: 14px; }
+.hud-status::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+  box-shadow: 0 0 8px currentColor; animation: pulse 1.6s ease-in-out infinite; }
+.hud-status[data-tone="online"]  { color: var(--ok); }
+.hud-status[data-tone="busy"]    { color: var(--accent-2); }
+.hud-status[data-tone="offline"] { color: var(--danger); }
+.hud-status[data-tone="error"]   { color: var(--danger); }
+
+/* rails laterais (centralizados na vertical, longe do rosto e do chat) */
+.hud-rail { position: absolute; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 16px; opacity: .92; }
+.hud-left  { left: 20px; align-items: flex-start; }
+.hud-right { right: 20px; align-items: flex-end; text-align: right; }
+
+/* medidores circulares (GPU/CPU) */
+.hud-gauge { position: relative; width: 64px; height: 64px; }
+.hud-gauge svg { width: 64px; height: 64px; transform: rotate(-90deg); }
+.hg-track { fill: none; stroke: var(--hud-line-soft); stroke-width: 3; opacity: .55; }
+.hg-arc { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 60%, transparent));
+  transition: stroke-dashoffset var(--dur-2) var(--ease); }
+.hg-c { position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1px; }
+.hg-c b { font-size: 13px; color: var(--text); text-shadow: var(--glow-text); }
+.hg-c span { font-size: 8px; letter-spacing: 1px; color: var(--muted); }
+
+/* barras finas (VRAM/RAM) */
+.hud-bars { display: flex; flex-direction: column; gap: 9px; width: 116px; }
+.hud-bar-top { display: flex; justify-content: space-between; font-size: 9px; letter-spacing: 1px; color: var(--muted); }
+.hud-bar-top span:last-child { color: var(--text); }
+.hud-bar-tr { height: 4px; margin-top: 4px; border-radius: 3px; background: var(--hud-line-soft); overflow: hidden; }
+.hud-bar-tr i { display: block; height: 100%; width: 0; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: width var(--dur-2) var(--ease); }
+
+/* leituras de texto (modelo/rede/autonomia/tokens/uptime/emoção) */
+.hud-ro { display: flex; flex-direction: column; gap: 1px; }
+.hud-ro-k { font-size: 8px; letter-spacing: 1.5px; color: var(--muted); }
+.hud-ro-v { font-size: 12px; color: var(--accent); text-shadow: var(--glow-text);
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* WAITING_PERMISSION: telemetria recua p/ o foco ir ao card */
+body[data-mode="permission"] .hud-rail { opacity: .3; }
+
+/* telas estreitas: sem rails (viram ruído); header some no mobile */
+@media (max-width: 1180px) { .hud-rail { display: none; } }
+@media (max-width: 860px)  { .hud-head { display: none; } }

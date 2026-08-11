@@ -15,6 +15,7 @@ import { initDirector } from './core/director.js';
 import { initTopbar, refreshStatus } from './shell/topbar.js';
 import { initInspector } from './shell/inspector.js';
 import { initDrawer } from './shell/drawer.js';
+import { initHud } from './shell/hud.js';
 
 /* ---------- abas ---------- */
 function showTab(t) {
@@ -119,6 +120,7 @@ initDirector();     // camada adaptativa: Agent State → data-mode no shell
 initTopbar();
 initInspector();
 initDrawer();       // inspector como drawer retrátil (abre em WORKING)
+initHud();          // telemetria HUD sobre o palco (dono do poll de /api/metrics)
 wireUI();
 connectWS({
   onMessage: (m) => { ingest(m); route(m); },   // ingest = estado/atividade; route = UI (chat/avatar)

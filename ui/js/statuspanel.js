@@ -28,10 +28,15 @@ export function initStatusPanel(target) {
         </div>`).join('')}
     </div>`;
 
-  State.on(updateState);
-  updateState(State.get());
-  poll();
-  setInterval(poll, 2000);
+  // Fonte única: estado + métricas vêm do State (o poller vive no HUD do palco,
+  // shell/hud.js, que escreve State.metrics). Aqui só renderizamos.
+  State.on(render);
+  render(State.get());
+}
+
+function render(s) {
+  updateState(s);
+  renderMeters(s.metrics || {});
 }
 
 function updateState(s) {
@@ -49,20 +54,17 @@ function setMeter(k, pct, label) {
   byId(`sp-${k}-bar`).style.width = Math.min(100, Math.max(0, pct || 0)) + '%';
 }
 
-async function poll() {
-  try {
-    const m = await (await fetch('/api/metrics')).json();
-    byId('sp-model').textContent = m.model || '—';
-    byId('sp-tps').textContent = m.tps ? m.tps.toFixed(0) : '—';
-    byId('sp-uptime').textContent = fmtUptime(m.uptime_s || 0);
-    setMeter('cpu', m.cpu, `${(m.cpu || 0).toFixed(0)}%`);
-    setMeter('ram', m.ram?.percent, `${m.ram?.used_gb}/${m.ram?.total_gb} GB`);
-    if (m.gpu) {
-      setMeter('gpu', m.gpu.util, `${m.gpu.util.toFixed(0)}%`);
-      const vp = m.gpu.vram_total_mb ? (m.gpu.vram_used_mb / m.gpu.vram_total_mb) * 100 : 0;
-      setMeter('vram', vp, `${(m.gpu.vram_used_mb / 1024).toFixed(1)}/${(m.gpu.vram_total_mb / 1024).toFixed(1)} GB`);
-    } else {
-      setMeter('gpu', 0, 'n/d'); setMeter('vram', 0, 'n/d');
-    }
-  } catch (e) { /* offline */ }
+function renderMeters(m) {
+  byId('sp-model').textContent = m.model || '—';
+  byId('sp-tps').textContent = m.tps ? m.tps.toFixed(0) : '—';
+  byId('sp-uptime').textContent = m.uptime_s != null ? fmtUptime(m.uptime_s) : '—';
+  setMeter('cpu', m.cpu, m.cpu != null ? `${m.cpu.toFixed(0)}%` : '—');
+  setMeter('ram', m.ram?.percent, m.ram ? `${m.ram.used_gb}/${m.ram.total_gb} GB` : '—');
+  if (m.gpu) {
+    setMeter('gpu', m.gpu.util, `${m.gpu.util.toFixed(0)}%`);
+    const vp = m.gpu.vram_total_mb ? (m.gpu.vram_used_mb / m.gpu.vram_total_mb) * 100 : 0;
+    setMeter('vram', vp, `${(m.gpu.vram_used_mb / 1024).toFixed(1)}/${(m.gpu.vram_total_mb / 1024).toFixed(1)} GB`);
+  } else {
+    setMeter('gpu', 0, 'n/d'); setMeter('vram', 0, 'n/d');
+  }
 }
