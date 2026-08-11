@@ -33,6 +33,10 @@ export function ingest(m) {
     case 'task.state':
       State.upsertTask({ id: m.id, goal: m.goal, state: m.state, progress: m.progress });
       break;
+    case 'permission.request':
+      // WAITING_PERMISSION vira estado de 1ª classe (director → data-mode=permission)
+      State.set({ pendingPermission: { id: m.id, action: m.action, risk: m.risk, params: m.params } });
+      break;
     default:
       break;
   }

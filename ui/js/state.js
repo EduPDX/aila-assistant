@@ -12,6 +12,10 @@ const _state = {
   voiceOut: true,          // Aila fala as respostas
   activeSession: null,
 
+  // --- UI adaptativa (director) ---
+  uiMode: 'idle',          // idle | conversation | working | permission | error
+  pendingPermission: null, // {id, action, risk, params} quando aguardando autorização
+
   // --- conexão (WebSocket) ---
   connection: 'connecting', // connecting | online | offline
 

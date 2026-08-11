@@ -20,6 +20,19 @@ button, input, textarea { font-family: inherit; color: inherit; }
 *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
 *::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 
+/* ============================================================
+   UI ADAPTATIVA (data-mode) — base do director.js.
+   Cada modo expõe --mode-accent p/ as próximas fatias (palco/drawer/
+   Focus Mode) reagirem ao estado. Fatia 1: sem efeito visual perceptível.
+   idle · conversation · working · permission · error
+   ============================================================ */
+body { --mode-accent: var(--muted); transition: none; }
+body[data-mode="idle"]         { --mode-accent: var(--muted); }
+body[data-mode="conversation"] { --mode-accent: var(--accent); }
+body[data-mode="working"]      { --mode-accent: var(--accent-2); }
+body[data-mode="permission"]   { --mode-accent: var(--warn); }
+body[data-mode="error"]        { --mode-accent: var(--danger); }
+
 /* ---------- utilitários ---------- */
 .glass {
   background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur));

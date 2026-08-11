@@ -11,6 +11,7 @@ import * as voice from './voice.js';
 import { initSettings, openSettings, closeSettings, settingsTab, loadStatus, setLlm } from './settings.js';
 import { ingest } from './core/events.js';
 import { humanizeTool } from './core/humanize.js';
+import { initDirector } from './core/director.js';
 import { initTopbar, refreshStatus } from './shell/topbar.js';
 import { initInspector } from './shell/inspector.js';
 
@@ -38,7 +39,11 @@ function showPerm(m) {
   byId('perm-allow').className = 'btn ' + (risk === 'danger' ? 'danger' : 'accent');
   byId('perm-overlay').classList.add('show');
 }
-function respondPerm(ok) { wsSend({ type: 'permission.response', id: permId, approved: ok }); byId('perm-overlay').classList.remove('show'); }
+function respondPerm(ok) {
+  wsSend({ type: 'permission.response', id: permId, approved: ok });
+  byId('perm-overlay').classList.remove('show');
+  State.set({ pendingPermission: null });   // sai do estado WAITING_PERMISSION
+}
 
 /* ---------- roteamento dos eventos do backend ---------- */
 function route(m) {
@@ -110,6 +115,7 @@ function setDrawer(open) {
 
 /* ---------- start ---------- */
 initSettings();
+initDirector();     // camada adaptativa: Agent State → data-mode no shell
 initTopbar();
 initInspector();
 wireUI();
