@@ -14,6 +14,7 @@ import { humanizeTool } from './core/humanize.js';
 import { initDirector } from './core/director.js';
 import { initTopbar, refreshStatus } from './shell/topbar.js';
 import { initInspector } from './shell/inspector.js';
+import { initDrawer } from './shell/drawer.js';
 
 /* ---------- abas ---------- */
 function showTab(t) {
@@ -50,13 +51,12 @@ function route(m) {
   switch (m.type) {
     case 'assistant.token': chat.onToken(m); break;
     case 'assistant.message': chat.onMessage(m); sidebar.loadSessions(); break;
-    case 'agent.invoked': chat.onTool(`↳ ${m.tool}(${JSON.stringify(m.args)})`); break;
-    case 'agent.result': chat.onTool(`✓ ${m.tool}: ${m.content}`); break;
+    // agent.invoked / agent.result / memory.recalled NÃO poluem mais o chat —
+    // vivem no Activity drawer (via core/events.js:ingest). O chat fica só com a conversa.
     case 'avatar.state': State.set({ emotion: m.emotion }); avatar.avatarEmotion(m.emotion, m.animation, m.gesture); break;
     case 'avatar.behavior': State.set({ emotion: m.emotion }); avatar.avatarBehavior(m); break;
     case 'avatar.gesture': avatar.avatarGesture(m.value); break;
     case 'aila.state': State.set({ status: m.status, tool: m.tool || null }); avatar.avatarStatus(m.status); break;
-    case 'memory.recalled': chat.onTool(`🧠 lembrei de ${m.items.length} memória(s)`); break;
     case 'permission.request': showPerm(m); break;
     case 'session.loaded': chat.renderMessages(m.messages); State.set({ activeSession: m.id }); sidebar.loadSessions(); break;
     case 'session.changed': chat.clearChat(); State.set({ activeSession: m.id }); sidebar.loadSessions(); break;
@@ -118,6 +118,7 @@ initSettings();
 initDirector();     // camada adaptativa: Agent State → data-mode no shell
 initTopbar();
 initInspector();
+initDrawer();       // inspector como drawer retrátil (abre em WORKING)
 wireUI();
 connectWS({
   onMessage: (m) => { ingest(m); route(m); },   // ingest = estado/atividade; route = UI (chat/avatar)

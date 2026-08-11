@@ -358,12 +358,22 @@ body[data-mode="error"]        { --mode-accent: var(--danger); }
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   border-radius: 6px; transition: width var(--dur-2) var(--ease); }
 
-@media (max-width: 1180px) { .statuspanel { display: none; } }
-
 /* ============================================================
-   INSPECTOR (zona direita com abas: Atividade · Sistema)
+   INSPECTOR — agora um DRAWER retrátil (desliza da direita).
+   Fechado por padrão; abre pelo botão da topbar e em WORKING.
    ============================================================ */
-.statuspanel.inspector { padding: 0; gap: 0; }
+.statuspanel.inspector {
+  padding: 0; gap: 0;
+  position: fixed; top: 54px; right: 0; bottom: 0; width: 320px; max-width: 86vw; z-index: 40;
+  box-shadow: -10px 0 42px rgba(0, 0, 0, .38);
+  transform: translateX(calc(100% + 12px));
+  transition: transform var(--dur-2) var(--ease);
+}
+body[data-drawer="open"] .statuspanel.inspector { transform: translateX(0); }
+
+.drawer-toggle { margin-left: 2px; }
+.drawer-toggle.active { color: var(--accent); border-color: var(--glass-border);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
 .insp-tabs { display: flex; gap: 3px; padding: var(--s-3) var(--s-3) 0; border-bottom: 1px solid var(--border); }
 .insp-tab { flex: 1; background: none; border: none; color: var(--muted); cursor: pointer;
   padding: 9px 6px; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 1px;

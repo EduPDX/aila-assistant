@@ -15,6 +15,7 @@ const _state = {
   // --- UI adaptativa (director) ---
   uiMode: 'idle',          // idle | conversation | working | permission | error
   pendingPermission: null, // {id, action, risk, params} quando aguardando autorização
+  drawerOpen: false,       // inspector (Atividade/Tarefas/Sistema) como drawer retrátil
 
   // --- conexão (WebSocket) ---
   connection: 'connecting', // connecting | online | offline
