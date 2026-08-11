@@ -440,14 +440,21 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
    INSPECTOR — agora um DRAWER retrátil (desliza da direita).
    Fechado por padrão; abre pelo botão da topbar e em WORKING.
    ============================================================ */
+/* Coluna à direita NO FLUXO (espelho da sidebar da esquerda): fechada, recolhe
+   com margin-right negativa e o palco (main, flex:1) expande p/ ocupar tudo;
+   aberta, entra e o palco encolhe. Sem sobreposição, sem vão — igual ao menu.
+   position:relative (vem da regra dos colchetes) mantém o painel no fluxo. */
 .statuspanel.inspector {
   padding: 0; gap: 0;
-  position: fixed; top: 54px; right: 0; bottom: 0; width: 320px; max-width: 86vw; z-index: 40;
-  box-shadow: -10px 0 42px rgba(0, 0, 0, .38);
-  transform: translateX(calc(100% + 12px));
-  transition: transform var(--dur-2) var(--ease);
+  width: 0; flex-shrink: 0; overflow: hidden; box-shadow: none;
+  transition: width var(--dur-2) var(--ease);
 }
-body[data-drawer="open"] .statuspanel.inspector { transform: translateX(0); }
+/* conteúdo em largura FIXA: não reflui enquanto a coluna anima de 0 → 320.
+   Com width:0 a coluna some do fluxo e o palco (main, flex:1) ocupa tudo. */
+.statuspanel.inspector > * { width: 320px; }
+body[data-drawer="open"] .statuspanel.inspector {
+  width: 320px; box-shadow: -10px 0 42px rgba(0, 0, 0, .30);
+}
 
 .drawer-toggle { margin-left: 2px; }
 .drawer-toggle.active { color: var(--accent); border-color: var(--glass-border);
@@ -799,16 +806,8 @@ body[data-mode="permission"] .hud-rail { opacity: .3; }
 @media (max-width: 1180px) { .hud-rail { display: none; } }
 @media (max-width: 860px)  { .hud-head { display: none; } }
 
-/* ============================================================
-   DRAWER empurra o palco (simétrico à sidebar da esquerda).
-   Ao ABRIR, o palco recua e a avatar reenquadra no espaço restante;
-   ao FECHAR, o palco volta a ocupar tudo. Em telas estreitas o drawer
-   volta a sobrepor (empurrar espremeria demais o avatar).
-   ============================================================ */
-.content.stage { transition: margin-right var(--dur-2) var(--ease), margin-left var(--dur-2) var(--ease); }
-@media (min-width: 1024px) {
-  body[data-drawer="open"] .content.stage { margin-right: 320px; }
-}
+/* O palco (main, flex:1) expande/encolhe SOZINHO quando o drawer recolhe/entra
+   (a coluna do inspector muda de largura no fluxo). Sem margem no palco. */
 
 /* ============================================================
    HUD em TODO o front — sidebar (histórico) e centers.
@@ -845,3 +844,16 @@ body[data-mode="permission"] .hud-rail { opacity: .3; }
 .card, .sp-card { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent); }
 
 /* botão "Nova conversa" e "Fechar" das configs: já usam .btn/.accent (HUD) */
+
+/* MOBILE: o drawer no fluxo espremeria o palco → volta a SOBREPOR (fixed).
+   (vem depois da regra dos colchetes p/ vencer o position:relative dela) */
+@media (max-width: 860px) {
+  .statuspanel.inspector {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 45;
+    width: min(320px, 86vw) !important;   /* vence a largura 0/320 do fluxo */
+    transform: translateX(100%);
+    transition: transform var(--dur-2) var(--ease);
+  }
+  .statuspanel.inspector > * { width: min(320px, 86vw); }
+  body[data-drawer="open"] .statuspanel.inspector { transform: translateX(0); }
+}
