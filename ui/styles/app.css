@@ -291,6 +291,23 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .dot.on { background: var(--ok); box-shadow: 0 0 6px var(--ok); } .dot.off { background: var(--danger); }
 
+/* ---------- Autonomia / Rede (Settings Center) ---------- */
+.auto-list, .net-list { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-3); }
+.auto-item, .net-item { display: flex; align-items: center; gap: var(--s-3); text-align: left; width: 100%;
+  padding: 12px; border-radius: var(--r-md); border: 1px solid var(--border); color: var(--text); cursor: pointer;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease); }
+.auto-item:hover, .net-item:hover { border-color: var(--glass-border); }
+.auto-item.active, .net-item.active { border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.auto-badge { flex-shrink: 0; font-size: var(--fs-xs); font-weight: 700; padding: 4px 8px; border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.auto-item[data-danger="1"] .auto-badge { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.auto-info, .net-info { flex: 1; min-width: 0; }
+.auto-name, .net-name { font-weight: 600; font-size: var(--fs-md); }
+.auto-desc, .net-desc { font-size: var(--fs-xs); margin-top: 2px; line-height: 1.45; }
+.auto-check { color: var(--accent); flex-shrink: 0; font-size: 12px; }
+
 .modal { width: 440px; padding: var(--s-5); border-radius: var(--r-lg); background: var(--panel); border: 1px solid var(--glass-border); box-shadow: var(--shadow-2); }
 .modal h3 { margin-bottom: var(--s-2); }
 .modal pre { background: var(--panel-2); padding: 10px; border-radius: var(--r-sm); font-size: var(--fs-sm); color: var(--muted); overflow-x: auto; margin: var(--s-2) 0; }
