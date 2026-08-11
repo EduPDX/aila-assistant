@@ -20,7 +20,7 @@ import { FINGERS, fingerBones, SIDES } from './bones.js';
 // p/ junto da mão (0 = aberto/livre, 1 = colado). Poses previsíveis (regra 9).
 export const HAND_POSES = {
   open:      { Thumb: 0.00, Index: 0.00, Middle: 0.00, Ring: 0.00, Little: 0.00, _thumbAdduct: 0.35 },
-  relaxed:   { Thumb: 0.22, Index: 0.35, Middle: 0.42, Ring: 0.50, Little: 0.58, _thumbAdduct: 0.72 },
+  relaxed:   { Thumb: 0.22, Index: 0.35, Middle: 0.42, Ring: 0.50, Little: 0.58, _thumbAdduct: 0.42 },
   closed:    { Thumb: 0.62, Index: 0.95, Middle: 0.95, Ring: 0.95, Little: 0.95, _thumbAdduct: 0.60 },
   point:     { Thumb: 0.42, Index: 0.00, Middle: 0.95, Ring: 0.95, Little: 0.95, _thumbAdduct: 0.60 },
   thumbs_up: { Thumb: 0.00, Index: 0.95, Middle: 0.95, Ring: 0.95, Little: 0.95, _thumbAdduct: 0.00 },
