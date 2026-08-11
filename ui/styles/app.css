@@ -634,9 +634,9 @@ body::before {
 }
 
 /* ---- utilitário de COLCHETES DE CANTO (a assinatura do HUD) ---- */
-.content.stage, .statuspanel.inspector, .settings, .modal, .cbox { position: relative; }
+.content.stage, .statuspanel.inspector, .settings, .modal, .cbox, .sidebar { position: relative; }
 .content.stage::after, .statuspanel.inspector::after,
-.settings::after, .modal::after, .cbox::after {
+.settings::after, .modal::after, .cbox::after, .sidebar::after {
   content: ""; position: absolute; pointer-events: none; z-index: 5;
   inset: 6px; border-radius: inherit;
   --c: var(--hud-corner); --l: 15px; --w: 1.5px;
@@ -798,3 +798,50 @@ body[data-mode="permission"] .hud-rail { opacity: .3; }
 /* telas estreitas: sem rails (viram ruído); header some no mobile */
 @media (max-width: 1180px) { .hud-rail { display: none; } }
 @media (max-width: 860px)  { .hud-head { display: none; } }
+
+/* ============================================================
+   DRAWER empurra o palco (simétrico à sidebar da esquerda).
+   Ao ABRIR, o palco recua e a avatar reenquadra no espaço restante;
+   ao FECHAR, o palco volta a ocupar tudo. Em telas estreitas o drawer
+   volta a sobrepor (empurrar espremeria demais o avatar).
+   ============================================================ */
+.content.stage { transition: margin-right var(--dur-2) var(--ease), margin-left var(--dur-2) var(--ease); }
+@media (min-width: 1024px) {
+  body[data-drawer="open"] .content.stage { margin-right: 320px; }
+}
+
+/* ============================================================
+   HUD em TODO o front — sidebar (histórico) e centers.
+   ============================================================ */
+/* sidebar como painel HUD: os colchetes de canto já entram pela regra
+   compartilhada; aqui reforçamos moldura, marca e itens. */
+.sidebar { border-right: 1px solid var(--hud-line-soft);
+  box-shadow: inset 0 0 60px color-mix(in srgb, var(--accent) 4%, transparent); }
+.sidebar::after { inset: 8px; opacity: .55; }   /* discreto (tem muita lista) */
+
+/* busca em tom técnico */
+.search { border-color: var(--hud-line-soft); }
+.search input { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.search:focus-within { border-color: var(--hud-line); box-shadow: var(--glow-sm); }
+
+/* itens de sessão: marca de estado à esquerda, ativo brilha */
+.session-item { border-left: 2px solid transparent; border-radius: 0 var(--r-md) var(--r-md) 0; }
+.session-item:hover { border-left-color: var(--hud-line-soft); }
+.session-item.active { border-left-color: var(--accent);
+  box-shadow: inset 0 0 14px color-mix(in srgb, var(--accent) 8%, transparent); }
+.session-item .title { font-size: var(--fs-sm); }
+
+/* divisores de dia com tique HUD */
+.sessions .day { position: relative; padding-left: 12px; }
+.sessions .day::before { content: ""; position: absolute; left: 2px; top: 50%; transform: translateY(-50%);
+  width: 5px; height: 5px; background: var(--accent); box-shadow: var(--glow-sm);
+  clip-path: polygon(0 0, 100% 50%, 0 100%); }
+
+/* nav das configurações: barra de acento à esquerda no ativo */
+.snav.active { box-shadow: inset 2px 0 0 var(--accent), inset 0 0 18px color-mix(in srgb, var(--accent) 8%, transparent);
+  text-shadow: var(--glow-text); }
+
+/* cards internos (settings/painéis) ganham borda técnica + leve brilho */
+.card, .sp-card { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent); }
+
+/* botão "Nova conversa" e "Fechar" das configs: já usam .btn/.accent (HUD) */
