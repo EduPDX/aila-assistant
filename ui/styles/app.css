@@ -168,22 +168,46 @@ body[data-mode="error"]        { --mode-accent: var(--danger); }
 #avatar3d { width: 100%; height: 100%; border: none; background: transparent; }
 
 /* ============================================================
-   STAGE — avatar + chat CONVIVEM (desktop). Estreito → volta a abas.
+   STAGE — palco AVATAR-CÊNTRICO (chat sobreposto / overlay).
+   O avatar preenche o palco; a conversa é uma camada translúcida na
+   parte inferior que NÃO cobre o rosto (fade p/ o avatar no topo);
+   o composer flutua embaixo. O usuário acompanha o avatar enquanto lê.
    ============================================================ */
-.content.stage { display: flex; position: static; }
-.stage > .pane { position: static; display: flex; min-width: 0; }
-#pane-avatar { flex: 0 0 40%; min-width: 200px; border-right: 1px solid var(--border);
-  background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%); }
-#pane-chat { flex: 1; min-width: 320px; }
-.stage .chat { padding: var(--s-5) var(--s-5); }
-.stage .composer { padding: var(--s-3) var(--s-5); }
-@media (min-width: 1001px) { .topbar .tabs { display: none; } }
-@media (max-width: 1000px) {
-  .content.stage { position: relative; }
-  .stage > .pane { position: absolute; inset: 0; display: none; }
-  .stage > .pane.active { display: flex; }
-  .stage .chat, .stage .composer { padding-left: 6%; padding-right: 6%; }
+.content.stage { position: relative; overflow: hidden; }
+.stage > .pane { position: absolute; display: flex; }
+
+/* avatar: preenche o palco, atrás da conversa */
+#pane-avatar { inset: 0; z-index: 0; }
+
+/* conversa: camada inferior; gradiente escurece a base p/ leitura */
+#pane-chat {
+  inset: auto 0 0 0; height: 72%; z-index: 1;
+  flex-direction: column; justify-content: flex-end;
+  background: linear-gradient(to top,
+    color-mix(in srgb, var(--bg) 88%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 55%, transparent) 46%,
+    transparent 96%);
 }
+/* a conversa fica colada embaixo (perto do composer) e some no topo */
+.stage .chat {
+  justify-content: flex-end;
+  padding: var(--s-4) clamp(var(--s-4), 9vw, 24%) var(--s-2);
+  -webkit-mask-image: linear-gradient(to top, #000 80%, transparent);
+          mask-image: linear-gradient(to top, #000 80%, transparent);
+}
+.stage .composer { padding: var(--s-2) clamp(var(--s-4), 9vw, 24%) var(--s-4); }
+
+/* bolhas legíveis sobre o avatar */
+.stage .msg.ai .bubble   { background: color-mix(in srgb, var(--panel) 88%, transparent); }
+.stage .msg.user .bubble { background: color-mix(in srgb, var(--panel-2) 92%, transparent); }
+.stage .msg.sys .bubble  { background: color-mix(in srgb, var(--bg) 55%, transparent); border-radius: var(--r-pill); padding: 6px 14px; }
+
+/* composer flutuante com leve destaque de estado (data-mode) */
+.stage .cbox { box-shadow: var(--shadow-1); }
+.stage .cbox:focus-within { border-color: color-mix(in srgb, var(--mode-accent) 55%, var(--glass-border)); }
+
+/* overlay torna as abas Avatar/Conversa desnecessárias */
+.topbar .tabs { display: none; }
 
 /* ---------- chat ---------- */
 #pane-chat { flex-direction: column; }
