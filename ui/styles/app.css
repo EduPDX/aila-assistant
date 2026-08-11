@@ -807,6 +807,23 @@ body::before {
 .hud-status[data-tone="offline"] { color: var(--danger); }
 .hud-status[data-tone="error"]   { color: var(--danger); }
 
+/* anel de atividade ao redor da avatar — "processando" (gira) / progresso de
+   tarefa (preenche) / atenção / erro. Cor via --mode-accent (director). */
+.hud-ring { position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%);
+  width: min(58vh, 62%); aspect-ratio: 1; z-index: 3; pointer-events: none; overflow: visible;
+  opacity: 0; transition: opacity var(--dur-3) var(--ease); }
+.hud-ring.on { opacity: .5; }
+.hr-track { fill: none; stroke: var(--mode-accent); stroke-width: .4; opacity: .16; }
+.hr-arc { fill: none; stroke: var(--mode-accent); stroke-width: .8; stroke-linecap: round;
+  stroke-dasharray: 66 224; transform-origin: 50% 50%;
+  filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--mode-accent) 60%, transparent)); }
+.hud-ring.on .hr-arc { animation: hud-ring-spin 2.4s linear infinite; }
+.hud-ring.determinate .hr-arc { animation: none; transition: stroke-dasharray var(--dur-2) var(--ease); }
+.hud-ring[data-mode="perm"] .hr-arc { animation-duration: 4.5s; }
+.hud-ring[data-mode="error"] .hr-arc { animation: none; stroke-dasharray: none; opacity: .5; }
+@keyframes hud-ring-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .hud-ring .hr-arc { animation: none !important; } }
+
 /* rails laterais (centralizados na vertical, longe do rosto e do chat) */
 .hud-rail { position: absolute; top: 50%; transform: translateY(-50%);
   display: flex; flex-direction: column; gap: 16px; opacity: .92; }
