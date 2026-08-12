@@ -14,6 +14,7 @@ OFFLINE o provedor se recusa a sair para a rede.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
@@ -78,8 +79,9 @@ class OpenAICompatBackend(LLMBackend):
     ) -> AsyncIterator[ChatChunk]:
         self._guard()   # offline → NetworkBlocked
         body: dict[str, Any] = {"model": model or self.default_model, "messages": messages}
+        name_map: dict[str, str] = {}
         if tools:
-            body["tools"] = tools
+            body["tools"], name_map = _sanitize_tools(tools)
         if temperature is not None:
             body["temperature"] = temperature
         if max_tokens is not None:
@@ -90,16 +92,19 @@ class OpenAICompatBackend(LLMBackend):
             resp.raise_for_status()
             msg = resp.json()["choices"][0]["message"]
             yield ChatChunk(content=msg.get("content") or "", done=True,
-                            tool_calls=msg.get("tool_calls") or None)
+                            tool_calls=_restore_tool_names(msg.get("tool_calls"), name_map) or None)
             return
 
         body["stream"] = True
-        async for chunk in self._stream(body):
+        async for chunk in self._stream(body, name_map):
             yield chunk
 
-    async def _stream(self, body: dict[str, Any]) -> AsyncIterator[ChatChunk]:
+    async def _stream(self, body: dict[str, Any], name_map: dict[str, str] | None = None) -> AsyncIterator[ChatChunk]:
         acc: dict[int, dict[str, str]] = {}   # index -> {id, name, arguments}
         async with self._client.stream("POST", "/chat/completions", json=body) as resp:
+            if resp.status_code >= 400:   # loga o CORPO do erro (não expõe a chave)
+                detail = (await resp.aread()).decode("utf-8", "replace")[:600]
+                log.warning(f"{self.name} HTTP {resp.status_code} em /chat/completions: {detail}")
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 if not line.startswith("data:"):
@@ -125,7 +130,7 @@ class OpenAICompatBackend(LLMBackend):
                         slot["name"] = fn["name"]
                     if fn.get("arguments"):
                         slot["arguments"] += fn["arguments"]
-        tool_calls = _finalize_tools(acc)
+        tool_calls = _finalize_tools(acc, name_map)
         yield ChatChunk(content="", done=True, tool_calls=tool_calls or None)
 
     async def complete(
@@ -146,11 +151,15 @@ class OpenAICompatBackend(LLMBackend):
     ) -> dict[str, Any]:
         self._guard()
         body: dict[str, Any] = {"model": model or self.default_model, "messages": messages}
+        name_map: dict[str, str] = {}
         if tools:
-            body["tools"] = tools
+            body["tools"], name_map = _sanitize_tools(tools)
         resp = await self._client.post("/chat/completions", json=body)
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]
+        msg = resp.json()["choices"][0]["message"]
+        if msg.get("tool_calls"):
+            msg["tool_calls"] = _restore_tool_names(msg["tool_calls"], name_map)
+        return msg
 
     async def list_models(self) -> list[str]:
         try:
@@ -175,17 +184,51 @@ class OpenAICompatBackend(LLMBackend):
         await self._client.aclose()
 
 
-def _finalize_tools(acc: dict[int, dict[str, str]]) -> list[dict]:
-    """Converte os deltas de tool_call acumulados no formato que o engine lê."""
+def _finalize_tools(acc: dict[int, dict[str, str]], name_map: dict[str, str] | None = None) -> list[dict]:
+    """Converte os deltas de tool_call acumulados no formato que o engine lê.
+    ``name_map`` restaura o nome original (ex.: file_read → file.read)."""
+    nm = name_map or {}
     calls: list[dict] = []
     for slot in acc.values():
         if not slot["name"]:
             continue
         calls.append({
             "id": slot["id"], "type": "function",
-            "function": {"name": slot["name"], "arguments": slot["arguments"] or "{}"},
+            "function": {"name": nm.get(slot["name"], slot["name"]),
+                         "arguments": slot["arguments"] or "{}"},
         })
     return calls
+
+
+# Provedores compatíveis-OpenAI (NVIDIA, OpenAI, …) exigem nome de função em
+# [a-zA-Z0-9_-]. As tools da Aila usam ponto (file.read). Saneia ao enviar e
+# guarda o mapa reverso p/ restaurar quando o modelo chamar a ferramenta.
+_INVALID_FN_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
+
+
+def _sanitize_tools(tools: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    out: list[dict[str, Any]] = []
+    rev: dict[str, str] = {}
+    for t in tools:
+        fn = t.get("function") or {}
+        orig = fn.get("name", "")
+        safe = _INVALID_FN_CHARS.sub("_", orig)
+        if safe != orig:
+            rev[safe] = orig
+            t = {**t, "function": {**fn, "name": safe}}
+        out.append(t)
+    return out, rev
+
+
+def _restore_tool_names(tool_calls: list[dict] | None, name_map: dict[str, str]) -> list[dict] | None:
+    """Restaura os nomes originais nos tool_calls devolvidos pelo modelo."""
+    if not tool_calls or not name_map:
+        return tool_calls
+    for tc in tool_calls:
+        fn = tc.get("function") or {}
+        if fn.get("name") in name_map:
+            fn["name"] = name_map[fn["name"]]
+    return tool_calls
 
 
 # metadados oficiais por provedor (base_url/modelo/capacidades). A config só
