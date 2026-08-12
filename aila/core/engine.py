@@ -267,6 +267,8 @@ class AilaEngine:
                 async for chunk in backend.chat(
                     msgs, stream=True, tools=tools, options=opts,
                 ):
+                    if chunk.reasoning:
+                        await emit("assistant.reasoning", {"text": chunk.reasoning})
                     if chunk.content:
                         collected.append(chunk.content)
                         await emit("assistant.token", {"text": chunk.content})
@@ -376,6 +378,8 @@ class AilaEngine:
             tool_calls: list[dict] = []
             m = to_provider_messages(msgs, backend.capabilities().local)
             async for chunk in backend.chat(m, stream=True, tools=tools, options=opts):
+                if chunk.reasoning:
+                    await emit("assistant.reasoning", {"text": chunk.reasoning})
                 if chunk.content:
                     collected.append(chunk.content)
                     await emit("assistant.token", {"text": chunk.content})

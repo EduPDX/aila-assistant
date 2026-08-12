@@ -17,6 +17,9 @@ class ChatChunk:
     """Um pedaço de resposta em streaming."""
 
     content: str
+    # raciocínio (reasoning_content) de modelos "thinking" (ex.: Nemotron) —
+    # separado do content; a UI mostra num bloco colapsável.
+    reasoning: str = ""
     done: bool = False
     # tool_calls aparecem quando o modelo decide usar ferramentas (mesmo em stream)
     tool_calls: list[dict[str, Any]] | None = None

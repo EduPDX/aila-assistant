@@ -40,6 +40,7 @@ class OpenAICompatBackend(LLMBackend):
         default_model: str,
         vision: bool = False,
         context: int = 128000,
+        reasoning: bool = False,
         network: NetworkPolicy | None = None,
         timeout: float = 120.0,
     ) -> None:
@@ -48,6 +49,7 @@ class OpenAICompatBackend(LLMBackend):
         self.default_model = default_model
         self._vision = vision
         self._context = context
+        self._reasoning = reasoning   # modelo "thinking" (envia enable_thinking e lê reasoning_content)
         self.network = network
         self.last_tps = 0.0
         self._client = httpx.AsyncClient(
@@ -86,6 +88,8 @@ class OpenAICompatBackend(LLMBackend):
             body["temperature"] = temperature
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
+        if self._reasoning:   # liga o modo "thinking" (Nemotron) → stream de reasoning_content
+            body["chat_template_kwargs"] = {"enable_thinking": True}
 
         if not stream:
             resp = await self._client.post("/chat/completions", json=body)
@@ -118,6 +122,8 @@ class OpenAICompatBackend(LLMBackend):
                     continue
                 choices = obj.get("choices") or [{}]
                 delta = choices[0].get("delta", {})
+                if delta.get("reasoning_content"):   # "pensar" do modelo (separado da resposta)
+                    yield ChatChunk(content="", reasoning=delta["reasoning_content"])
                 if delta.get("content"):
                     yield ChatChunk(content=delta["content"])
                 for tcd in delta.get("tool_calls") or []:
@@ -248,7 +254,7 @@ PROVIDER_DEFAULTS: dict[str, dict[str, Any]] = {
     # NÃO é lido pelo _stream — sem extra_body, responde normal (content).
     "nvidia": {"base_url": "https://integrate.api.nvidia.com/v1",
                "model": "nvidia/nemotron-3-ultra-550b-a55b",
-               "vision": False, "context": 128000},
+               "vision": False, "context": 128000, "reasoning": True},
 }
 
 
@@ -274,6 +280,7 @@ def build_external_providers(
             name=name, base_url=base_url, api_key=cfg.api_key, default_model=model,
             vision=cfg.vision or d.get("vision", False),
             context=cfg.context or d.get("context", 128000),
+            reasoning=bool(d.get("reasoning", False)),
             network=network, timeout=settings.llm.timeout_seconds,
         )
         log.info(f"provedor externo habilitado: {name} ({model})")

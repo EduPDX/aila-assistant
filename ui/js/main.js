@@ -51,6 +51,7 @@ function respondPerm(ok) {
 /* ---------- roteamento dos eventos do backend ---------- */
 function route(m) {
   switch (m.type) {
+    case 'assistant.reasoning': chat.onReasoning(m); break;   // "pensar" de modelos thinking
     case 'assistant.token': chat.onToken(m); break;
     case 'assistant.message': chat.onMessage(m); sidebar.loadSessions(); break;
     // agent.invoked / agent.result / memory.recalled NÃO poluem mais o chat —

@@ -562,6 +562,22 @@ body[data-drawer="open"] .statuspanel.inspector {
 .hl-com { color: #5c6b7f; font-style: italic; }
 .hl-fn  { color: #7dcfff; }
 
+/* ---------- bloco de RACIOCÍNIO (modelos "thinking", ex.: Nemotron) ---------- */
+.reasoning { flex: 1; min-width: 0; border: 1px solid var(--hud-line-soft);
+  background: color-mix(in srgb, var(--panel) 40%, transparent); }
+.reasoning-head { width: 100%; display: flex; align-items: center; gap: 7px; cursor: pointer;
+  background: none; border: none; color: var(--muted); padding: 7px 11px;
+  font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 1.5px; font-size: var(--fs-xs); }
+.reasoning-head:hover { color: var(--accent); }
+.reasoning-lbl { flex: 1; text-align: left; }
+.reasoning-tog { transition: transform var(--dur-1) var(--ease); }
+.reasoning:not(.open) .reasoning-tog { transform: rotate(-90deg); }
+.reasoning-body { display: none; padding: 8px 12px 11px; border-top: 1px solid var(--hud-line-soft);
+  color: var(--muted); font-family: var(--font-mono); font-size: 11px; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow: auto; }
+.reasoning.open .reasoning-body { display: block; }
+.reasoning.open .reasoning-ico { animation: pulse 1.4s ease-in-out infinite; }   /* pulsa enquanto pensa */
+
 /* ============================================================
    FASE 5 — polimento: microinterações + responsividade
    ============================================================ */

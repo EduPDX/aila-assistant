@@ -8,6 +8,8 @@ import { renderMarkdown, enhanceCodeBlocks } from './markdown.js';
 let aiBubble = null;
 let attached = [];
 let streamRaw = '';   // texto cru acumulado durante o streaming (p/ render final)
+let reasoningEl = null;   // bloco colapsável de "raciocínio" (modelos thinking)
+let reasoningRaw = '';
 
 const chatEl = () => byId('chat');
 function scroll() { const c = chatEl(); c.scrollTop = c.scrollHeight; }
@@ -17,7 +19,7 @@ export function addBubble(role, text, extra = '') {
   const b = document.createElement('div'); b.className = 'bubble ' + extra; b.textContent = text;
   w.appendChild(b); chatEl().appendChild(w); scroll(); return b;
 }
-export function clearChat() { chatEl().innerHTML = ''; aiBubble = null; streamRaw = ''; }
+export function clearChat() { chatEl().innerHTML = ''; aiBubble = null; streamRaw = ''; reasoningEl = null; reasoningRaw = ''; }
 
 // renderiza markdown (+ realce + botões) dentro de uma bolha existente
 function renderInto(bubble, text) {
@@ -37,8 +39,28 @@ export function renderMessages(msgs) {
 }
 
 // eventos do WS
+/** "pensar" de modelos thinking (ex.: Nemotron): bloco colapsável ANTES da
+ *  resposta, que streama enquanto a Aila raciocina e colapsa quando ela responde. */
+export function onReasoning(m) {
+  if (!reasoningEl) {
+    const w = document.createElement('div'); w.className = 'msg ai';
+    const box = document.createElement('div'); box.className = 'reasoning open';
+    box.innerHTML = '<button class="reasoning-head"><span class="reasoning-ico">💭</span>'
+      + '<span class="reasoning-lbl">Raciocínio</span><span class="reasoning-tog">▾</span></button>'
+      + '<div class="reasoning-body"></div>';
+    box.querySelector('.reasoning-head').onclick = () => box.classList.toggle('open');
+    w.appendChild(box); chatEl().appendChild(w);
+    reasoningEl = box; reasoningRaw = '';
+  }
+  reasoningRaw += m.text;
+  reasoningEl.querySelector('.reasoning-body').textContent = reasoningRaw;
+  scroll();
+}
 export function onToken(m) {
-  if (!aiBubble) { aiBubble = addBubble('ai', ''); streamRaw = ''; aiBubble.classList.add('streaming'); }
+  if (!aiBubble) {
+    if (reasoningEl) reasoningEl.classList.remove('open');   // resposta começou → colapsa o raciocínio
+    aiBubble = addBubble('ai', ''); streamRaw = ''; aiBubble.classList.add('streaming');
+  }
   streamRaw += m.text;
   aiBubble.textContent = streamRaw;   // durante o stream: texto puro (rápido)
   scroll();
@@ -50,6 +72,7 @@ export function onMessage(m) {
   renderInto(bubble, text);           // ao concluir: markdown + realce + botões
   scroll();
   aiBubble = null; streamRaw = '';
+  reasoningEl = null; reasoningRaw = '';   // fim do turno (mantém o bloco no DOM, solta a ref)
   if (State.get('voiceOut') && text) speak(text);
 }
 
@@ -66,7 +89,7 @@ export function onSys(text) { addBubble('sys', text); aiBubble = null; }
 // envio
 function _send(fullText, label) {
   addBubble('user', label);
-  aiBubble = null;
+  aiBubble = null; reasoningEl = null; reasoningRaw = '';
   wsSend({ type: 'user.message', text: fullText, mode: 'auto' });
 }
 /** envia um texto simples (usado pelo microfone) */
