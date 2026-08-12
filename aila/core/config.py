@@ -216,10 +216,12 @@ class ProvidersConfig(BaseModel):
     gemini: ProviderConfig = Field(default_factory=ProviderConfig)
     grok: ProviderConfig = Field(default_factory=ProviderConfig)
     deepseek: ProviderConfig = Field(default_factory=ProviderConfig)
+    nvidia: ProviderConfig = Field(default_factory=ProviderConfig)
 
     def items(self) -> list[tuple[str, ProviderConfig]]:
         return [("openai", self.openai), ("gemini", self.gemini),
-                ("grok", self.grok), ("deepseek", self.deepseek)]
+                ("grok", self.grok), ("deepseek", self.deepseek),
+                ("nvidia", self.nvidia)]
 
 
 class Settings(BaseSettings):

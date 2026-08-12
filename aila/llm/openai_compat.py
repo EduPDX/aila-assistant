@@ -200,6 +200,12 @@ PROVIDER_DEFAULTS: dict[str, dict[str, Any]] = {
              "vision": False, "context": 131072},
     "deepseek": {"base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat",
                  "vision": False, "context": 64000},
+    # NVIDIA NIM (build.nvidia.com) — endpoint compatível com OpenAI. Chave grátis
+    # de dev por conta. Nemotron tem modo "thinking" (reasoning_content) que hoje
+    # NÃO é lido pelo _stream — sem extra_body, responde normal (content).
+    "nvidia": {"base_url": "https://integrate.api.nvidia.com/v1",
+               "model": "nvidia/nemotron-3-ultra-550b-a55b",
+               "vision": False, "context": 128000},
 }
 
 

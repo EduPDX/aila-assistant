@@ -14,6 +14,7 @@ const BRAND = {
   gemini: { color: '#4285f4', glyph: '✦' },
   grok: { color: '#111827', glyph: 'x' },
   deepseek: { color: '#4d6bfe', glyph: 'D' },
+  nvidia: { color: '#76b900', glyph: 'N' },
 };
 
 let busy = false;
@@ -101,7 +102,7 @@ function btn(text, kind, onClick) {
   const cls = kind === 'accent' ? 'btn accent' : kind === 'ghost' ? 'btn ghost' : 'prov-linkbtn';
   return el('button', { class: cls, onclick: onClick }, text);
 }
-function label(name) { return { openai: 'OpenAI', gemini: 'Gemini', grok: 'Grok', deepseek: 'DeepSeek' }[name] || name; }
+function label(name) { return { openai: 'OpenAI', gemini: 'Gemini', grok: 'Grok', deepseek: 'DeepSeek', nvidia: 'NVIDIA' }[name] || name; }
 function flash(msg) {
   const h = byId('prov-help');
   if (!h) return;

@@ -123,7 +123,7 @@ async def set_autonomy(request: Request, body: AutonomyBody) -> dict:
 
 
 _PROVIDER_LABELS = {"openai": "OpenAI", "gemini": "Gemini",
-                    "grok": "Grok (xAI)", "deepseek": "DeepSeek"}
+                    "grok": "Grok (xAI)", "deepseek": "DeepSeek", "nvidia": "NVIDIA"}
 
 
 def _providers_snapshot(engine) -> dict:
