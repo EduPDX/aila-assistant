@@ -17,6 +17,7 @@ import { createLookAtLayer } from './layers/lookat.js';
 import { createEmotionLayer } from './layers/emotion.js';
 import { createLipSyncLayer } from './layers/lipsync.js';
 import { createGestureAnimLayer } from './layers/gesture-anim.js';
+import { createGestureIKLayer } from './layers/gesture-ik.js';
 import { createBlinkLayer } from './layers/blink.js';
 import { createHandPoseLayer } from './hand-poses.js';
 import { createJointLimits } from './solvers/joint-limits.js';
@@ -39,6 +40,7 @@ export class AnimationController {
       createEmotionLayer(),
       createLipSyncLayer(),
       createGestureAnimLayer(),   // nod/shake (cabeça) — F5
+      createGestureIKLayer(),     // gestos de braço por IK → alvo de mão (Fase C)
       createHandPoseLayer(),      // dedos: poses de mão (Fase B)
       createBlinkLayer(),
     ];
@@ -175,7 +177,7 @@ export class AnimationController {
     // solvers de posição (IK/colisão + updateMatrices, o passo mais caro) só
     // quando os braços podem se aproximar do corpo — parada ao lado, pula tudo.
     const armsActive = ctx.speech > 0.05 || ctx.gesture !== 'rest'
-      || !!ctx.handTarget || !!this._behavior;
+      || !!ctx.handTarget || !!this._behavior || buf.ik.size > 0;
     if (armsActive) {
       this.rig.updateMatrices();
       // 3) IK de gesto (se houver alvo de mão explícito)

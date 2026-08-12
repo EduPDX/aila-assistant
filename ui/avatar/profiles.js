@@ -54,14 +54,14 @@ export const CTRL_BONES = [
 ];
 
 // -------- biblioteca de poses/gestos (graus). "rest" = braços ao lado. --------
+//  NOTA (Fase C): wave/thumbs_up/point/think saíram daqui — agora são gestos
+//  por IK (ui/avatar/gestures.js). A postura cai em `rest` p/ esses, e o IK
+//  posiciona o braço. Os demais (hand_explain/shrug/cheer/raise_*) seguem FK
+//  até serem migrados (hand_explain espera o braço esquerdo — regra 7).
 export const POSES = {
   rest:        { leftUpperArm: [0, 0, -72], rightUpperArm: [0, 0, 72], leftLowerArm: [0, 4, -10], rightLowerArm: [0, -4, 10] },
-  wave:        { rightUpperArm: [0, 0, 150], rightLowerArm: [0, -25, 20] },
-  thumbs_up:   { rightUpperArm: [-25, 0, 80], rightLowerArm: [-95, 0, 10] },
-  point:       { rightUpperArm: [-80, 0, 74], rightLowerArm: [0, 0, 5] },
   hand_explain:{ leftUpperArm: [-35, 0, -70], rightUpperArm: [-35, 0, 70], leftLowerArm: [-40, 10, -20], rightLowerArm: [-40, -10, 20] },
   shrug:       { leftUpperArm: [0, 0, -110], rightUpperArm: [0, 0, 110], leftLowerArm: [0, 40, -80], rightLowerArm: [0, -40, 80] },
-  think:       { rightUpperArm: [-60, 0, 66], rightLowerArm: [-115, 0, 10], head: [10, -8, 0] },
   cheer:       { leftUpperArm: [0, 0, -165], rightUpperArm: [0, 0, 165] },
   raise_right: { rightUpperArm: [0, 0, 168] },
   raise_left:  { leftUpperArm: [0, 0, -168] },
