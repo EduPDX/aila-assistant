@@ -188,14 +188,24 @@ body[data-mode="error"]        { --mode-accent: var(--danger); }
     color-mix(in srgb, var(--bg) 55%, transparent) 46%,
     transparent 96%);
 }
-/* a conversa fica colada embaixo (perto do composer) e some no topo */
+/* a conversa fica colada embaixo (perto do composer) e some no topo.
+   NÃO usar justify-content:flex-end aqui — quebra o scroll (o topo fica
+   inacessível). Em vez disso, um espaçador ::before com margin-top:auto ancora
+   as mensagens embaixo quando são poucas, mas permite rolar até o topo. */
 .stage .chat {
-  justify-content: flex-end;
   padding: var(--s-4) clamp(var(--s-4), 9vw, 24%) var(--s-2);
-  -webkit-mask-image: linear-gradient(to top, #000 80%, transparent);
-          mask-image: linear-gradient(to top, #000 80%, transparent);
+  -webkit-mask-image: linear-gradient(to top, #000 92%, transparent);
+          mask-image: linear-gradient(to top, #000 92%, transparent);
 }
+.stage .chat::before { content: ''; margin-top: auto; flex: 0 0 auto; }
 .stage .composer { padding: var(--s-2) clamp(var(--s-4), 9vw, 24%) var(--s-4); }
+
+/* o palco do chat NÃO rouba o mouse do avatar: a camada e as áreas vazias
+   deixam o drag/zoom passar pro iframe; só o conteúdo INTERATIVO captura
+   (mensagens p/ ler/selecionar/rolar, e o composer p/ digitar). Assim dá p/
+   girar o avatar em quase toda a tela e ainda ler/rolar o chat sobre a msg. */
+.stage #pane-chat, .stage .chat { pointer-events: none; }
+.stage .chat .msg, .stage .composer { pointer-events: auto; }
 
 /* bolhas legíveis sobre o avatar */
 .stage .msg.ai .bubble   { background: color-mix(in srgb, var(--panel) 88%, transparent); }
