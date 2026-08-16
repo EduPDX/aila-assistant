@@ -27,4 +27,6 @@ export const GESTURES = {
   wave:      { side: 'right', target: [0.42, 0.52, 0.34], hand: 'open', orient: { ref: 'palm', dir: 'forward' } },
   // pensar: mão perto do queixo, dedos semi-dobrados + leve inclinação de cabeça
   think:     { side: 'right', target: [0.10, 0.28, 0.34], hand: 'thinking', head: [10, -8, 0] },
+  // explicar: OS DOIS braços à frente, mãos abertas (o x é espelhado por lado)
+  hand_explain: { side: 'both', target: [0.34, -0.02, 0.52], hand: 'open' },
 };
