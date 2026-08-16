@@ -12,11 +12,16 @@ import subprocess
 from pathlib import Path
 
 from aila.agents.base import AgentDeps, BaseAgent
-from aila.core.config import PROJECT_ROOT
+from aila.core.config import PROJECT_ROOT, data_path
 from aila.core.logging import get_logger
 from aila.tools.schema import Tool, ToolParam, ToolResult
 
 log = get_logger("code_agent")
+
+
+def _qual(node) -> str:
+    """qualname legível de um nó de código (sem o prefixo 'code:')."""
+    return node.attrs.get("qualname") or node.id.removeprefix("code:")
 
 
 def _find_python() -> str | None:
@@ -59,6 +64,7 @@ class CodeAgent(BaseAgent):
     def __init__(self, deps: AgentDeps) -> None:
         super().__init__(deps)
         self.code_model = deps.settings.llm.code_model
+        self._cg_store = None          # GraphStore do Code Graph (lazy)
 
     def tools(self) -> list[Tool]:
         return [
@@ -125,6 +131,53 @@ class CodeAgent(BaseAgent):
                     ToolParam("content", "string", "novo conteúdo completo do arquivo"),
                 ],
                 handler=self._write_file,
+                agent=self.name,
+            ),
+            # --- Code Graph (Fase 6): mapa estrutural do PRÓPRIO código, read-only ---
+            Tool(
+                name="code.map",
+                description=(
+                    "Mapa do código da Aila (repo-map): totais de módulos/classes/funções "
+                    "e as funções mais chamadas. Use para se orientar antes de editar. "
+                    "refresh=true reconstrói o índice a partir do código atual."
+                ),
+                params=[ToolParam("refresh", "boolean", "reconstruir o índice", required=False)],
+                handler=self._map,
+                agent=self.name,
+            ),
+            Tool(
+                name="code.definition",
+                description="Onde uma função/classe é definida (módulo, arquivo e linha).",
+                params=[ToolParam("name", "string", "nome simples, ex.: authorize")],
+                handler=self._definition,
+                agent=self.name,
+            ),
+            Tool(
+                name="code.callers",
+                description="Quem CHAMA esta função (chamadas resolvidas por nome único).",
+                params=[ToolParam("name", "string", "nome da função, ex.: authorize")],
+                handler=self._callers,
+                agent=self.name,
+            ),
+            Tool(
+                name="code.callees",
+                description="O que esta função chama (dependências diretas).",
+                params=[ToolParam("name", "string", "nome da função")],
+                handler=self._callees,
+                agent=self.name,
+            ),
+            Tool(
+                name="code.impact",
+                description=(
+                    "Análise de IMPACTO: tudo que chama esta função direta ou "
+                    "indiretamente (raio de alcance). Use ANTES de alterar algo, "
+                    "para saber o que testar."
+                ),
+                params=[
+                    ToolParam("name", "string", "nome da função a alterar"),
+                    ToolParam("depth", "integer", "profundidade (default 3)", required=False),
+                ],
+                handler=self._impact,
                 agent=self.name,
             ),
         ]
@@ -246,3 +299,121 @@ class CodeAgent(BaseAgent):
             "written", allowed=True,
         )
         return ToolResult.success(f"Escrito {args['path']} ({len(content)} bytes; backup .bak).")
+
+    # ------------------------- Code Graph (Fase 6) --------------------- #
+    def _graph(self, *, refresh: bool = False):
+        """GraphStore do Code Graph, construído sob demanda (índice persistente)."""
+        from aila.cognition.graph import CodeGraph, GraphStore
+
+        if self._cg_store is None:
+            self._cg_store = GraphStore(data_path("code_graph.db"))
+        store = self._cg_store
+        if refresh or store.counts()["nodes"] == 0:
+            CodeGraph(store, PROJECT_ROOT).build(subdir="aila")
+        return store
+
+    def _find(self, store, name: str, types: tuple[str, ...]):
+        """Nós por nome simples ou por final do qualname (ex.: BaseAgent.authorize)."""
+        nodes = store.nodes_by_label(name, types)
+        if not nodes and "." in name:                      # tentativa por qualname
+            nodes = [n for n in (store.get_node(f"code:{name}"),) if n]
+        return nodes
+
+    async def _map(self, args: dict) -> ToolResult:
+        await self.authorize("code.graph.info", args)       # leitura → SAFE/L1
+        store = self._graph(refresh=bool(args.get("refresh")))
+        c = store.counts()
+        bt = c["by_type"]
+        top = store.conn.execute(
+            "SELECT target, COUNT(*) n FROM kg_edge WHERE relation='calls' "
+            "GROUP BY target ORDER BY n DESC LIMIT 15"
+        ).fetchall()
+        lines = [
+            f"Code Graph da Aila — {bt.get('module', 0)} módulos, "
+            f"{bt.get('class', 0)} classes, {bt.get('function', 0)} funções, "
+            f"{c['edges']} relações (defines/imports/calls).",
+            "\nFunções mais chamadas:",
+        ]
+        for r in top:
+            node = store.get_node(r["target"])
+            if node:
+                lines.append(f"  • {_qual(node)}  ({r['n']} chamadas)")
+        return ToolResult.success("\n".join(lines), **c)
+
+    async def _definition(self, args: dict) -> ToolResult:
+        await self.authorize("code.graph.get", args)
+        store = self._graph()
+        nodes = self._find(store, args["name"], ("function", "class"))
+        if not nodes:
+            return ToolResult.error(f"Não achei definição de '{args['name']}' no código da Aila.")
+        out = []
+        for n in nodes:
+            out.append(f"{_qual(n)} ({n.type}) — {self._owner_file(store, n)}"
+                       f":{n.attrs.get('lineno', '?')}")
+        return ToolResult.success("\n".join(out), count=len(out))
+
+    async def _callers(self, args: dict) -> ToolResult:
+        await self.authorize("code.graph.get", args)
+        return self._relation_report(args["name"], direction="in", verb="É chamada por")
+
+    async def _callees(self, args: dict) -> ToolResult:
+        await self.authorize("code.graph.get", args)
+        return self._relation_report(args["name"], direction="out", verb="Chama")
+
+    async def _impact(self, args: dict) -> ToolResult:
+        await self.authorize("code.graph.analyze", args)
+        store = self._graph()
+        nodes = self._find(store, args["name"], ("function",))
+        if not nodes:
+            return ToolResult.error(f"Função '{args['name']}' não encontrada no código.")
+        depth = max(1, int(args.get("depth") or 3))
+        # BFS reversa em 'calls': tudo que depende (direta/indiretamente) desta função
+        seen: set[str] = set()
+        frontier = {n.id for n in nodes}
+        for _ in range(depth):
+            nxt: set[str] = set()
+            for nid in frontier:
+                for src, _rel in store.neighbors(nid, relation="calls", direction="in"):
+                    if src not in seen:
+                        seen.add(src); nxt.add(src)
+            frontier = nxt
+            if not frontier:
+                break
+        if not seen:
+            return ToolResult.success(
+                f"Nada chama '{args['name']}' (por nome único) — impacto local.", impacted=0)
+        quals = sorted(_qual(store.get_node(i)) for i in seen if store.get_node(i))
+        body = "\n".join(f"  • {q}" for q in quals)
+        return ToolResult.success(
+            f"Alterar '{args['name']}' pode afetar {len(quals)} função(ões) "
+            f"(até {depth} níveis):\n{body}\n\nDica: rode os testes que cobrem esses pontos.",
+            impacted=len(quals),
+        )
+
+    def _relation_report(self, name: str, *, direction: str, verb: str) -> ToolResult:
+        store = self._graph()
+        nodes = self._find(store, name, ("function",))
+        if not nodes:
+            return ToolResult.error(f"Função '{name}' não encontrada no código.")
+        quals: set[str] = set()
+        for n in nodes:
+            for other, _rel in store.neighbors(n.id, relation="calls", direction=direction):
+                node = store.get_node(other)
+                if node:
+                    quals.add(_qual(node))
+        if not quals:
+            return ToolResult.success(f"{verb} nada (resolvido por nome único).", count=0)
+        body = "\n".join(f"  • {q}" for q in sorted(quals))
+        return ToolResult.success(f"{name} — {verb.lower()}:\n{body}", count=len(quals))
+
+    def _owner_file(self, store, node) -> str:
+        """Sobe pela relação 'defines' até o módulo p/ achar o arquivo."""
+        cur = node
+        for _ in range(6):
+            if cur.type == "module":
+                return cur.attrs.get("file", _qual(cur))
+            ins = store.neighbors(cur.id, relation="defines", direction="in")
+            if not ins:
+                break
+            cur = store.get_node(ins[0][0]) or cur
+        return _qual(node).rsplit(".", 1)[0]

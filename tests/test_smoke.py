@@ -697,6 +697,44 @@ def test_code_graph(tmp_path: Path):
     assert graph.counts() == c1
 
 
+def test_code_agent_graph_tools(tmp_path: Path):
+    """Fase 6: o Code Agent usa o Code Graph (repo-map, definição, callers,
+    impacto) — tudo read-only (SAFE/L1) e ancorado no código REAL da Aila."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.code_agent import CodeAgent
+    from aila.cognition.graph import GraphStore
+
+    s = get_settings()
+    audit = AuditLog(tmp_path / "a.jsonl")
+    pm = PermissionManager(s.security, audit)
+    deps = AgentDeps(settings=s, permissions=pm,
+                     sandbox=PathSandbox(tmp_path / "ws"), llm=None)
+    agent = CodeAgent(deps)
+    agent._cg_store = GraphStore(tmp_path / "cg.db")   # não polui o data dir do usuário
+    tools = {t.name: t for t in agent.tools()}
+
+    async def go():
+        # repo-map da própria Aila
+        m = await tools["code.map"].handler({})
+        assert m.ok and m.data["nodes"] > 100 and m.data["by_type"]["function"] > 50
+
+        # authorize() é definido em base.py e chamado por muitos handlers
+        d = await tools["code.definition"].handler({"name": "authorize"})
+        assert d.ok and "authorize" in d.content and "base.py" in d.content
+
+        callers = await tools["code.callers"].handler({"name": "authorize"})
+        assert callers.ok and callers.data["count"] > 5   # vários handlers chamam authorize
+
+        imp = await tools["code.impact"].handler({"name": "authorize", "depth": 2})
+        assert imp.ok and imp.data["impacted"] > 0
+
+        # nome inexistente → erro claro (não quebra)
+        miss = await tools["code.definition"].handler({"name": "naoexiste_xyz"})
+        assert not miss.ok
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig

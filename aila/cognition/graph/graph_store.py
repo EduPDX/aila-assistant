@@ -70,6 +70,10 @@ class GraphStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
+        # WAL + synchronous=NORMAL: commits ~10x mais baratos (build do Code Graph
+        # faz milhares de upserts). Seguro p/ app local single-user.
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.executescript(_SCHEMA)
         self.conn.commit()
         # índice de adjacência em RAM: node -> [(neighbor, relation, weight, edge_id)]
@@ -215,6 +219,23 @@ class GraphStore:
                    if r["label"] and r["label"].lower() in t]
         matched.sort(key=lambda il: len(il[1]), reverse=True)
         return [i for i, _l in matched[:limit]]
+
+    def nodes_by_label(self, label: str, types: tuple[str, ...] | None = None) -> list[GraphNode]:
+        """Nós com ``label`` exato (opcionalmente filtrando por ``type``)."""
+        q = f"SELECT {_NODE_COLS} FROM kg_node WHERE label = ?"
+        args: list[Any] = [label]
+        if types:
+            q += f" AND type IN ({','.join('?' * len(types))})"
+            args.extend(types)
+        return [GraphNode.from_row(dict(r)) for r in self.conn.execute(q, args)]
+
+    def neighbors(self, node_id: str, *, relation: str | None = None,
+                  direction: str = "out") -> list[tuple[str, str]]:
+        """(vizinho, relação) de um nó, filtrando por relação/direção. Usa o índice
+        em RAM. direction: 'out' (segue a aresta) | 'in' (inverte) | 'both'."""
+        self._ensure_index()
+        return [(m, rel) for (m, rel, _w, _eid) in self._edges_of(node_id, direction)
+                if relation is None or rel == relation]
 
     def related(self, node_id: str, limit: int = 10) -> list[dict]:
         """Vizinhos diretos ordenados por peso da aresta (desc)."""
