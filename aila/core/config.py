@@ -235,6 +235,13 @@ class MCPServerConfig(BaseModel):
     enabled: bool = True
 
 
+class SkillsConfig(BaseModel):
+    """Receitas nomeadas (skill.<nome>) que compõem tools existentes. Embutidas
+    sempre disponíveis; ``dir`` aponta p/ skills externas .yaml opcionais."""
+    enabled: bool = True
+    dir: str = "./skills"
+
+
 class MCPConfig(BaseModel):
     """Conecta servidores MCP externos como ferramentas (opt-in, offline-safe).
 
@@ -268,6 +275,7 @@ class Settings(BaseSettings):
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    skills: SkillsConfig = Field(default_factory=SkillsConfig)
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)

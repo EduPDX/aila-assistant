@@ -654,6 +654,17 @@ def build_engine(
         memory=memory, network=network,
     )
     manager = AgentManager(deps)
+    # Skills (Fase 8): receitas nomeadas (skill.<nome>) registradas no MESMO
+    # registry — cada passo passa pela segurança da tool que invoca.
+    if settings.skills.enabled:
+        from aila.cognition.skills import load_skills, register_skills, SkillRunner
+        from aila.core.event_bus import bus as _bus
+
+        runner = SkillRunner(manager.registry, bus=_bus)
+        skills = load_skills(_resolve(settings.skills.dir) if settings.skills.dir else None)
+        n = register_skills(manager.registry, runner, skills)
+        log.info(f"{n} skill(s) registrada(s)")
+
     engine = AilaEngine(
         settings, llm, manager, store=store, memory=memory,
         providers=providers, network=network,

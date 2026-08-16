@@ -913,6 +913,96 @@ def test_mcp_disabled_is_noop():
     asyncio.run(go())
 
 
+def test_skill_runner_templating_and_chaining():
+    """Fase 8: SkillRunner interpola args, encadeia via save_as, respeita optional,
+    e a skill vira uma tool (skill.<nome>) — sem reimplementar o tool-loop."""
+    from aila.cognition.skills import (
+        Skill, SkillInput, SkillRunner, SkillStep, skill_to_tool,
+    )
+    from aila.tools.registry import ToolRegistry
+    from aila.tools.schema import Tool, ToolParam, ToolResult
+
+    reg = ToolRegistry()
+
+    async def _echo(a):
+        return ToolResult.success(a.get("text", ""))
+
+    async def _upper(a):
+        return ToolResult.success((a.get("text", "")).upper())
+
+    async def _boom(a):
+        return ToolResult.error("falhou de propósito")
+
+    reg.register(Tool("t.echo", "echo", [ToolParam("text", "string", "")], _echo, "t"))
+    reg.register(Tool("t.upper", "upper", [ToolParam("text", "string", "")], _upper, "t"))
+    reg.register(Tool("t.boom", "boom", [], _boom, "t"))
+
+    skill = Skill(
+        name="shout", description="ecoa e MAIÚSCULA",
+        inputs=[SkillInput("who", "string", "quem")],
+        steps=[
+            SkillStep("t.echo", {"text": "{who}"}, save_as="a"),
+            SkillStep("t.upper", {"text": "{a}"}, save_as="b"),
+        ],
+    )
+    runner = SkillRunner(reg)
+
+    async def go():
+        res = await runner.run(skill, {"who": "aila"})
+        assert res.ok
+        assert res.outputs["a"] == "aila" and res.outputs["b"] == "AILA"
+        assert "AILA" in res.content
+
+        # passo obrigatório que falha aborta; optional=True não aborta
+        s_fail = Skill("f", "", steps=[SkillStep("t.boom", {}), SkillStep("t.echo", {"text": "x"})])
+        assert (await runner.run(s_fail)).ok is False
+        s_opt = Skill("o", "", steps=[SkillStep("t.boom", {}, optional=True),
+                                      SkillStep("t.echo", {"text": "x"}, save_as="z")])
+        r_opt = await runner.run(s_opt)
+        assert r_opt.ok and r_opt.outputs["z"] == "x"
+
+        # skill como tool + validação de input obrigatório
+        reg.register(skill_to_tool(skill, runner))
+        tool = reg.get("skill.shout")
+        assert tool is not None and [p.name for p in tool.params] == ["who"]
+        assert (await tool.handler({})).ok is False           # falta 'who'
+        assert (await tool.handler({"who": "x"})).ok is True
+
+    asyncio.run(go())
+
+
+def test_builtin_skill_change_analysis(tmp_path: Path):
+    """Fase 8: skill embutida change_analysis compõe code.definition + code.impact
+    (tools reais) — cada passo passa por authorize(); resultado agrega os dois."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.code_agent import CodeAgent
+    from aila.cognition.graph import GraphStore
+    from aila.cognition.skills import SkillRunner, load_skills, register_skills
+    from aila.tools.registry import ToolRegistry
+
+    s = get_settings()
+    deps = AgentDeps(settings=s, permissions=PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl")),
+                     sandbox=PathSandbox(tmp_path / "ws"), llm=None)
+    agent = CodeAgent(deps)
+    agent._cg_store = GraphStore(tmp_path / "cg.db")
+
+    reg = ToolRegistry()
+    for t in agent.tools():
+        reg.register(t)
+    runner = SkillRunner(reg)
+    n = register_skills(reg, runner, load_skills(None))       # só embutidas
+    assert n >= 2 and reg.get("skill.change_analysis") is not None
+
+    async def go():
+        r = await reg.get("skill.change_analysis").handler({"name": "authorize"})
+        assert r.ok
+        assert "authorize" in r.content and "base.py" in r.content   # veio do code.definition
+        # nome faltando → erro claro
+        assert (await reg.get("skill.change_analysis").handler({})).ok is False
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig
