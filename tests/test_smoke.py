@@ -480,6 +480,57 @@ def test_memory_cognitive_schema(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_graph_store(tmp_path: Path):
+    """Fase 2 (grafo): upsert idempotente + vizinhança + caminho + related +
+    contagens, sobre o motor nativo (sem networkx)."""
+    from aila.cognition.graph import GraphStore, edge_id
+
+    g = GraphStore(tmp_path / "kg.db")
+    # nós
+    for nid, typ, label in [
+        ("user", "user", "Você"), ("DirectResponses", "concept", "respostas diretas"),
+        ("Aila", "project", "Aila"), ("ModelRouter", "concept", "ModelRouter"),
+        ("Gemini", "model", "Gemini"), ("Ollama", "model", "Ollama"),
+    ]:
+        g.upsert_node(nid, typ, label)
+    # arestas
+    g.upsert_edge("user", "DirectResponses", "prefers", confidence=0.94)
+    g.upsert_edge("user", "Aila", "works_on")
+    g.upsert_edge("Aila", "ModelRouter", "uses")
+    g.upsert_edge("Aila", "Gemini", "uses")
+    g.upsert_edge("ModelRouter", "Ollama", "relates_to", weight=2.0)
+
+    c = g.counts()
+    assert c["nodes"] == 6 and c["edges"] == 5
+    assert c["by_type"]["model"] == 2
+
+    # idempotência: reupsert da MESMA aresta não duplica (atualiza)
+    same = g.upsert_edge("user", "DirectResponses", "prefers", confidence=0.97)
+    assert same == edge_id("user", "DirectResponses", "prefers")
+    assert g.counts()["edges"] == 5
+    assert g.get_edge(same).confidence == 0.97
+
+    # vizinhança de Aila (depth 1): user (in), ModelRouter, Gemini (out)
+    nb = g.neighborhood("Aila", depth=1)
+    ids = {n["id"] for n in nb["nodes"]}
+    assert {"Aila", "user", "ModelRouter", "Gemini"} <= ids
+    assert "Ollama" not in ids                     # está a 2 hops
+
+    # caminho user → Ollama (via Aila → ModelRouter → Ollama)
+    p = g.path("user", "Ollama")
+    assert p and p[0] == "user" and p[-1] == "Ollama" and "ModelRouter" in p
+
+    # related de ModelRouter ordenado por peso (Ollama tem weight 2.0)
+    rel = g.related("ModelRouter")
+    assert rel and rel[0]["id"] == "Ollama"
+
+    # touch marca last_recalled sem mexer na importância (sinais independentes)
+    imp = g.get_node("Aila").importance
+    g.touch("Aila")
+    assert g.get_node("Aila").last_recalled and g.get_node("Aila").importance == imp
+    g.close()
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig
