@@ -37,9 +37,11 @@ export class PoseBuffer {
     this.gaze.active = false;
     this.ik.clear();
   }
-  /** define o alvo de mundo da MÃO (side='left'|'right'); o IK resolve o braço */
-  setHandTarget(side, x, y, z, weight = 1) {
-    this.ik.set(side, { x, y, z, weight });
+  /** define o alvo de mundo da MÃO (side='left'|'right'); o IK resolve o braço.
+   *  orient (opcional) = {ref:'thumb'|'palm', dir:[x,y,z] mundo, weight} → o IK
+   *  rola a mão p/ orientar (ex.: polegar pra cima, palma pra frente). */
+  setHandTarget(side, x, y, z, weight = 1, orient = null) {
+    this.ik.set(side, { x, y, z, weight, orient });
   }
   /** soma rotação (rad) num osso */
   addRot(bone, x, y, z) {

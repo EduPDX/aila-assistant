@@ -14,7 +14,7 @@ import { GESTURE_ALIASES } from '../profiles.js';
 export function createGestureIKLayer() {
   const V = () => new THREE.Vector3();
   const RU = V(), LU = V(), NK = V(), HP = V(), S = V(), E = V(), H = V();
-  const right = V(), up = V(), fwd = V(), off = V(), world = V();
+  const right = V(), up = V(), fwd = V(), off = V(), world = V(), dirTmp = V();
   const w = { left: 0, right: 0 };
   const last = { left: V(), right: V() };
   const hasLast = { left: false, right: false };
@@ -59,9 +59,28 @@ export function createGestureIKLayer() {
           ctx.handPose[side] = 'relaxed';
         }
 
+        // orientação do punho (só enquanto ativo): resolve dir → vetor de mundo
+        let orient = null;
+        if (active && g.orient) {
+          const d = resolveDir(g.orient.dir, right, up, fwd, dirTmp);
+          orient = { ref: g.orient.ref, dir: [d.x, d.y, d.z], weight: w[side] };
+        }
         const tgt = active ? world : (hasLast[side] ? last[side] : null);
-        if (tgt) buf.setHandTarget(side, tgt.x, tgt.y, tgt.z, w[side]);
+        if (tgt) buf.setHandTarget(side, tgt.x, tgt.y, tgt.z, w[side], orient);
       }
     },
   };
+}
+
+// dir (nome) → vetor de mundo, no frame do avatar (out reusado, 0-GC)
+function resolveDir(name, right, up, fwd, out) {
+  switch (name) {
+    case 'up':      return out.copy(up);
+    case 'down':    return out.copy(up).negate();
+    case 'forward': return out.copy(fwd);
+    case 'back':    return out.copy(fwd).negate();
+    case 'right':   return out.copy(right);
+    case 'left':    return out.copy(right).negate();
+    default:        return out.copy(up);
+  }
 }

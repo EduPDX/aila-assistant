@@ -15,13 +15,16 @@
 //  (hand_explain) e o espelho p/ o esquerdo entram depois que o direito validar.
 // ============================================================
 
+//  orient (opcional): orienta o PUNHO após o IK posicionar a mão —
+//    ref = 'thumb' (direção do polegar) ou 'palm' (normal da palma);
+//    dir = 'up' | 'down' | 'forward' | 'back' (no frame do avatar).
 export const GESTURES = {
   // apontar à frente: braço estendido p/ frente, indicador esticado
-  point:     { side: 'right', target: [0.28, -0.04, 0.82], hand: 'point' },
+  point:     { side: 'right', target: [0.30, -0.10, 0.86], hand: 'point' },
   // joinha: mão à frente do peito, polegar p/ cima
-  thumbs_up: { side: 'right', target: [0.22, 0.10, 0.52], hand: 'thumbs_up' },
-  // aceno: mão levantada à altura do ombro/cabeça, palma aberta
-  wave:      { side: 'right', target: [0.42, 0.52, 0.34], hand: 'open' },
+  thumbs_up: { side: 'right', target: [0.26, 0.02, 0.60], hand: 'thumbs_up', orient: { ref: 'thumb', dir: 'up' } },
+  // aceno: mão levantada à altura do ombro/cabeça, palma p/ frente
+  wave:      { side: 'right', target: [0.42, 0.52, 0.34], hand: 'open', orient: { ref: 'palm', dir: 'forward' } },
   // pensar: mão perto do queixo, dedos semi-dobrados + leve inclinação de cabeça
   think:     { side: 'right', target: [0.10, 0.28, 0.34], hand: 'thinking', head: [10, -8, 0] },
 };

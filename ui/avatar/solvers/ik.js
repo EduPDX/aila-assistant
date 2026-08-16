@@ -19,6 +19,10 @@ export function createArmIK() {
   const na = new THREE.Vector3(), nb = new THREE.Vector3();
   const qDelta = new THREE.Quaternion(), qWorld = new THREE.Quaternion(), qPar = new THREE.Quaternion();
   const qFk = new THREE.Quaternion();
+  // orientação do punho (roll): temporários
+  const refA = new THREE.Vector3(), refW = new THREE.Vector3(), dirW = new THREE.Vector3();
+  const rp = new THREE.Vector3(), dp = new THREE.Vector3(), axisW = new THREE.Vector3(), cw = new THREE.Vector3();
+  const kn = new THREE.Vector3(), fg = new THREE.Vector3();
 
   // gira o osso p/ que a direção `from` (mundo) aponte p/ `to` (mundo)
   function align(node, from, to, weight) {
@@ -32,6 +36,51 @@ export function createArmIK() {
     if (weight >= 0.999) node.quaternion.copy(qWorld);
     else { qFk.copy(node.quaternion); node.quaternion.slerpQuaternions(qFk, qWorld, weight); }
     node.updateWorldMatrix(false, true);        // propaga p/ os filhos (cotovelo/mão)
+  }
+
+  // vetor de referência da MÃO (mundo): 'thumb' = direção do polegar;
+  // 'palm' = normal da palma (linha dos nós × direção dos dedos). Derivado do rig.
+  function handRefVec(rig, side, refType, handW, out) {
+    if (refType === 'thumb') {
+      const m = rig.bone(side + 'ThumbMetacarpal'), d = rig.bone(side + 'ThumbDistal');
+      if (m && d) {
+        out.setFromMatrixPosition(d.matrixWorld);
+        refA.setFromMatrixPosition(m.matrixWorld);
+        return out.sub(refA);
+      }
+    }
+    const ip = rig.bone(side + 'IndexProximal'), lp = rig.bone(side + 'LittleProximal'), mp = rig.bone(side + 'MiddleProximal');
+    if (ip && lp && mp) {
+      kn.setFromMatrixPosition(ip.matrixWorld);
+      refA.setFromMatrixPosition(lp.matrixWorld);
+      kn.sub(refA);                                      // linha dos nós (index - little)
+      fg.setFromMatrixPosition(mp.matrixWorld).sub(handW);
+      return out.crossVectors(kn, fg);                   // normal da palma
+    }
+    return out.set(0, 0, 0);
+  }
+
+  // rola a MÃO em torno do antebraço p/ alinhar sua referência (ref) à direção
+  // desejada (dir, mundo). Não muda a POSIÇÃO da mão — só o "twist" do punho.
+  function rollWrist(rig, side, hand, elbowW, handW, orient) {
+    axisW.copy(handW).sub(elbowW);
+    if (axisW.lengthSq() < 1e-8) return;
+    axisW.normalize();
+    handRefVec(rig, side, orient.ref, handW, refW);
+    dirW.set(orient.dir[0], orient.dir[1], orient.dir[2]);
+    rp.copy(refW).addScaledVector(axisW, -refW.dot(axisW));   // ref ⟂ eixo
+    dp.copy(dirW).addScaledVector(axisW, -dirW.dot(axisW));   // dir ⟂ eixo
+    if (rp.lengthSq() < 1e-8 || dp.lengthSq() < 1e-8) return;
+    rp.normalize(); dp.normalize();
+    cw.crossVectors(rp, dp);
+    const angle = Math.atan2(cw.dot(axisW), rp.dot(dp)) * (orient.weight ?? 1);
+    qDelta.setFromAxisAngle(axisW, angle);
+    hand.getWorldQuaternion(qWorld);
+    qWorld.premultiply(qDelta);
+    hand.parent.getWorldQuaternion(qPar);
+    qWorld.premultiply(qPar.invert());
+    hand.quaternion.copy(qWorld);
+    hand.updateWorldMatrix(false, true);
   }
 
   return {
@@ -75,6 +124,12 @@ export function createArmIK() {
         E.setFromMatrixPosition(lower.matrixWorld);
         H.setFromMatrixPosition(hand.matrixWorld);
         align(lower, dCur.copy(H).sub(E), dWant.copy(T).sub(E), w);
+        // 3) orientação do punho (opcional): rola a mão em torno do antebraço
+        if (tgt.orient) {
+          E.setFromMatrixPosition(lower.matrixWorld);
+          H.setFromMatrixPosition(hand.matrixWorld);
+          rollWrist(rig, side, hand, E, H, tgt.orient);
+        }
       }
     },
   };
