@@ -75,9 +75,26 @@ class AilaEngine:
         self.agents = agents
         self.store = store
         self.memory = memory                          # store (count / MemoryAgent)
-        self.mem = MemoryManager(memory) if memory else None   # fachada multi-tipo
+        # Knowledge Graph (o que a Aila APRENDE das conversas) → retrieval HÍBRIDO
+        # (vetorial + entidades + traversal). Mesmo arquivo que a UID /api/graph lê.
+        self.kgraph = None
+        if memory is not None:
+            from aila.cognition.graph import GraphStore
+            from aila.core.config import data_path
+
+            self.kgraph = GraphStore(data_path("knowledge.db"))
+        self.mem = MemoryManager(memory, graph=self.kgraph) if memory else None
         self.session_id: int | None = None
         self.bus = event_bus          # backbone de eventos (subscribers desacoplados)
+        # Consolidação ("dreaming") CONSERVADORA: constrói/atualiza o KG a partir
+        # das entidades co-ocorrentes nas memórias; roda em background a cada N turnos.
+        self.consolidator = None
+        if memory is not None:
+            from aila.cognition.memory.consolidation import Consolidator
+
+            self.consolidator = Consolidator(memory, self.kgraph, bus=self.bus)
+        self._consolidating = False
+        self._turns = 0
         self.emotions = EmotionEngine()
         # Guardrails (Fase 7): trilho de saída — redige segredos antes de
         # exibir/falar/gravar. Complementa authorize()/policy/injection.
@@ -228,6 +245,30 @@ class AilaEngine:
             blocks.append(f"Memórias relevantes:\n{linhas}")
         return "\n\n".join(blocks)
 
+    def _maybe_consolidate(self, every: int = 4) -> None:
+        """A cada `every` turnos, roda a consolidação em BACKGROUND (constrói o KG
+        das conversas). Não bloqueia a resposta; nunca há duas rodando ao mesmo tempo."""
+        if self.consolidator is None or self._consolidating:
+            return
+        self._turns += 1
+        if self._turns % every != 0:
+            return
+        self._consolidating = True
+
+        async def _run() -> None:
+            try:
+                rep = await self.consolidator.consolidate()
+                log.info(f"consolidação (background): {rep}")
+            except Exception as exc:  # noqa: BLE001 - nunca deve derrubar o chat
+                log.warning(f"consolidação falhou: {exc!r}")
+            finally:
+                self._consolidating = False
+
+        try:
+            asyncio.create_task(_run())
+        except RuntimeError:           # sem event loop (ex.: testes síncronos)
+            self._consolidating = False
+
     async def _remember(self, user_text: str, answer: str) -> None:
         """Grava a troca como memória EPISÓDICA (best-effort)."""
         if self.mem is None or not self.settings.memory.store_conversations:
@@ -354,6 +395,7 @@ class AilaEngine:
         self.context.add_assistant(final_text)
         self._persist("assistant", final_text)
         await self._remember(user_text, final_text)
+        self._maybe_consolidate()          # "dreaming" em background (não bloqueia o turno)
 
         # Behavior Planner: decide o comportamento pelo SIGNIFICADO e emite ANTES
         # do assistant.message (que dispara o TTS) — o avatar já assume a

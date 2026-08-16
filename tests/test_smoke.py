@@ -1249,6 +1249,64 @@ def test_graph_view_for_subconscious(tmp_path: Path):
     assert empty["nodes"] == [] and empty["communities"] == []
 
 
+def test_entities_extract():
+    """Extrator de entidades: pega CamelCase/dotted/Capitalizado; ignora
+    scaffolding (Usuário/Aila) e palavras comuns."""
+    from aila.cognition.memory.entities import extract
+
+    ents = extract("Usuário: como está o ModelRouter e o aila.core? Aila: o Gemini responde")
+    assert "ModelRouter" in ents and "aila.core" in ents and "Gemini" in ents
+    assert "aila" not in [e.lower() for e in ents]      # scaffolding fora
+    assert "como" not in ents and "está" not in ents    # stopwords fora
+
+
+def test_knowledge_graph_grows_from_conversation(tmp_path: Path):
+    """Plugagem: conversas → memórias com entidades → consolidação constrói o
+    Knowledge Graph (co-ocorrência) → to_view p/ a UI. Fecha o ciclo do subconsciente."""
+    from aila.cognition.graph import GraphStore, edge_id
+    from aila.cognition.graph.view import to_view
+    from aila.cognition.memory.consolidation import Consolidator
+    from aila.memory.manager import MemoryManager
+    from aila.memory.store import MemoryStore
+
+    vocab = ["modelrouter", "gemini", "provedor", "escolhe", "chama", "hoje", "precisa"]
+    async def embed(texts):
+        return [[float(t.lower().count(w)) + 0.01 for w in vocab] for t in texts]
+
+    async def go():
+        store = MemoryStore(tmp_path / "mem.db", embed)
+        graph = GraphStore(tmp_path / "know.db")
+        mgr = MemoryManager(store, graph=graph)
+
+        # duas conversas em que ModelRouter e Gemini CO-OCORREM (evidência ≥ 2)
+        await mgr.remember_exchange("falei do ModelRouter e do Gemini hoje",
+                                    "o ModelRouter escolhe o Gemini", 1)
+        await mgr.remember_exchange("o ModelRouter chama o Gemini quando precisa",
+                                    "sim, ModelRouter usa Gemini", 1)
+
+        rep = await Consolidator(store, graph, min_evidence=2).consolidate()
+        assert rep["nodes"] > 0 and rep["edges"] >= 1
+
+        # nós ModelRouter e Gemini existem; aresta entre eles (co-ocorreram 2x;
+        # a co-ocorrência ordena os pares alfabeticamente → Gemini→ModelRouter)
+        assert graph.get_node("ModelRouter") is not None
+        assert graph.get_node("Gemini") is not None
+        assert (graph.get_edge(edge_id("Gemini", "ModelRouter", "relates_to")) is not None
+                or graph.get_edge(edge_id("ModelRouter", "Gemini", "relates_to")) is not None)
+
+        # view p/ a UI: nós com comunidade/grau, comunidades listadas
+        view = to_view(graph, "knowledge")
+        labels = {n["label"] for n in view["nodes"]}
+        assert "ModelRouter" in labels and "Gemini" in labels
+        assert all("community" in n and "degree" in n for n in view["nodes"])
+
+        # recall agora é HÍBRIDO (grafo presente) e NÃO reforça (ajuste v2 #2)
+        hits = await mgr.recall("ModelRouter", top_k=3)
+        assert isinstance(hits, list)
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig
