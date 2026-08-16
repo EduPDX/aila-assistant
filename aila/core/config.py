@@ -109,6 +109,8 @@ class SecurityConfig(BaseModel):
     max_repeated_calls: int = 3         # mesma tool+args repetida N vezes = loop
     command_denylist: list[str] = Field(default_factory=list)  # regex extra p/ terminal
     command_allowlist: list[str] = Field(default_factory=list)  # prefixos seguros extra
+    # ----- Fase 7: guardrails (trilho de saída — redação de segredos) -----
+    guardrails: bool = True             # redige segredos vazados na resposta final
 
 
 class AgentsConfig(BaseModel):

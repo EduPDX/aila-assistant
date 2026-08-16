@@ -735,6 +735,76 @@ def test_code_agent_graph_tools(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_guardrails_output_redaction():
+    """Fase 7: o output rail redige segredos conhecidos e deixa prosa comum intacta."""
+    from types import SimpleNamespace
+
+    from aila.security.guardrails import Guardrails
+
+    g = Guardrails(None)  # habilitado por padrão
+    r = g.check_output("minha chave é sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX12345 pronto")
+    assert r.modified and "sk-proj" not in r.text and "openai_key" in r.findings
+
+    # prosa comum não é tocada
+    r2 = g.check_output("Olá! Vou te ajudar com o código agora.")
+    assert not r2.modified and r2.text.startswith("Olá")
+
+    # atribuição: preserva o rótulo, redige só o valor
+    r3 = g.check_output('config: password="hunter2superseguro"')
+    assert r3.modified and "hunter2superseguro" not in r3.text and "password" in r3.text
+
+    # o segredo NUNCA aparece nos findings (só o tipo)
+    assert all("sk-" not in f and "hunter" not in f for f in r.findings + r3.findings)
+
+    # desabilitado por config → no-op transparente
+    off = Guardrails(SimpleNamespace(guardrails=False))
+    assert off.check_output("sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX12345").modified is False
+
+
+def test_guardrails_engine_redacts_before_persist():
+    """Integração: um segredo na resposta é redigido ANTES do assistant.message
+    e ANTES de entrar no contexto/memória."""
+    from aila.core.config import get_settings
+    from aila.core.engine import build_engine
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+
+    leak = "Achei no arquivo: AKIAABCDEFGHIJKLMNOP e sk-proj-ABCDEFGHIJKLMNOPQRSTUV123456."
+
+    class FakeLLM(LLMBackend):
+        name = "ollama"
+        default_model = "fake"
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+        async def chat(self, messages, **k):
+            yield ChatChunk(content=leak, done=True)
+        async def complete(self, messages, **k):
+            return leak
+        async def list_models(self):
+            return ["fake"]
+        async def health(self):
+            return True
+
+    s = get_settings()
+    s.memory.enabled = False
+    s.routing.enabled = False
+    eng = build_engine(s, FakeLLM())
+
+    events: list[tuple[str, dict]] = []
+    async def emit(ev, payload):
+        events.append((ev, payload))
+
+    async def go():
+        out = await eng.process("o que tem no arquivo?", emit)
+        assert "AKIA" not in out and "sk-proj" not in out and "«segredo removido»" in out
+        msg = next(p for e, p in events if e == "assistant.message")
+        assert "AKIA" not in msg["text"] and "sk-proj" not in msg["text"]
+        assert any(e == "guardrail.triggered" for e, _ in events)
+        # não vazou p/ o contexto da conversa
+        assert all("AKIA" not in (m.content or "") for m in eng.context._messages)
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig

@@ -40,6 +40,7 @@ from aila.llm.messages import to_provider_messages
 from aila.llm.router import ModelRouter, RouteTask
 from aila.memory.manager import MemoryManager
 from aila.memory.store import MemoryStore
+from aila.security.guardrails import Guardrails
 from aila.security.injection import is_untrusted_source, wrap_external
 from aila.security.limits import CallBudget
 from aila.security.permissions import PermissionDenied
@@ -78,6 +79,9 @@ class AilaEngine:
         self.session_id: int | None = None
         self.bus = event_bus          # backbone de eventos (subscribers desacoplados)
         self.emotions = EmotionEngine()
+        # Guardrails (Fase 7): trilho de saída — redige segredos antes de
+        # exibir/falar/gravar. Complementa authorize()/policy/injection.
+        self.guardrails = Guardrails(settings.security)
         # Behavior Planner: decide o comportamento do avatar pelo SIGNIFICADO
         # da resposta (emoção/postura/olhar/ritmo/gestos), antes do TTS.
         self.planner = BehaviorPlanner(self.emotions)
@@ -321,6 +325,17 @@ class AilaEngine:
                 self.context.add_tool(name, _safe_tool_context(name, result.content))
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
+
+        # Guardrail de SAÍDA: redige segredos ANTES de gravar no contexto/memória
+        # e antes do TTS (a resposta falada e persistida já sai limpa).
+        guarded = self.guardrails.check_output(final_text)
+        if guarded.modified:
+            final_text = guarded.text
+            await emit("guardrail.triggered", {"kinds": guarded.findings})
+            if getattr(self, "audit", None) is not None:
+                self.audit.record("guardrail.output", "guardrails",
+                                  {"kinds": guarded.findings}, "redacted", allowed=True)
+            log.warning(f"guardrail: {len(guarded.findings)} segredo(s) redigido(s) na saída")
 
         self.context.add_assistant(final_text)
         self._persist("assistant", final_text)
