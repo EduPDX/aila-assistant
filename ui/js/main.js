@@ -6,6 +6,7 @@ import { State, STATUS_LABEL } from './state.js';
 import { connectWS, wsSend } from './ws.js';
 import * as chat from './chat.js';
 import * as sidebar from './sidebar.js';
+import * as mind from './mind.js';
 import * as avatar from './avatar.js';
 import * as voice from './voice.js';
 import { initSettings, openSettings, closeSettings, settingsTab, loadStatus, setLlm } from './settings.js';
@@ -21,10 +22,12 @@ import { initBoot } from './shell/boot.js';
 
 /* ---------- abas ---------- */
 function showTab(t) {
-  ['avatar', 'chat'].forEach((x) => {
+  ['avatar', 'chat', 'mind'].forEach((x) => {
     byId('pane-' + x).classList.toggle('active', x === t);
     byId('tab-' + x).classList.toggle('active', x === t);
   });
+  document.body.dataset.tab = t;      // CSS esconde o mini-subconsciente na aba 🧠
+  mind.showMind(t === 'mind');        // poll só enquanto a aba está visível
 }
 
 /* ---------- permissão ---------- */
@@ -85,6 +88,7 @@ function wireUI() {
   byId('btn-hamb').onclick = () => setDrawer(byId('drawer').classList.contains('collapsed'));
   byId('tab-avatar').onclick = () => showTab('avatar');
   byId('tab-chat').onclick = () => showTab('chat');
+  byId('tab-mind').onclick = () => showTab('mind');
   byId('btn-send').onclick = chat.send;
   byId('mic').onclick = voice.toggleMic;
   byId('attach').onclick = () => byId('attachfile').click();

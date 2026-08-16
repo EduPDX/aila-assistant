@@ -41,6 +41,7 @@
       <div class="tabs">
         <button id="tab-avatar" class="active">Avatar</button>
         <button id="tab-chat">Conversa</button>
+        <button id="tab-mind" title="O que a Aila está pensando">🧠 Mente</button>
       </div>
       <div class="spacer"></div>
       <div class="statuscluster" id="topbar-status"></div>
@@ -65,6 +66,24 @@
             <textarea id="input" rows="1" placeholder="Fale com a Aila…  (Enter envia)"></textarea>
             <button class="icon-btn" id="mic" title="Falar">🎙</button>
             <button class="icon-btn send" id="btn-send" title="Enviar">➤</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="pane-mind" class="pane mind">
+        <div class="mind-scroll">
+          <div class="mind-h">🧠 Subconsciente <span class="muted">— o que a Aila está processando</span></div>
+          <div class="mind-sec">
+            <div class="mind-t">Cognição</div>
+            <div class="mind-tiles" id="mind-totals"></div>
+          </div>
+          <div class="mind-sec">
+            <div class="mind-t">Atividade recente</div>
+            <div class="mind-feed" id="mind-feed"><div class="muted">sem atividade cognitiva ainda</div></div>
+          </div>
+          <div class="mind-sec">
+            <div class="mind-t">Memória de longo prazo <span class="muted" id="mind-memcount"></span></div>
+            <div class="mind-mem" id="mind-mem"><div class="muted">—</div></div>
           </div>
         </div>
       </section>
