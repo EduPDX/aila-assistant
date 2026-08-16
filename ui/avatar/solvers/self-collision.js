@@ -3,9 +3,9 @@
 //
 //  Cápsulas/esferas simplificadas (SEM colisão por malha) montadas a partir
 //  dos ossos, com raio proporcional à escala do modelo (largura de ombros).
-//  Roda após applyBones()+updateMatrices(): amostra mão e antebraço, empurra
-//  o ALVO DA MÃO p/ fora dos colliders e deixa o IK (F2) resolver o braço.
-//  Suavização (damp) + histerese p/ não "pipocar" ao entrar/sair da colisão.
+//  PROATIVO (Fase D): roda ANTES do IK e constrange o ALVO DA MÃO — empurra o
+//  alvo p/ fora dos colliders, o IK resolve UMA vez p/ o alvo já seguro. Evita
+//  o ciclo IK↔colisão. Suavização (damp) + histerese p/ não "pipocar".
 // ============================================================
 import * as THREE from 'three';
 import { damp } from '../rig-core.js';
@@ -14,7 +14,7 @@ export function createSelfCollision() {
   const V = () => new THREE.Vector3();
   const hips = V(), neck = V(), head = V(), lLeg = V(), lKnee = V(), rLeg = V(), rKnee = V();
   const lU = V(), rU = V();
-  const cp = V(), d = V(), ab = V(), ap = V(), hand = V(), elbow = V(), mid = V(), want = V(), P = V();
+  const cp = V(), d = V(), ab = V(), ap = V(), P = V();
   // pool de colliders reusado (type 0=esfera[a,r], 1=cápsula[a,b,r])
   const pool = []; for (let i = 0; i < 6; i++) pool.push({ type: 0, a: V(), b: V(), r: 0 });
   let nCol = 0;
@@ -65,22 +65,21 @@ export function createSelfCollision() {
       addSphere(head, sw * 0.38);             // cabeça
       if (legs) { addCapsule(lLeg, lKnee, sw * 0.26); addCapsule(rLeg, rKnee, sw * 0.26); }
 
-      for (const side of ['left', 'right']) {
-        if (!wpos(rig, side + 'Hand', hand) || !wpos(rig, side + 'LowerArm', elbow)) continue;
-        mid.copy(hand).add(elbow).multiplyScalar(0.5);
-        P.copy(hand); const handPush = resolve(P); want.copy(P);           // mão p/ fora
-        P.copy(mid); const midPush = resolve(P);
-        if (midPush > 0) { ap.copy(P).sub(mid); want.addScaledVector(ap, 0.5); }  // antebraço: metade
-
+      // PROATIVO: constrange o ALVO DA MÃO (empurra p/ fora do corpo) ANTES do
+      // IK, preservando orientação/peso. Só age nos alvos que existem (buf.ik).
+      // Damp + histerese p/ estabilidade (converge, sem loop IK↔colisão).
+      for (const [side, tgt] of buf.ik) {
+        P.set(tgt.x, tgt.y, tgt.z);
+        const pushed = resolve(P);                    // empurra o alvo p/ fora dos colliders
         const st = state[side];
-        if (handPush + midPush > 0.0005) {
-          if (!st.on) { st.on = true; st.t.copy(hand); }                  // parte da posição atual (sem pulo)
-          st.t.set(damp(st.t.x, want.x, 14, dt), damp(st.t.y, want.y, 14, dt), damp(st.t.z, want.z, 14, dt));
-          buf.setHandTarget(side, st.t.x, st.t.y, st.t.z, 1);
-        } else if (st.on) {                                               // solta suave
-          st.t.set(damp(st.t.x, hand.x, 10, dt), damp(st.t.y, hand.y, 10, dt), damp(st.t.z, hand.z, 10, dt));
-          if (st.t.distanceTo(hand) < sw * 0.05) st.on = false;
-          else buf.setHandTarget(side, st.t.x, st.t.y, st.t.z, 1);
+        if (pushed > 0.0005) {
+          if (!st.on) { st.on = true; st.t.set(tgt.x, tgt.y, tgt.z); }   // parte do alvo (sem pulo)
+          st.t.set(damp(st.t.x, P.x, 16, dt), damp(st.t.y, P.y, 16, dt), damp(st.t.z, P.z, 16, dt));
+          buf.setHandTarget(side, st.t.x, st.t.y, st.t.z, tgt.weight, tgt.orient);
+        } else if (st.on) {                            // relaxa: volta suave ao alvo original
+          st.t.set(damp(st.t.x, tgt.x, 12, dt), damp(st.t.y, tgt.y, 12, dt), damp(st.t.z, tgt.z, 12, dt));
+          if (st.t.distanceTo(P) < sw * 0.03) st.on = false;
+          else buf.setHandTarget(side, st.t.x, st.t.y, st.t.z, tgt.weight, tgt.orient);
         }
       }
     },

@@ -174,18 +174,14 @@ export class AnimationController {
     // 2) limites anatômicos (clampa o buffer FK) e aplica no esqueleto
     this.bufferSolver.solve(this.rig, buf);
     this.rig.applyBones();
-    // solvers de posição (IK/colisão + updateMatrices, o passo mais caro) só
-    // quando os braços podem se aproximar do corpo — parada ao lado, pula tudo.
-    const armsActive = ctx.speech > 0.05 || ctx.gesture !== 'rest'
-      || !!ctx.handTarget || !!this._behavior || buf.ik.size > 0;
-    if (armsActive) {
-      this.rig.updateMatrices();
-      // 3) IK de gesto (se houver alvo de mão explícito)
-      if (buf.ik.size) { this.ikSolver.solve(this.rig, buf); this.rig.updateMatrices(); }
-      // 4) auto-colisão: checa a mão JÁ POSADA e empurra p/ fora do corpo
+    // solvers de posição (colisão→IK + updateMatrices, o passo mais caro) SÓ
+    // quando há alvo de mão (buf.ik). Parada ao lado (sem gesto) = pula tudo.
+    if (buf.ik.size) {
+      this.rig.updateMatrices();                     // corpo posado → colliders válidos
+      // 3) colisão PROATIVA: constrange o alvo p/ fora do corpo (antes do IK)
       this.collision.solve(this.rig, buf, ctx, dt);
-      // 5) reprocessa o IK se a colisão criou/ajustou um alvo
-      if (buf.ik.size) this.ikSolver.solve(this.rig, buf);
+      // 4) IK resolve o braço UMA vez p/ o alvo já seguro (cotovelo + orientação)
+      this.ikSolver.solve(this.rig, buf);
     }
     // 6) blendshapes + olhar + física secundária
     this.rig.finalize(dt);
