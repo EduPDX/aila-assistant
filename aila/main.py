@@ -81,10 +81,24 @@ async def lifespan(app: FastAPI):
             log.warning(f"Sistema de voz indisponível: {exc!r}")
 
     log.info(f"Aila pronta em http://{settings.host}:{settings.port}")
+    # Servidores MCP externos (opt-in, offline-safe): registra as tools deles no
+    # mesmo registry — cada uma passando por authorize(). Falha não derruba o app.
+    app.state.mcp = None
+    if settings.mcp.enabled:
+        from aila.tools.mcp_adapter import connect_and_register
+
+        try:
+            app.state.mcp = await connect_and_register(
+                settings.mcp, engine.agents.registry, engine.permissions)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"MCP indisponível: {exc!r}")
+
     log.info(f"Modo de rede: {network.mode} · somente-leitura: {settings.security.read_only}")
 
     yield
 
+    if app.state.mcp is not None:
+        await app.state.mcp.close_all()
     await llm.aclose()
 
 

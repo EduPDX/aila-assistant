@@ -226,6 +226,27 @@ class ProvidersConfig(BaseModel):
                 ("nvidia", self.nvidia)]
 
 
+class MCPServerConfig(BaseModel):
+    """Servidor MCP externo via stdio. ``command``+``args`` iniciam o processo."""
+    name: str = ""
+    command: str = ""                        # ex.: "npx", "python", "uvx"
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class MCPConfig(BaseModel):
+    """Conecta servidores MCP externos como ferramentas (opt-in, offline-safe).
+
+    ``enabled: false`` (default) = nada conecta; comportamento atual intacto.
+    Cada tool externa vira ``mcp.<servidor>.<tool>`` e SEMPRE passa por
+    ``authorize()`` (nível REVIEW/L2 por padrão — não são leituras)."""
+    enabled: bool = False
+    servers: list[MCPServerConfig] = Field(default_factory=list)
+    startup_timeout: float = 20.0            # p/ conectar + listar tools
+    call_timeout: float = 60.0               # p/ cada tools/call
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="AILA_",
@@ -246,6 +267,7 @@ class Settings(BaseSettings):
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
     agents: AgentsConfig = Field(default_factory=AgentsConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)

@@ -805,6 +805,114 @@ def test_guardrails_engine_redacts_before_persist():
     asyncio.run(go())
 
 
+_FAKE_MCP_SERVER = r'''
+import sys, json
+def send(o): sys.stdout.write(json.dumps(o) + "\n"); sys.stdout.flush()
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    msg = json.loads(line)
+    mid, method = msg.get("id"), msg.get("method")
+    if method == "initialize":
+        send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":"2024-11-05",
+              "capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"1"}}})
+    elif method == "notifications/initialized":
+        pass
+    elif method == "tools/list":
+        send({"jsonrpc":"2.0","id":mid,"result":{"tools":[{"name":"echo",
+              "description":"ecoa o texto","inputSchema":{"type":"object",
+              "properties":{"text":{"type":"string","description":"texto"}},
+              "required":["text"]}}]}})
+    elif method == "tools/call":
+        args = (msg.get("params") or {}).get("arguments") or {}
+        send({"jsonrpc":"2.0","id":mid,"result":{"content":[
+              {"type":"text","text":"echo: " + str(args.get("text",""))}],"isError":False}})
+    elif mid is not None:
+        send({"jsonrpc":"2.0","id":mid,"error":{"code":-32601,"message":"no method"}})
+'''
+
+
+def test_mcp_client_stdio(tmp_path: Path):
+    """Fase 7b: cliente MCP mínimo (stdio JSON-RPC) — initialize/tools.list/call
+    contra um servidor fake em stdlib (hermético, sem rede, sem dep)."""
+    import sys
+
+    from aila.tools.mcp_adapter import MCPClient
+
+    server = tmp_path / "fake_mcp.py"
+    server.write_text(_FAKE_MCP_SERVER, encoding="utf-8")
+
+    async def go():
+        client = MCPClient("fake", sys.executable, [str(server)])
+        try:
+            await client.start(timeout=20)
+            tools = await client.list_tools()
+            assert any(t["name"] == "echo" for t in tools)
+            text, err = await client.call_tool("echo", {"text": "oi"})
+            assert not err and "echo: oi" in text
+        finally:
+            await client.close()
+
+    asyncio.run(go())
+
+
+def test_mcp_connect_and_register_passes_authorize(tmp_path: Path):
+    """Fase 7b: connect_and_register registra as tools externas como mcp.<srv>.<tool>
+    e o handler SEMPRE passa por authorize() antes de chamar o servidor."""
+    import sys
+    from types import SimpleNamespace
+
+    from aila.tools.mcp_adapter import connect_and_register
+    from aila.tools.registry import ToolRegistry
+
+    server = tmp_path / "fake_mcp.py"
+    server.write_text(_FAKE_MCP_SERVER, encoding="utf-8")
+
+    cfg = SimpleNamespace(
+        enabled=True, startup_timeout=20.0, call_timeout=30.0,
+        servers=[SimpleNamespace(name="fake", command=sys.executable,
+                                 args=[str(server)], env={}, enabled=True)],
+    )
+    reg = ToolRegistry()
+    authorized: list[tuple[str, str]] = []
+
+    class Perms:
+        async def check(self, action, agent, params):
+            authorized.append((action, agent))
+
+    async def go():
+        mgr = await connect_and_register(cfg, reg, Perms())
+        try:
+            tool = reg.get("mcp.fake.echo")
+            assert tool is not None and tool.agent == "mcp"
+            assert [p.name for p in tool.params] == ["text"]
+            r = await tool.handler({"text": "abc"})
+            assert r.ok and "echo: abc" in r.content
+            assert authorized == [("mcp.fake.echo", "mcp")]   # passou por authorize
+        finally:
+            await mgr.close_all()
+
+    asyncio.run(go())
+
+
+def test_mcp_disabled_is_noop():
+    """offline-safe: com mcp.enabled=False nada conecta e nada é registrado."""
+    from types import SimpleNamespace
+
+    from aila.tools.mcp_adapter import connect_and_register
+    from aila.tools.registry import ToolRegistry
+
+    reg = ToolRegistry()
+    cfg = SimpleNamespace(enabled=False, servers=[], startup_timeout=1.0, call_timeout=1.0)
+
+    async def go():
+        mgr = await connect_and_register(cfg, reg, None)
+        assert reg.all() == [] and mgr.clients == []
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig
