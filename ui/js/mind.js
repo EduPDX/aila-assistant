@@ -1,89 +1,118 @@
 // ============================================================
-//  Aba 🧠 Subconsciente (Fase 12) — visão COMPLETA da cognição da Aila:
-//  totais acumulados, atividade cognitiva recente e memória de longo prazo.
-//  Fontes: GET /api/cognition (metadados) + GET /api/memory. Só faz poll
-//  enquanto a aba está visível (economiza recursos).
+//  Aba 🧠 Subconsciente (Fase 12, v2) — VISUALIZAÇÃO EM GRAFO estilo
+//  Graphify: nós coloridos por comunidade, física, painel de comunidades,
+//  clique p/ ver vizinhos, busca, e seletor Código ↔ Conhecimento.
+//  Fonte: GET /api/graph. Renderizador próprio (canvas, sem deps).
 // ============================================================
 import { api } from './core/api.js';
+import { ForceGraph } from './graph/forcegraph.js';
 
-const ICON = {
-  'memory.recalled': '🧠', 'memory.consolidated': '🌙', 'graph.updated': '🔗',
-  'guardrail.triggered': '🛡', 'skill.ran': '⚙',
-};
-// ordem + rótulo dos tiles de totais
-const TOTALS = [
-  ['memory.recalled', 'lembradas'], ['memory.consolidated', 'consolidações'],
-  ['graph.updated', 'grafo'], ['guardrail.triggered', 'proteções'], ['skill.ran', 'skills'],
-];
-
+const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
-function hhmm(iso) {
-  const d = new Date(iso);
-  return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
+let fg = null;
+let kind = 'code';
+let communities = [];
+let visible = null;          // Set de comunidades visíveis
+let built = false;
 
-function feedLabel(e) {
-  switch (e.type) {
-    case 'memory.recalled': return `recuperou ${e.count ?? 0} memória(s) relevante(s)`;
-    case 'memory.consolidated': return `consolidou · ${e.merged || 0} fundidas, ${e.nodes || 0} nós, ${e.edges || 0} relações`;
-    case 'graph.updated': return `grafo atualizado · ${e.nodes || 0} nós / ${e.edges || 0} relações`;
-    case 'guardrail.triggered': return `protegeu a saída · ${(e.kinds || []).join(', ') || 'segredo'}`;
-    case 'skill.ran': return `executou skill · ${e.skill || '—'}${e.ok === false ? ' (falhou)' : ''}`;
-    default: return e.type;
-  }
-}
-
-let _timer = null;
-
-/** Liga/desliga o poll conforme a aba 🧠 fica visível. */
 export function showMind(on) {
-  clearInterval(_timer);
-  _timer = null;
   if (!on) return;
-  refresh();
-  _timer = setInterval(refresh, 4000);
+  if (!built) build();
+  else load(kind);           // reabriu a aba → atualiza
 }
 
-async function refresh() {
-  const [c, m] = await Promise.all([
-    api.cognition(40).catch(() => ({ totals: {}, recent: [] })),
-    api.memory(20).catch(() => ({})),
-  ]);
-  renderTotals(c.totals || {});
-  renderFeed(c.recent || []);
-  renderMem(m || {});
+function build() {
+  built = true;
+  fg = new ForceGraph($('mind-canvas'), { interactive: true, onNode: renderNodeInfo });
+
+  $('mind-kindsel').querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      kind = b.dataset.k;
+      $('mind-kindsel').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+      load(kind);
+    };
+  });
+  $('mind-all').onchange = (e) => {
+    const on = e.target.checked;
+    visible = on ? null : new Set();
+    $('mind-comm').querySelectorAll('input').forEach((c) => { c.checked = on; });
+    fg.setVisible(visible);
+  };
+  const search = $('mind-search');
+  search.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(search.value); });
+  search.addEventListener('input', () => { if (!search.value) fg.select(null); });
+
+  load(kind);
 }
 
-function renderTotals(totals) {
-  const box = document.getElementById('mind-totals'); if (!box) return;
-  box.innerHTML = TOTALS.map(([k, lbl]) =>
-    `<div class="mind-tile"><span class="mt-ic">${ICON[k]}</span>
-       <b>${totals[k] ?? 0}</b><span class="mt-k">${lbl}</span></div>`).join('');
-}
-
-function renderFeed(recent) {
-  const box = document.getElementById('mind-feed'); if (!box) return;
-  if (!recent.length) {
-    box.innerHTML = '<div class="muted">sem atividade cognitiva ainda — conversa com a Aila que ela começa a "pensar" aqui</div>';
+async function load(k) {
+  let data;
+  try { data = await api.graph(k, 1500); } catch (e) { data = { nodes: [], edges: [], communities: [] }; }
+  communities = data.communities || [];
+  visible = null;
+  const empty = $('mind-empty');
+  if (!data.nodes || !data.nodes.length) {
+    empty.hidden = false;
+    empty.innerHTML = k === 'knowledge'
+      ? '🌙 O grafo de conhecimento ainda está vazio.<br><span class="muted">A Aila constrói isso conforme conversa e consolida o que aprende.</span>'
+      : 'sem dados de código';
+    $('mind-stats').textContent = '';
+    fg.setData({ nodes: [], edges: [], communities: [] });
+    renderCommunities();
     return;
   }
-  box.innerHTML = recent.slice().reverse().map((e) =>
-    `<div class="mind-row"><span class="mr-ic">${ICON[e.type] || '·'}</span>
-       <span>${esc(feedLabel(e))}</span><time>${hhmm(e.t)}</time></div>`).join('');
+  empty.hidden = true;
+  fg.setData(data);
+  renderCommunities();
+  renderNodeInfo(null);
+  const c = data.counts || {};
+  $('mind-stats').textContent = `${c.nodes || 0} nós · ${c.edges || 0} arestas · ${c.communities || 0} comunidades`;
+  if ($('mind-all')) $('mind-all').checked = true;
 }
 
-function renderMem(m) {
-  const cnt = document.getElementById('mind-memcount');
-  const box = document.getElementById('mind-mem');
-  if (cnt) cnt.textContent = m.enabled === false ? '(desligada)' : `· ${m.count ?? 0} itens`;
-  if (!box) return;
-  const items = m.recent || [];
-  if (!items.length) {
-    box.innerHTML = '<div class="muted">nada guardado ainda</div>';
+function renderCommunities() {
+  const box = $('mind-comm'); if (!box) return;
+  if (!communities.length) { box.innerHTML = '<div class="muted" style="padding:8px">—</div>'; return; }
+  box.innerHTML = communities.map((c) =>
+    `<label class="mind-crow">
+       <input type="checkbox" data-c="${esc(c.id)}" checked>
+       <span class="mind-dot" style="background:${fg.color.get(c.id) || '#8aa'}"></span>
+       <span class="mind-clabel">${esc(c.label)}</span>
+       <span class="mind-ccount">${c.count}</span>
+     </label>`).join('');
+  box.querySelectorAll('input').forEach((cb) => {
+    cb.onchange = () => {
+      const on = new Set();
+      box.querySelectorAll('input').forEach((x) => { if (x.checked) on.add(x.dataset.c); });
+      visible = on.size === communities.length ? null : on;
+      fg.setVisible(visible);
+      $('mind-all').checked = visible === null;
+    };
+  });
+}
+
+function renderNodeInfo(node, neighbors = []) {
+  const box = $('mind-nodeinfo'); if (!box) return;
+  if (!node) {
+    box.innerHTML = '<div class="muted">clique num nó para ver detalhes</div>';
     return;
   }
-  box.innerHTML = items.map((it) =>
-    `<div class="mind-mi"><span class="k">${esc(it.kind || 'nota')}</span>
-       <div>${esc(it.text || '')}</div></div>`).join('');
+  const nb = neighbors.slice(0, 30).map((n) =>
+    `<div class="mind-nb" data-id="${esc(n.id)}"><span class="mind-dot" style="background:${fg.color.get(n.community) || '#8aa'}"></span>${esc(n.label)}</div>`).join('');
+  box.innerHTML =
+    `<div class="mind-ni-name">${esc(node.label)}</div>
+     <div class="mind-ni-k">tipo <b>${esc(node.type || '—')}</b></div>
+     <div class="mind-ni-k">comunidade <b>${esc(node.community || '—')}</b></div>
+     <div class="mind-ni-k">grau <b>${node.degree || 0}</b></div>
+     <div class="mind-ni-h">Vizinhos (${neighbors.length})</div>
+     <div class="mind-nbs">${nb || '<span class="muted">nenhum</span>'}</div>`;
+  box.querySelectorAll('.mind-nb').forEach((el) => { el.onclick = () => fg.selectById(el.dataset.id); });
+}
+
+function doSearch(q) {
+  q = (q || '').trim().toLowerCase(); if (!q || !fg) return;
+  const hit = fg.nodes.find((n) => (n.label || '').toLowerCase() === q)
+    || fg.nodes.find((n) => (n.label || '').toLowerCase().includes(q));
+  if (hit) fg.selectById(hit.id);
 }

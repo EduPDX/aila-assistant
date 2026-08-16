@@ -71,21 +71,21 @@
       </section>
 
       <section id="pane-mind" class="pane mind">
-        <div class="mind-scroll">
-          <div class="mind-h">🧠 Subconsciente <span class="muted">— o que a Aila está processando</span></div>
-          <div class="mind-sec">
-            <div class="mind-t">Cognição</div>
-            <div class="mind-tiles" id="mind-totals"></div>
+        <div class="mind-graphwrap">
+          <canvas id="mind-canvas"></canvas>
+          <div class="mind-kindsel" id="mind-kindsel">
+            <button data-k="code" class="active">Código</button>
+            <button data-k="knowledge">Conhecimento</button>
           </div>
-          <div class="mind-sec">
-            <div class="mind-t">Atividade recente</div>
-            <div class="mind-feed" id="mind-feed"><div class="muted">sem atividade cognitiva ainda</div></div>
-          </div>
-          <div class="mind-sec">
-            <div class="mind-t">Memória de longo prazo <span class="muted" id="mind-memcount"></span></div>
-            <div class="mind-mem" id="mind-mem"><div class="muted">—</div></div>
-          </div>
+          <div class="mind-empty" id="mind-empty" hidden></div>
+          <div class="mind-stats" id="mind-stats"></div>
         </div>
+        <aside class="mind-side">
+          <input id="mind-search" class="mind-search" placeholder="Buscar nós…" autocomplete="off" />
+          <div class="mind-nodeinfo" id="mind-nodeinfo"></div>
+          <div class="mind-comm-h">COMUNIDADES <label class="mind-all"><input type="checkbox" id="mind-all" checked> todas</label></div>
+          <div class="mind-comm" id="mind-comm"></div>
+        </aside>
       </section>
     </div>
   </main>
