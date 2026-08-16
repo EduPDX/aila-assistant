@@ -201,6 +201,18 @@ class GraphStore:
                 break
         return []
 
+    def match_entities(self, text: str, limit: int = 20) -> list[str]:
+        """Ids de nós cujo ``label`` aparece no texto (case-insensitive). Labels
+        mais LONGOS (mais específicos) primeiro. Base leve p/ o retrieval híbrido."""
+        t = (text or "").lower()
+        if not t:
+            return []
+        matched = [(r["id"], r["label"]) for r in
+                   self.conn.execute("SELECT id, label FROM kg_node")
+                   if r["label"] and r["label"].lower() in t]
+        matched.sort(key=lambda il: len(il[1]), reverse=True)
+        return [i for i, _l in matched[:limit]]
+
     def related(self, node_id: str, limit: int = 10) -> list[dict]:
         """Vizinhos diretos ordenados por peso da aresta (desc)."""
         self._ensure_index()

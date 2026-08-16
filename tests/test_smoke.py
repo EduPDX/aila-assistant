@@ -531,6 +531,53 @@ def test_graph_store(tmp_path: Path):
     g.close()
 
 
+def test_hybrid_retrieval(tmp_path: Path):
+    """Fase 3 (retrieval híbrido): a query nomeia UMA entidade (Gemini) e o grafo
+    traz uma memória ligada à VIZINHANÇA (Aila) mesmo sem a palavra 'Gemini';
+    e recall marca last_recalled sem reforçar (ajuste v2)."""
+    from aila.cognition.graph import GraphStore
+    from aila.memory.manager import MemoryManager
+    from aila.memory.store import MemoryStore
+
+    # embed constante → vetorial não diferencia; o GRAFO decide
+    async def flat_embed(texts):
+        return [[1.0, 0.0] for _ in texts]
+
+    async def go():
+        store = MemoryStore(tmp_path / "hyb.db", flat_embed)
+        graph = GraphStore(tmp_path / "hyb_kg.db")
+        graph.upsert_node("Aila", "project", "Aila")
+        graph.upsert_node("Gemini", "model", "Gemini")
+        graph.upsert_node("ModelRouter", "concept", "ModelRouter")
+        graph.upsert_edge("Aila", "Gemini", "uses")
+        graph.upsert_edge("Aila", "ModelRouter", "uses")
+
+        # M1 fala do projeto (ligada a Aila/ModelRouter) — NÃO menciona Gemini
+        m1 = await store.add("montamos o roteamento de modelos do projeto",
+                             kind="project", entities=["Aila", "ModelRouter"], importance=0.7)
+        # M2 não tem relação nenhuma
+        await store.add("gatos são fofos", kind="fact", entities=[])
+
+        mgr = MemoryManager(store, graph=graph)
+        hits = await mgr.recall("me lembra do Gemini?", top_k=2)
+        ids = [h.id for h in hits]
+        # M1 aparece via traversal (Gemini → vizinho Aila → memória ligada a Aila)
+        assert m1 in ids and ids[0] == m1
+        assert hits[0].importance == 0.7          # sinal cognitivo propagado
+
+        # recall marcou last_recalled mas NÃO reforçou
+        from aila.cognition.memory.models import Memory
+        mem = Memory.from_row(store.get(m1))
+        assert mem.last_recalled and mem.reinforcement == 0
+
+        # sem grafo → recall legado continua funcionando
+        mgr2 = MemoryManager(store)
+        legacy = await mgr2.recall("roteamento", top_k=2)
+        assert legacy is not None
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig

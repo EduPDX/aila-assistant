@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from aila.core.logging import get_logger
 
 if TYPE_CHECKING:
+    from aila.cognition.graph.graph_store import GraphStore
     from aila.memory.store import MemoryHit, MemoryStore
 
 log = get_logger("memory")
@@ -46,8 +47,14 @@ def normalize_kind(kind: str | None) -> str:
 
 
 class MemoryManager:
-    def __init__(self, store: MemoryStore) -> None:
+    def __init__(self, store: MemoryStore, graph: GraphStore | None = None) -> None:
         self.store = store
+        self.graph = graph
+        # retrieval HÍBRIDO quando há grafo; senão, o recall clássico (compat).
+        self._retriever = None
+        if graph is not None:
+            from aila.cognition.memory.retrieval import HybridRetriever
+            self._retriever = HybridRetriever(store, graph)
 
     async def save(self, text: str, kind: str = FACT, session_id: int | None = None) -> int:
         return await self.store.add(text, kind=normalize_kind(kind), session_id=session_id)
@@ -59,8 +66,14 @@ class MemoryManager:
     def forget(self, mem_id: int) -> None:
         self.store.delete(mem_id)
 
-    async def recall(self, query: str, *, top_k: int = 4, min_score: float = 0.0) -> list[MemoryHit]:
-        """Recuperação multi-tipo: conhecimento durável primeiro, depois episódico."""
+    async def recall(self, query: str, *, top_k: int = 4, min_score: float = 0.0,
+                     context: dict | None = None) -> list[MemoryHit]:
+        """Recuperação. Com grafo → HÍBRIDO (vetorial + entidades + traversal +
+        re-rank, marca last_recalled sem reforçar). Sem grafo → multi-tipo
+        (conhecimento durável primeiro, depois episódico) — comportamento legado."""
+        if self._retriever is not None:
+            return await self._retriever.retrieve(query, top_k=top_k, min_score=min_score,
+                                                  context=context)
         know = await self.store.search(query, top_k=top_k, min_score=min_score, kinds=KNOWLEDGE)
         epi = await self.store.search(query, top_k=max(1, top_k // 2), min_score=min_score,
                                       kinds={EPISODIC})

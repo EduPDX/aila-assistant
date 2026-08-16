@@ -70,6 +70,8 @@ class MemoryHit:
     kind: str
     score: float
     created_at: str
+    importance: float = 0.5     # sinais cognitivos (preenchidos pelo retrieval híbrido)
+    confidence: float = 1.0
 
 
 class MemoryStore:
@@ -236,6 +238,19 @@ class MemoryStore:
             f"SELECT {self._FULL_COLS} FROM memories WHERE id = ?", (mem_id,)
         ).fetchone()
         return dict(r) if r else None
+
+    def by_entities(self, node_ids: list[str], limit: int = 40) -> list[dict]:
+        """Memórias ligadas a algum dos nós do grafo (coluna JSON `entities`).
+        Match por LIKE sobre o JSON — suficiente p/ o volume single-user."""
+        if not node_ids:
+            return []
+        clauses = " OR ".join(["entities LIKE ?"] * len(node_ids))
+        params: list = [f'%"{nid}"%' for nid in node_ids]
+        params.append(limit)
+        rows = self.conn.execute(
+            f"SELECT {self._FULL_COLS} FROM memories WHERE ({clauses}) LIMIT ?", params
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def mark_recalled(self, ids: list[int]) -> None:
         """Marca ``last_recalled``. NÃO reforça (ajuste v2: recuperar ≠ reforçar —
