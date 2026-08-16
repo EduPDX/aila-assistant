@@ -16,6 +16,7 @@ import { initTopbar, refreshStatus } from './shell/topbar.js';
 import { initInspector } from './shell/inspector.js';
 import { initDrawer } from './shell/drawer.js';
 import { initHud } from './shell/hud.js';
+import { initSubconscious } from './shell/subconscious.js';
 import { initBoot } from './shell/boot.js';
 
 /* ---------- abas ---------- */
@@ -124,6 +125,7 @@ initTopbar();
 initInspector();
 initDrawer();       // inspector como drawer retrátil (abre em WORKING)
 initHud();          // telemetria HUD sobre o palco (dono do poll de /api/metrics)
+initSubconscious(); // mini-subconsciente: atividade cognitiva sutil (poll /api/cognition)
 wireUI();
 connectWS({
   onMessage: (m) => { ingest(m); route(m); },   // ingest = estado/atividade; route = UI (chat/avatar)

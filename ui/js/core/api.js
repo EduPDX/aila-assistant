@@ -18,6 +18,7 @@ export const api = {
   status: () => j('/api/status'),                     // app/llm/model/providers/network_mode/autonomy_level/agent_state…
   metrics: () => j('/api/metrics'),                   // cpu/ram/gpu/vram/tps/uptime
   events: (n = 40) => j(`/api/events?n=${n}`),         // atividade recente (redigida) + state + provider
+  cognition: (n = 20) => j(`/api/cognition?n=${n}`),   // feed do subconsciente: {totals, recent}
   tasks: () => j('/api/tasks'),                       // { tasks: [...] }
   task: (id) => j(`/api/tasks/${id}`),
   memory: (n = 20) => j(`/api/memory?n=${n}`),         // { enabled, count, recent }
