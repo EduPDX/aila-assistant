@@ -107,6 +107,7 @@ agents:
   enabled:
     - file
     - code
+    - documents  # ler/criar PDF, Word, Excel, PowerPoint, CSV, TXT, Markdown
     - git        # status/diff/branch/checkout/commit (backup+rollback do self-improve)
     - web        # pesquisa na internet + leitura de páginas (leitura, sem chave)
     - memory

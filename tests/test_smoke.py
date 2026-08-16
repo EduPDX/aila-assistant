@@ -1044,6 +1044,126 @@ def test_cognitive_observability_feed():
     asyncio.run(go())
 
 
+def test_document_agent_read_and_create(tmp_path: Path):
+    """DocumentAgent: lê formatos de texto sem dependência, cria md/txt, e degrada
+    com mensagem clara (não quebra) quando a lib opcional de pdf/docx falta."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.document_agent import DocumentAgent
+
+    s = get_settings()
+    s.security.read_only = False        # permitir docs.create (escrita)
+    pm = PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl"))
+    sandbox = PathSandbox(tmp_path / "ws")
+    deps = AgentDeps(settings=s, permissions=pm, sandbox=sandbox, llm=None)
+    tools = {t.name: t for t in DocumentAgent(deps).tools()}
+
+    (sandbox.root).mkdir(parents=True, exist_ok=True)
+    (sandbox.root / "nota.md").write_text("# Título\n\nolá mundo", encoding="utf-8")
+    (sandbox.root / "dados.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+
+    async def go():
+        # leitura de texto (sem dependência)
+        r = await tools["docs.read"].handler({"path": "nota.md"})
+        assert r.ok and "olá mundo" in r.content
+        rc = await tools["docs.read"].handler({"path": "dados.csv"})
+        assert rc.ok and "1\t2" in rc.content
+
+        # arquivo inexistente e formato não suportado → erro claro (não crasha)
+        assert (await tools["docs.read"].handler({"path": "nao_existe.md"})).ok is False
+        (sandbox.root / "x.zip").write_bytes(b"PK\x03\x04")
+        assert (await tools["docs.read"].handler({"path": "x.zip"})).ok is False
+
+        # criação dep-free (markdown)
+        cm = await tools["docs.create"].handler(
+            {"path": "saida.md", "content": "conteúdo", "title": "Relatório"})
+        assert cm.ok and (sandbox.root / "saida.md").is_file()
+        assert "Relatório" in (sandbox.root / "saida.md").read_text(encoding="utf-8")
+
+        # sufixo desconhecido para criação → erro claro
+        assert (await tools["docs.create"].handler({"path": "x.zip", "content": "y"})).ok is False
+
+    asyncio.run(go())
+
+
+def test_document_agent_graceful_without_libs(tmp_path: Path, monkeypatch):
+    """Degradação graciosa: se a lib opcional faltar, docs.read/create de pdf/docx
+    devolvem a dica de instalação (não quebram) — simulado via monkeypatch."""
+    from aila.agents import document_agent as da
+    from aila.agents.base import AgentDeps
+
+    def _raise(_module):
+        raise RuntimeError(da._INSTALL_HINT)
+
+    monkeypatch.setattr(da, "_need", _raise)
+
+    s = get_settings()
+    s.security.read_only = False
+    deps = AgentDeps(settings=s, permissions=PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl")),
+                     sandbox=PathSandbox(tmp_path / "ws"), llm=None)
+    tools = {t.name: t for t in da.DocumentAgent(deps).tools()}
+    (deps.sandbox.root).mkdir(parents=True, exist_ok=True)
+    (deps.sandbox.root / "f.pdf").write_bytes(b"%PDF-1.4")
+
+    async def go():
+        rp = await tools["docs.read"].handler({"path": "f.pdf"})
+        assert rp.ok is False and ".[docs]" in rp.content
+        cd = await tools["docs.create"].handler({"path": "r.docx", "content": "x"})
+        assert cd.ok is False and ".[docs]" in cd.content
+
+    asyncio.run(go())
+
+
+@pytest.mark.parametrize("ext,mod", [(".pdf", "fpdf"), (".docx", "docx")])
+def test_document_agent_real_roundtrip(tmp_path: Path, ext: str, mod: str):
+    """Round-trip real: criar PDF/DOCX e ler de volta (pula se o extra .[docs]
+    não estiver instalado)."""
+    pytest.importorskip(mod)
+    from aila.agents.base import AgentDeps
+    from aila.agents.document_agent import DocumentAgent
+
+    s = get_settings()
+    s.security.read_only = False
+    deps = AgentDeps(settings=s, permissions=PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl")),
+                     sandbox=PathSandbox(tmp_path / "ws"), llm=None)
+    tools = {t.name: t for t in DocumentAgent(deps).tools()}
+
+    async def go():
+        c = await tools["docs.create"].handler(
+            {"path": f"doc{ext}", "content": "linha alfa\nlinha beta", "title": "Cabeçalho"})
+        assert c.ok
+        r = await tools["docs.read"].handler({"path": f"doc{ext}"})
+        assert r.ok and "linha alfa" in r.content and "linha beta" in r.content
+
+    asyncio.run(go())
+
+
+def test_document_agent_enabled_in_engine():
+    """O agente 'documents' entra no AgentManager e expõe docs.read/docs.create."""
+    from aila.core.engine import build_engine
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+
+    class F(LLMBackend):
+        name = "ollama"
+        async def chat(self, m, **k):
+            yield ChatChunk(content="x", done=True)
+        async def complete(self, m, **k):
+            return "[]"
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+
+    s = get_settings()
+    s.memory.enabled = False
+    s.routing.enabled = False
+    eng = build_engine(s, F())
+    assert "documents" in eng.agents.agents
+    names = {t.name for t in eng.agents.registry.all()}
+    assert {"docs.read", "docs.create"} <= names
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig

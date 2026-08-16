@@ -7,6 +7,7 @@ from aila.agents.base import AgentDeps, BaseAgent
 from aila.agents.binary_agent import BinaryAgent
 from aila.agents.code_agent import CodeAgent
 from aila.agents.computer_agent import ComputerAgent
+from aila.agents.document_agent import DocumentAgent
 from aila.agents.file_agent import FileAgent
 from aila.agents.git_agent import GitAgent
 from aila.agents.memory_agent import MemoryAgent
@@ -21,6 +22,7 @@ log = get_logger("agent_manager")
 AGENT_CLASSES: dict[str, type[BaseAgent]] = {
     "file": FileAgent,
     "code": CodeAgent,
+    "documents": DocumentAgent,
     "git": GitAgent,
     "web": WebAgent,
     "computer": ComputerAgent,
@@ -57,5 +59,17 @@ class AgentManager:
         for name, agent in self.agents.items():
             lines.append(f"\n• {name}: {agent.description}")
             for tool in agent.tools():
+                lines.append(f"    - {tool.name}: {tool.description}")
+        # tools que NÃO pertencem a um agente (skills, servidores MCP externos) —
+        # registradas direto no registry. Agrupa por 'dono' p/ ficar legível.
+        extra: dict[str, list] = {}
+        for tool in self.registry.all():
+            if tool.agent not in self.agents:
+                extra.setdefault(tool.agent, []).append(tool)
+        _labels = {"skill": "receitas nomeadas (compõem outras ferramentas)",
+                   "mcp": "ferramentas de servidores MCP externos"}
+        for owner, tools in extra.items():
+            lines.append(f"\n• {owner}: {_labels.get(owner, owner)}")
+            for tool in tools:
                 lines.append(f"    - {tool.name}: {tool.description}")
         return "\n".join(lines)

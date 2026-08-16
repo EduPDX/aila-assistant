@@ -22,7 +22,7 @@ import re
 # Ferramentas cujo resultado carrega texto de terceiros (não confiável).
 _UNTRUSTED_PREFIXES: tuple[str, ...] = (
     "web.", "file.read", "code.read", "computer.run_command", "vision.",
-    "binary.read", "git.diff", "git.log",
+    "binary.read", "git.diff", "git.log", "docs.read",
 )
 
 _INJECTION = re.compile(
