@@ -207,8 +207,11 @@ class GraphStore:
         t = (text or "").lower()
         if not t:
             return []
-        matched = [(r["id"], r["label"]) for r in
-                   self.conn.execute("SELECT id, label FROM kg_node")
+        # nós de código (module/class/function) NÃO entram no retrieval de memória
+        # do chat — evita que 'run'/'get' etc. casem com qualquer texto do usuário.
+        matched = [(r["id"], r["label"]) for r in self.conn.execute(
+                       "SELECT id, label FROM kg_node "
+                       "WHERE type NOT IN ('module','class','function')")
                    if r["label"] and r["label"].lower() in t]
         matched.sort(key=lambda il: len(il[1]), reverse=True)
         return [i for i, _l in matched[:limit]]

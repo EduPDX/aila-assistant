@@ -639,6 +639,64 @@ def test_consolidation(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_code_graph(tmp_path: Path):
+    """Fase 5 (Code Graph via stdlib `ast`, zero dep): nós module/class/function,
+    arestas defines(EXTRACTED)/imports(interno)/calls(INFERRED por nome único),
+    ambíguas ignoradas, isolamento do KG e idempotência."""
+    from aila.cognition.graph import CodeGraph, GraphStore, edge_id
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "b.py").write_text("def helper():\n    return 1\n", encoding="utf-8")
+    (pkg / "a.py").write_text(
+        "import pkg.b\n"
+        "from pkg.b import helper\n\n"
+        "class Widget:\n"
+        "    def render(self):\n"
+        "        return helper()\n\n"
+        "def main():\n"
+        "    w = Widget()\n"
+        "    return w.render()\n",
+        encoding="utf-8",
+    )
+
+    graph = GraphStore(tmp_path / "code.db")
+    rep = CodeGraph(graph, tmp_path).build()
+
+    assert rep["modules"] == 3 and rep["classes"] == 1 and rep["functions"] == 3
+    assert rep["defines"] == 4 and rep["ambiguous_calls"] == 0
+
+    # tipos corretos
+    assert graph.get_node("code:pkg.a.Widget").type == "class"
+    assert graph.get_node("code:pkg.b.helper").type == "function"
+    assert graph.get_node("code:pkg.a").type == "module"
+
+    # defines (EXTRACTED): módulo→classe e classe→método
+    assert graph.get_edge(edge_id("code:pkg.a", "code:pkg.a.Widget", "defines")) is not None
+    assert graph.get_edge(edge_id("code:pkg.a.Widget", "code:pkg.a.Widget.render", "defines")) is not None
+
+    # imports internos resolvidos (módulo e símbolo)
+    assert graph.get_edge(edge_id("code:pkg.a", "code:pkg.b", "imports")) is not None
+    assert graph.get_edge(edge_id("code:pkg.a", "code:pkg.b.helper", "imports")) is not None
+
+    # calls (INFERRED, nome único): render→helper e main→render
+    call = graph.get_edge(edge_id("code:pkg.a.Widget.render", "code:pkg.b.helper", "calls"))
+    assert call is not None and call.confidence == 0.6
+    assert call.provenance.get("label") == "INFERRED"
+    assert graph.get_edge(edge_id("code:pkg.a.main", "code:pkg.a.Widget.render", "calls")) is not None
+
+    # ISOLAMENTO: nós de código não poluem o match_entities do chat (KG só)
+    graph.upsert_node("Aila", "concept", "Aila")
+    hits = graph.match_entities("falando de Aila, do helper e do Widget aqui")
+    assert hits == ["Aila"]
+
+    # idempotente: reconstruir não duplica
+    c1 = graph.counts()
+    CodeGraph(graph, tmp_path).build()
+    assert graph.counts() == c1
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig
