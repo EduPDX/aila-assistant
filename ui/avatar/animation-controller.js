@@ -18,6 +18,7 @@ import { createEmotionLayer } from './layers/emotion.js';
 import { createLipSyncLayer } from './layers/lipsync.js';
 import { createGestureAnimLayer } from './layers/gesture-anim.js';
 import { createGestureIKLayer } from './layers/gesture-ik.js';
+import { createSpeechGestureLayer } from './layers/speech-gesture.js';
 import { createBlinkLayer } from './layers/blink.js';
 import { createHandPoseLayer } from './hand-poses.js';
 import { createJointLimits } from './solvers/joint-limits.js';
@@ -41,6 +42,7 @@ export class AnimationController {
       createLipSyncLayer(),
       createGestureAnimLayer(),   // nod/shake (cabeça) — F5
       createGestureIKLayer(),     // gestos de braço por IK → alvo de mão (Fase C)
+      createSpeechGestureLayer(), // gesticulação ocasional da fala por IK (Fase E)
       createHandPoseLayer(),      // dedos: poses de mão (Fase B)
       createBlinkLayer(),
     ];
