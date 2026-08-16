@@ -12,6 +12,7 @@ Embeddings são gravados como bytes float32 (compacto) no SQLite.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -39,6 +40,28 @@ CREATE TABLE IF NOT EXISTS memories (
 );
 """
 
+# Colunas COGNITIVAS (Fase 1) — adicionadas por migração ADITIVA (ALTER TABLE)
+# para não quebrar bancos existentes. `kind` continua sendo o "type" cognitivo
+# (não duplicamos com uma coluna `type`). Três sinais INDEPENDENTES (ajuste v2):
+# confidence (confiável?) · importance (relevante?) · reinforcement (confirmado?).
+_COGNITIVE_COLUMNS: list[tuple[str, str]] = [
+    ("source", "TEXT"),                        # user | web | tool:<name> | consolidation | code
+    ("provenance", "TEXT"),                    # JSON {origin, url?, tool?, session_id, ...}
+    ("entities", "TEXT"),                      # JSON[] — ids de nós do Knowledge Graph
+    ("evidence", "TEXT"),                      # JSON[] — ids de memórias/eventos de suporte
+    ("confidence", "REAL DEFAULT 1.0"),        # 0..1
+    ("importance", "REAL DEFAULT 0.5"),        # 0..1
+    ("reinforcement", "INTEGER DEFAULT 0"),    # sobe só com evidência nova / confirmação
+    ("last_recalled", "TEXT"),                 # atualizado no recall — recall NÃO reforça
+    ("expiration", "TEXT"),                    # decay p/ fatos temporários
+    ("status", "TEXT DEFAULT 'active'"),       # active | archived | superseded
+]
+
+
+def _dump(value: object) -> str | None:
+    """Serializa listas/dicts para JSON (ou None)."""
+    return None if value is None else json.dumps(value, ensure_ascii=False)
+
 
 @dataclass(slots=True)
 class MemoryHit:
@@ -57,9 +80,19 @@ class MemoryStore:
         self.conn = sqlite3.connect(str(self.path))
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(_SCHEMA)
+        self._migrate()                 # adiciona colunas cognitivas se faltarem (aditivo)
         self.conn.commit()
         # cache do índice (id, texto, matriz normalizada) p/ busca rápida
         self._cache: tuple[list[int], list[str], list[str], np.ndarray] | None = None
+
+    def _migrate(self) -> None:
+        """Migração aditiva idempotente: cria as colunas cognitivas que faltam.
+        Bancos antigos (só as 7 colunas base) ganham as novas com DEFAULT — as
+        memórias existentes continuam válidas."""
+        existing = {r[1] for r in self.conn.execute("PRAGMA table_info(memories)").fetchall()}
+        for name, decl in _COGNITIVE_COLUMNS:
+            if name not in existing:
+                self.conn.execute(f"ALTER TABLE memories ADD COLUMN {name} {decl}")
 
     # ------------------------------------------------------------------ #
     @staticmethod
@@ -75,7 +108,15 @@ class MemoryStore:
         self._cache = None
 
     # ------------------------------------------------------------------ #
-    async def add(self, text: str, kind: str = "chat", session_id: int | None = None) -> int:
+    async def add(
+        self, text: str, kind: str = "chat", session_id: int | None = None, *,
+        source: str | None = None, confidence: float = 1.0, importance: float = 0.5,
+        provenance: dict | None = None, entities: list | None = None,
+        evidence: list | None = None, expiration: str | None = None,
+        status: str = "active",
+    ) -> int:
+        """Grava uma memória. Os metadados cognitivos são opcionais (defaults),
+        então chamadas antigas ``add(text, kind, session_id)`` seguem idênticas."""
         text = (text or "").strip()
         if not text:
             return -1
@@ -84,9 +125,12 @@ class MemoryStore:
             raise RuntimeError("embed_fn não retornou vetores")
         vec = np.asarray(vecs[0], dtype=np.float32)
         cur = self.conn.execute(
-            "INSERT INTO memories (text, kind, session_id, dim, embedding, created_at) "
-            "VALUES (?,?,?,?,?,?)",
-            (text, kind, session_id, len(vec), vec.tobytes(), self._now()),
+            "INSERT INTO memories (text, kind, session_id, dim, embedding, created_at, "
+            "source, confidence, importance, reinforcement, provenance, entities, evidence, "
+            "expiration, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (text, kind, session_id, len(vec), vec.tobytes(), self._now(),
+             source, confidence, importance, 0, _dump(provenance), _dump(entities),
+             _dump(evidence), expiration, status),
         )
         self.conn.commit()
         self._invalidate()
@@ -180,6 +224,56 @@ class MemoryStore:
         self.conn.execute("DELETE FROM memories")
         self.conn.commit()
         self._invalidate()
+
+    # ------------------- cognitivo (Fase 1) ------------------- #
+    _FULL_COLS = ("id, text, kind, session_id, created_at, source, provenance, entities, "
+                  "evidence, confidence, importance, reinforcement, last_recalled, "
+                  "expiration, status")
+
+    def get(self, mem_id: int) -> dict | None:
+        """Linha completa (sem o BLOB de embedding) — base p/ o model Memory."""
+        r = self.conn.execute(
+            f"SELECT {self._FULL_COLS} FROM memories WHERE id = ?", (mem_id,)
+        ).fetchone()
+        return dict(r) if r else None
+
+    def mark_recalled(self, ids: list[int]) -> None:
+        """Marca ``last_recalled``. NÃO reforça (ajuste v2: recuperar ≠ reforçar —
+        evita loop de erro em que uma memória errada 'ganha' importância só por
+        ser recuperada)."""
+        if not ids:
+            return
+        now = self._now()
+        self.conn.executemany(
+            "UPDATE memories SET last_recalled = ? WHERE id = ?", [(now, i) for i in ids]
+        )
+        self.conn.commit()
+
+    def reinforce(self, mem_id: int, delta: int = 1) -> None:
+        """Reforço EXPLÍCITO (evidência nova / confirmação do usuário) — nunca no recall."""
+        self.conn.execute(
+            "UPDATE memories SET reinforcement = COALESCE(reinforcement, 0) + ? WHERE id = ?",
+            (delta, mem_id),
+        )
+        self.conn.commit()
+
+    def set_signals(
+        self, mem_id: int, *, confidence: float | None = None,
+        importance: float | None = None, status: str | None = None,
+        expiration: str | None = None,
+    ) -> None:
+        """Atualiza sinais independentes (confidence/importance/status/expiration)."""
+        sets, vals = [], []
+        for col, val in (("confidence", confidence), ("importance", importance),
+                         ("status", status), ("expiration", expiration)):
+            if val is not None:
+                sets.append(f"{col} = ?")
+                vals.append(val)
+        if not sets:
+            return
+        vals.append(mem_id)
+        self.conn.execute(f"UPDATE memories SET {', '.join(sets)} WHERE id = ?", vals)
+        self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()

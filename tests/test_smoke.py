@@ -436,6 +436,50 @@ def test_memory_multitype(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_memory_cognitive_schema(tmp_path: Path):
+    """Fase 1 (cognição): schema estendido (migração aditiva) + metadados +
+    model Memory + regra 'recall NÃO reforça'."""
+    from aila.cognition.memory.models import Memory
+    from aila.memory.store import MemoryStore
+
+    async def fake_embed(texts):
+        return [[float(len(t)), 0.5] for t in texts]
+
+    async def go():
+        store = MemoryStore(tmp_path / "cog.db", fake_embed)
+        # add com metadados cognitivos
+        mid = await store.add(
+            "o usuário prefere respostas diretas", kind="preference",
+            source="user", confidence=0.9, importance=0.8,
+            provenance={"origin": "chat"}, entities=["user", "DirectResponses"],
+        )
+        # get() traz a linha completa; Memory.from_row monta o model
+        m = Memory.from_row(store.get(mid))
+        assert m.kind == "preference" and m.type == "preference"
+        assert m.confidence == 0.9 and m.importance == 0.8 and m.reinforcement == 0
+        assert m.entities == ["user", "DirectResponses"]
+        assert m.source == "user" and m.provenance == {"origin": "chat"}
+        assert m.status == "active"
+
+        # três sinais são INDEPENDENTES: recall marca last_recalled mas NÃO reforça
+        store.mark_recalled([mid])
+        m2 = Memory.from_row(store.get(mid))
+        assert m2.last_recalled and m2.reinforcement == 0    # recall != reforço
+
+        # reforço é EXPLÍCITO; confidence/importance mudam à parte
+        store.reinforce(mid, 3)
+        store.set_signals(mid, confidence=0.95)
+        m3 = Memory.from_row(store.get(mid))
+        assert m3.reinforcement == 3 and m3.confidence == 0.95 and m3.importance == 0.8
+
+        # add antigo (3 args) segue funcionando com defaults
+        old = await store.add("fato simples", kind="fact")
+        mo = Memory.from_row(store.get(old))
+        assert mo.confidence == 1.0 and mo.importance == 0.5 and mo.status == "active"
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig
@@ -597,11 +641,12 @@ def test_external_providers_build_and_route():
     from aila.llm.router import ModelRouter
 
     s = get_settings()
+    for _name, cfg in s.providers.items():     # hermético: parte de TUDO desabilitado
+        cfg.enabled = False                    # (ignora chaves reais do local.yaml)
     s.providers.openai.enabled = True
     s.providers.openai.api_key = "sk-test"
     s.providers.deepseek.enabled = True
     s.providers.deepseek.api_key = ""          # sem key → ignorado
-    s.providers.gemini.enabled = False         # desligado → ignorado
 
     provs = build_external_providers(s)
     assert set(provs) == {"openai"}
