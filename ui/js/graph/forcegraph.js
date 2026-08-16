@@ -91,6 +91,7 @@ export class ForceGraph {
       if (this.alpha > 0.02) { this._tick(); this.alpha *= 0.975; active = true; }
       else if (this.opts.mini) { this.alpha = 0.06; this._tick(); active = true; }  // mini nunca congela
       else if (!this._fitted) { this.fit(); this._fitted = true; }   // assentou → reenquadra 1x
+      if (this.opts.mini && (((this._frame = (this._frame || 0) + 1)) % 12 === 0)) this.fit();  // mini: sempre enquadrado
       this.draw();
       this._raf = active ? requestAnimationFrame(step) : null;   // assentou → para (economiza CPU)
     };
@@ -100,7 +101,9 @@ export class ForceGraph {
   _tick() {
     const nodes = this.nodes, N = nodes.length;
     if (!N) return;
-    const REP = 220, R = 78, SPRING = 0.06, LEN = 24, GRAV = 0.004, COMM = 0.06, DAMP = 0.85, CREP = 32000;
+    const mini = this.opts.mini;
+    const REP = 220, R = 78, SPRING = 0.06, LEN = mini ? 14 : 24, GRAV = mini ? 0.02 : 0.004,
+      COMM = 0.06, DAMP = 0.85, CREP = mini ? 0 : 32000;   // mini: blob compacto, sem explodir comunidades
     const a = this.alpha;
     // grade espacial p/ repulsão local (O(n))
     const cell = R, grid = new Map();

@@ -35,6 +35,7 @@ class GraphService:
             if st.counts()["nodes"] == 0:
                 rep = CodeGraph(st, PROJECT_ROOT).build(subdir="aila")
                 log.info(f"code graph construído p/ a UI: {rep}")
+            st.recompute_importance()   # importância=grau → a amostra do mini pega os hubs
             self._code = st
         return self._code
 
