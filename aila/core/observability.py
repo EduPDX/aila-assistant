@@ -8,7 +8,7 @@ metadados de controle (estado, tool, provedor, permissão).
 
 from __future__ import annotations
 
-from collections import deque
+from collections import Counter, deque
 from typing import TYPE_CHECKING, Any
 
 from aila.core.logging import get_logger
@@ -18,11 +18,18 @@ if TYPE_CHECKING:
 
 log = get_logger("events")
 
+# eventos COGNITIVOS (Fase 9): a "atividade mental" da Aila — alimentam o
+# mini-subconsciente e a aba 🧠 do Bloco C. Só metadados (nunca o conteúdo).
+_COGNITIVE = (
+    "memory.recalled", "memory.consolidated", "graph.updated",
+    "guardrail.triggered", "skill.ran",
+)
+
 # eventos "de controle" que valem observar (sem spam de token nem conteúdo cru)
 _TRACK = (
     "aila.state", "agent.invoked", "agent.result", "model.selected",
     "permission.request", "permission.response", "avatar.behavior", "error",
-    "task.created", "task.state",
+    "task.created", "task.state", *_COGNITIVE,
 )
 
 
@@ -44,6 +51,17 @@ def _summarize(etype: str, p: dict[str, Any]) -> dict[str, Any]:
         return {"id": p.get("id"), "state": p.get("state"), "progress": p.get("progress")}
     if etype == "error":
         return {"message": str(p.get("message", ""))[:120]}
+    # --- cognitivos (só contagens/tipos; NUNCA o texto da memória) ---
+    if etype == "memory.recalled":
+        return {"count": len(p.get("items", []) or [])}
+    if etype == "memory.consolidated":
+        return {k: p.get(k, 0) for k in ("archived", "merged", "nodes", "edges")}
+    if etype == "graph.updated":
+        return {"nodes": p.get("nodes"), "edges": p.get("edges")}
+    if etype == "guardrail.triggered":
+        return {"kinds": list(p.get("kinds", []) or [])}   # tipos, não valores
+    if etype == "skill.ran":
+        return {"skill": p.get("skill"), "ok": p.get("ok"), "steps": p.get("steps")}
     return {}
 
 
@@ -54,20 +72,32 @@ class AgentStateTracker:
         self.recent: deque[dict[str, Any]] = deque(maxlen=capacity)
         self.state: str = "IDLE"
         self.provider: str = "local"
+        # totais acumulados dos eventos cognitivos (lifetime; barato)
+        self.cognitive: Counter[str] = Counter()
 
     async def on_event(self, event: Event) -> None:
         if event.type not in _TRACK:
             return
-        self.recent.append({
-            "type": event.type, "t": event.timestamp, **_summarize(event.type, event.payload),
-        })
+        summary = _summarize(event.type, event.payload)
+        self.recent.append({"type": event.type, "t": event.timestamp, **summary})
         if event.type == "aila.state" and event.payload.get("status"):
             self.state = event.payload["status"]
         elif event.type == "model.selected" and event.payload.get("provider"):
             self.provider = event.payload["provider"]
+        elif event.type in _COGNITIVE:
+            self.cognitive[event.type] += 1
 
     def events(self, n: int = 40) -> list[dict[str, Any]]:
         return list(self.recent)[-n:]
+
+    def cognitive_summary(self, n: int = 20) -> dict[str, Any]:
+        """Feed do "subconsciente" p/ a UI: totais acumulados + últimos eventos
+        cognitivos (memória/grafo/guardrail/skill). Só metadados, sem conteúdo."""
+        recent = [e for e in self.recent if e["type"] in _COGNITIVE][-n:]
+        return {
+            "totals": {k: self.cognitive.get(k, 0) for k in _COGNITIVE},
+            "recent": recent,
+        }
 
 
 async def _log_event(event: Event) -> None:

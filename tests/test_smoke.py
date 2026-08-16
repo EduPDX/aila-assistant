@@ -1003,6 +1003,47 @@ def test_builtin_skill_change_analysis(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_cognitive_observability_feed():
+    """Fase 9: os eventos cognitivos passam pelo bus/observability e viram um feed
+    (totais + recentes) p/ a UI — SEM vazar o conteúdo das memórias."""
+    from aila.core.event_bus import EventBus
+    from aila.core.observability import attach_observability
+
+    bus = EventBus()
+    tracker = attach_observability(bus)
+
+    async def go():
+        # o texto da memória NÃO pode acabar na observabilidade
+        await bus.emit("memory.recalled",
+                       {"items": [{"text": "SEGREDO_DO_USUARIO", "score": 0.9},
+                                  {"text": "outra", "score": 0.7}]})
+        await bus.emit("guardrail.triggered", {"kinds": ["openai_key", "aws_key"]})
+        await bus.emit("skill.ran", {"skill": "change_analysis", "ok": True, "steps": 2})
+        await bus.emit("memory.consolidated",
+                       {"archived": 1, "merged": 2, "nodes": 3, "edges": 1})
+        await bus.emit("graph.updated", {"nodes": 3, "edges": 1, "by_type": {}})
+        await bus.emit("aila.state", {"status": "IDLE"})   # não-cognitivo: não conta
+
+        summary = tracker.cognitive_summary()
+        assert summary["totals"] == {
+            "memory.recalled": 1, "memory.consolidated": 1, "graph.updated": 1,
+            "guardrail.triggered": 1, "skill.ran": 1,
+        }
+        # memory.recalled vira só contagem
+        rec = next(e for e in summary["recent"] if e["type"] == "memory.recalled")
+        assert rec["count"] == 2 and "items" not in rec and "text" not in rec
+        # nada sensível em NENHUM lugar do feed
+        import json as _json
+        assert "SEGREDO_DO_USUARIO" not in _json.dumps(summary)
+        # guardrail guarda os TIPOS
+        g = next(e for e in summary["recent"] if e["type"] == "guardrail.triggered")
+        assert g["kinds"] == ["openai_key", "aws_key"]
+        # o feed cognitivo não inclui eventos de controle
+        assert all(e["type"] != "aila.state" for e in summary["recent"])
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig

@@ -41,6 +41,16 @@ async def events(request: Request, n: int = 40) -> dict:
     return {"events": tracker.events(n), "state": tracker.state, "provider": tracker.provider}
 
 
+@router.get("/cognition")
+async def cognition(request: Request, n: int = 20) -> dict:
+    """Feed do "subconsciente": atividade cognitiva recente (memória/grafo/
+    guardrail/skill) + totais. Só metadados. Base p/ o mini-subconsciente e a aba 🧠."""
+    tracker = getattr(request.app.state, "events", None)
+    if tracker is None:
+        return {"totals": {}, "recent": []}
+    return tracker.cognitive_summary(n)
+
+
 class TaskBody(BaseModel):
     goal: str
 
