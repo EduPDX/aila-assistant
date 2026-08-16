@@ -64,6 +64,9 @@ body[data-mode="error"]        { --mode-accent: var(--danger); }
 }
 .icon-btn:hover { color: var(--accent); border-color: var(--glass-border); }
 .icon-btn.send { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #04120f; border: none; }
+.icon-btn.stop { display: none; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.icon-btn.stop.show { display: inline-flex; }   /* aparece só enquanto ela fala */
+.icon-btn.stop:hover { color: var(--danger); border-color: var(--danger); }
 .icon-btn.rec { background: var(--danger); color: #fff; border: none; animation: pulse 1s infinite; }
 @keyframes pulse { 50% { filter: brightness(1.3); } }
 

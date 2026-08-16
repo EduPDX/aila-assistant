@@ -99,6 +99,7 @@ function wireUI() {
   byId('mind-close').onclick = () => showTab('avatar');   // voltar ao palco
   byId('btn-send').onclick = chat.send;
   byId('mic').onclick = voice.toggleMic;
+  byId('btn-stop').onclick = voice.stopSpeaking;   // ⏹ interrompe a fala
   byId('attach').onclick = () => byId('attachfile').click();
   byId('attachfile').onchange = (e) => chat.attachFiles(e.target.files, () => { showTab('chat'); e.target.value = ''; });
   byId('perm-deny').onclick = () => respondPerm(false);

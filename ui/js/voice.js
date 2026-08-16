@@ -23,10 +23,21 @@ export async function speak(text) {
     lipBuf = new Uint8Array(lipAnalyser.fftSize);
     src.connect(lipAnalyser); lipAnalyser.connect(lipCtx.destination);
     _driveMouth();
-    ttsAudio.onended = () => { lipAnalyser = null; avatarMouth(0); };
+    ttsAudio.onended = () => { lipAnalyser = null; avatarMouth(0); _speaking(false); };
+    _speaking(true);
     await ttsAudio.play();
-  } catch (e) { /* voz indisponível: silencioso */ }
+  } catch (e) { _speaking(false); /* voz indisponível: silencioso */ }
 }
+
+/** Interrompe a fala atual (botão ⏹). */
+export function stopSpeaking() {
+  if (ttsAudio) { try { ttsAudio.pause(); ttsAudio.currentTime = 0; } catch (e) {} }
+  lipAnalyser = null;
+  avatarMouth(0);
+  _speaking(false);
+}
+
+function _speaking(on) { byId('btn-stop')?.classList.toggle('show', on); }
 function _driveMouth() {
   if (!lipAnalyser) return;
   lipAnalyser.getByteTimeDomainData(lipBuf);
