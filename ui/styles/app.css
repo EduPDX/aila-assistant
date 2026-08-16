@@ -885,6 +885,20 @@ body[data-tab="mind"] .subc { display: none; }           /* na aba 🧠, o grafo
   padding: 5px 13px; font-size: var(--fs-sm); }
 .mind-kindsel button.active { background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #04120f; font-weight: 600; }
+.mind-close { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; z-index: 6;
+  display: flex; align-items: center; justify-content: center; background: var(--panel-2);
+  border: 1px solid var(--border); color: var(--muted); cursor: pointer; font-size: 14px; }
+.mind-close:hover { color: var(--text); border-color: var(--glass-border); }
+/* acesso ao subconsciente na sidebar (as abas do topo são ocultas) */
+.mind-nav { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.mind-nav-h { font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); padding: 0 2px 2px; }
+.mind-navbtn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  font-size: var(--fs-sm); cursor: pointer; text-align: left;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease); }
+.mind-navbtn:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-2)); }
 .mind-stats { position: absolute; bottom: 12px; right: 16px; font-family: var(--font-mono);
   font-size: 10px; color: var(--muted); pointer-events: none; }
 .mind-empty { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px;

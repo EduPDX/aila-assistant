@@ -25,11 +25,22 @@ export function initSubconscious() {
   load();
   // "pensa" periodicamente: destaca um nó, dando a sensação de processar
   setInterval(() => { if (fg && document.getElementById('subc')?.offsetParent) fg.think(); }, 2600);
+  // recarrega os dados REAIS a cada 20s → o grafo muda conforme a Aila aprende
+  setInterval(load, 20000);
 }
+
+let _sig = '';
 
 async function load() {
   try {
-    const d = await api.graph('code', 120);      // amostra pequena p/ o canto
-    if (d.nodes && d.nodes.length) fg.setData(d);
-  } catch (e) { /* offline: mantém vazio */ }
+    // mostra o que a Aila SABE (conhecimento das conversas); enquanto vazio,
+    // cai p/ uma amostra do código (nunca fica em branco).
+    let d = await api.graph('knowledge', 160);
+    if (!d.nodes || d.nodes.length < 3) d = await api.graph('code', 120);
+    if (!d.nodes || !d.nodes.length) return;
+    const sig = d.kind + ':' + d.nodes.length + ':' + d.edges.length;
+    if (sig === _sig) return;                     // sem mudança → não re-embaralha o layout
+    _sig = sig;
+    fg.setData(d);
+  } catch (e) { /* offline: mantém o último estado */ }
 }

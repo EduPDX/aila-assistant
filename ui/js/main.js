@@ -23,11 +23,17 @@ import { initBoot } from './shell/boot.js';
 /* ---------- abas ---------- */
 function showTab(t) {
   ['avatar', 'chat', 'mind'].forEach((x) => {
-    byId('pane-' + x).classList.toggle('active', x === t);
-    byId('tab-' + x).classList.toggle('active', x === t);
+    byId('pane-' + x)?.classList.toggle('active', x === t);
+    byId('tab-' + x)?.classList.toggle('active', x === t);   // abas do topo podem não existir
   });
   document.body.dataset.tab = t;      // CSS esconde o mini-subconsciente na aba 🧠
-  mind.showMind(t === 'mind');        // poll só enquanto a aba está visível
+  mind.showMind(t === 'mind');
+}
+
+/** abre a aba do grafo (Mente) já no grafo pedido (código | conhecimento) */
+function openGraph(kind) {
+  mind.showKind(kind);
+  showTab('mind');
 }
 
 /* ---------- permissão ---------- */
@@ -88,7 +94,9 @@ function wireUI() {
   byId('btn-hamb').onclick = () => setDrawer(byId('drawer').classList.contains('collapsed'));
   byId('tab-avatar').onclick = () => showTab('avatar');
   byId('tab-chat').onclick = () => showTab('chat');
-  byId('tab-mind').onclick = () => showTab('mind');
+  // acesso ao subconsciente pela sidebar (as abas do topo estão ocultas)
+  document.querySelectorAll('.mind-navbtn').forEach((b) => { b.onclick = () => openGraph(b.dataset.kind); });
+  byId('mind-close').onclick = () => showTab('avatar');   // voltar ao palco
   byId('btn-send').onclick = chat.send;
   byId('mic').onclick = voice.toggleMic;
   byId('attach').onclick = () => byId('attachfile').click();

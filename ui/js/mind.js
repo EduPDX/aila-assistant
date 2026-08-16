@@ -17,9 +17,19 @@ let visible = null;          // Set de comunidades visíveis
 let built = false;
 
 export function showMind(on) {
-  if (!on) return;
-  if (!built) build();
-  else load(kind);           // reabriu a aba → atualiza
+  if (on && !built) build();
+}
+
+/** abre já num grafo específico: 'code' (arquivos internos) | 'knowledge' (conversa) */
+export function showKind(k) {
+  kind = (k === 'knowledge') ? 'knowledge' : 'code';
+  if (!built) build();           // build() lê `kind` e carrega o certo
+  else { updateKindButtons(); load(kind); }
+}
+
+function updateKindButtons() {
+  $('mind-kindsel')?.querySelectorAll('button')
+    .forEach((b) => b.classList.toggle('active', b.dataset.k === kind));
 }
 
 function build() {
@@ -43,6 +53,7 @@ function build() {
   search.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(search.value); });
   search.addEventListener('input', () => { if (!search.value) fg.select(null); });
 
+  updateKindButtons();
   load(kind);
 }
 

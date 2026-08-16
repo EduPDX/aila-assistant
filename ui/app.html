@@ -25,6 +25,11 @@
       <div class="orb"></div><h1>AILA</h1>
       <button class="gear" id="btn-settings" title="Configurações">⚙️</button>
     </div>
+    <div class="mind-nav">
+      <div class="mind-nav-h">Subconsciente</div>
+      <button class="mind-navbtn" data-kind="code" title="Grafo dos arquivos internos da Aila">🗂 <span>Arquivos internos</span></button>
+      <button class="mind-navbtn" data-kind="knowledge" title="Grafo do que a Aila aprendeu nas conversas">💬 <span>Conversa</span></button>
+    </div>
     <button class="btn accent" id="btn-new" title="Começar um novo episódio da conversa">＋ Novo episódio</button>
     <div class="search"><span>🔎</span><input id="search" placeholder="Buscar na linha do tempo…" /></div>
     <div class="sessions" id="sessions"></div>
@@ -41,7 +46,6 @@
       <div class="tabs">
         <button id="tab-avatar" class="active">Avatar</button>
         <button id="tab-chat">Conversa</button>
-        <button id="tab-mind" title="O que a Aila está pensando">🧠 Mente</button>
       </div>
       <div class="spacer"></div>
       <div class="statuscluster" id="topbar-status"></div>
@@ -77,6 +81,7 @@
             <button data-k="code" class="active">Código</button>
             <button data-k="knowledge">Conhecimento</button>
           </div>
+          <button class="mind-close" id="mind-close" title="Voltar ao avatar">✕</button>
           <div class="mind-empty" id="mind-empty" hidden></div>
           <div class="mind-stats" id="mind-stats"></div>
         </div>
