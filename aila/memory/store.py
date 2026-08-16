@@ -290,5 +290,57 @@ class MemoryStore:
         self.conn.execute(f"UPDATE memories SET {', '.join(sets)} WHERE id = ?", vals)
         self.conn.commit()
 
+    def vectors(self, status: str = "active") -> tuple[list[int], list[str], list[int], np.ndarray | None]:
+        """(ids, kinds, reinforcement, matriz normalizada) das memórias de um status.
+        Base p/ a deduplicação da consolidação."""
+        rows = self.conn.execute(
+            "SELECT id, kind, reinforcement, embedding FROM memories WHERE status = ?", (status,)
+        ).fetchall()
+        if not rows:
+            return [], [], [], None
+        ids = [r["id"] for r in rows]
+        kinds = [r["kind"] for r in rows]
+        reinf = [int(r["reinforcement"] or 0) for r in rows]
+        mat = self._normalize(np.vstack([np.frombuffer(r["embedding"], dtype=np.float32) for r in rows]))
+        return ids, kinds, reinf, mat
+
+    def archive_expired(self, now: str) -> int:
+        """Decay: arquiva memórias ativas com expiration vencida. Devolve quantas."""
+        cur = self.conn.execute(
+            "UPDATE memories SET status = 'archived' WHERE status = 'active' "
+            "AND expiration IS NOT NULL AND expiration < ?", (now,)
+        )
+        self.conn.commit()
+        self._invalidate()
+        return cur.rowcount
+
+    def supersede(self, mem_id: int) -> None:
+        """Aposenta uma memória (duplicata) — NUNCA apaga (auditável/reversível)."""
+        self.conn.execute("UPDATE memories SET status = 'superseded' WHERE id = ?", (mem_id,))
+        self.conn.commit()
+        self._invalidate()
+
+    def add_evidence(self, mem_id: int, evidence_ids: list[int]) -> None:
+        """Anexa ids de suporte à coluna `evidence` (união, sem duplicar)."""
+        row = self.conn.execute("SELECT evidence FROM memories WHERE id = ?", (mem_id,)).fetchone()
+        cur: list = []
+        if row and row["evidence"]:
+            try:
+                cur = json.loads(row["evidence"])
+            except (ValueError, TypeError):
+                cur = []
+        merged = list(dict.fromkeys([*cur, *evidence_ids]))
+        self.conn.execute("UPDATE memories SET evidence = ? WHERE id = ?",
+                          (json.dumps(merged), mem_id))
+        self.conn.commit()
+
+    def active_with_entities(self, limit: int = 500) -> list[dict]:
+        """Memórias ativas que já têm entidades (p/ popular o grafo)."""
+        rows = self.conn.execute(
+            "SELECT id, entities FROM memories WHERE status = 'active' AND entities IS NOT NULL "
+            "ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def close(self) -> None:
         self.conn.close()

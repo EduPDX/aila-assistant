@@ -578,6 +578,67 @@ def test_hybrid_retrieval(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_consolidation(tmp_path: Path):
+    """Fase 4 (dreaming conservador): decay + dedup (com evidência+reforço) +
+    grafo por co-ocorrência GATED por evidência + importância. Determinístico."""
+    from aila.cognition.graph import GraphStore, edge_id
+    from aila.cognition.memory.consolidation import Consolidator
+    from aila.cognition.memory.models import Memory
+    from aila.memory.store import MemoryStore
+
+    vocab = ["roteamento", "modelos", "roteador", "provedor", "gemini",
+             "prefiro", "respostas", "diretas"]
+    async def bow_embed(texts):
+        out = []
+        for t in texts:
+            tl = t.lower()
+            out.append([float(tl.count(w)) + 0.001 for w in vocab])
+        return out
+
+    async def go():
+        store = MemoryStore(tmp_path / "cons.db", bow_embed)
+        graph = GraphStore(tmp_path / "cons_kg.db")
+
+        # co-ocorrência: Aila+ModelRouter em 2 memórias (evidência), Aila+Gemini em 1
+        await store.add("montei o roteamento de modelos", kind="project",
+                        entities=["Aila", "ModelRouter"])
+        await store.add("o roteador escolhe o provedor", kind="project",
+                        entities=["Aila", "ModelRouter"])
+        await store.add("usei o gemini hoje", kind="fact", entities=["Aila", "Gemini"])
+        # duplicata (mesmo texto+kind) → deve fundir
+        c1 = await store.add("prefiro respostas diretas", kind="preference")
+        c2 = await store.add("prefiro respostas diretas", kind="preference")
+        # temporária vencida → decay
+        await store.add("lembrete temporario", kind="fact",
+                        expiration="2020-01-01T00:00:00+00:00")
+
+        rep = await Consolidator(store, graph, min_evidence=2).consolidate()
+
+        # decay arquivou a temporária
+        assert rep["archived"] == 1
+        # dedup fundiu 1 (a duplicata); a canônica ganhou reforço + evidência
+        assert rep["merged"] == 1
+        canon = c1 if Memory.from_row(store.get(c1)).status == "active" else c2
+        dup = c2 if canon == c1 else c1
+        assert Memory.from_row(store.get(dup)).status == "superseded"
+        cm = Memory.from_row(store.get(canon))
+        assert cm.reinforcement == 1 and dup in cm.evidence   # reforço SÓ com evidência
+
+        # grafo: 3 nós; aresta Aila-ModelRouter (co-ocorr. 2 ≥ evidência), NÃO Aila-Gemini (1)
+        assert rep["nodes"] == 3 and rep["edges"] == 1
+        assert graph.get_edge(edge_id("Aila", "ModelRouter", "relates_to")) is not None
+        assert graph.get_edge(edge_id("Aila", "Gemini", "relates_to")) is None
+
+        # importância recalculada: Aila (conectada) > Gemini (isolada)
+        assert graph.get_node("Aila").importance > graph.get_node("Gemini").importance
+
+        # idempotente: rodar de novo não re-funde nem duplica arestas
+        rep2 = await Consolidator(store, graph, min_evidence=2).consolidate()
+        assert rep2["merged"] == 0 and graph.counts()["edges"] == 1
+
+    asyncio.run(go())
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig

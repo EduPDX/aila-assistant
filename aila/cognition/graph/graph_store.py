@@ -246,6 +246,18 @@ class GraphStore:
         self.conn.execute("UPDATE kg_node SET last_recalled = ? WHERE id = ?", (self._now(), node_id))
         self.conn.commit()
 
+    def recompute_importance(self) -> None:
+        """Importância do nó = grau normalizado (centralidade simples). Barato;
+        roda na consolidação. Nós mais conectados = mais importantes."""
+        self._ensure_index()
+        ids = [r["id"] for r in self.conn.execute("SELECT id FROM kg_node")]
+        deg = {nid: len(self._out.get(nid, [])) + len(self._in.get(nid, [])) for nid in ids}
+        mx = max(deg.values(), default=0) or 1
+        for nid, d in deg.items():
+            self.conn.execute("UPDATE kg_node SET importance = ? WHERE id = ?",
+                              (round(d / mx, 3), nid))
+        self.conn.commit()
+
     def delete_node(self, node_id: str) -> None:
         self.conn.execute("DELETE FROM kg_node WHERE id = ?", (node_id,))
         self.conn.execute("DELETE FROM kg_edge WHERE source = ? OR target = ?", (node_id, node_id))
