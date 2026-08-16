@@ -39,7 +39,7 @@ export function renderSessions() {
   const list = _sessions.filter((s) => !q || (s.title || '').toLowerCase().includes(q));
 
   if (!list.length) {
-    box.innerHTML = `<div class="muted" style="padding:10px">${q ? 'nada encontrado' : 'nenhuma conversa ainda'}</div>`;
+    box.innerHTML = `<div class="muted" style="padding:10px">${q ? 'nada encontrado' : 'sua linha do tempo aparece aqui'}</div>`;
     return;
   }
   const groups = [];
@@ -67,13 +67,13 @@ export function renderSessions() {
 function openMenu(anchor, id) {
   const s = _sessions.find((x) => x.id === id);
   contextMenu(anchor, [
-    { icon: '✏️', label: 'Renomear', onClick: () => renameSession(id, s?.title || '') },
-    { icon: '🗑️', label: 'Apagar', danger: true, onClick: () => deleteSession(id) },
+    { icon: '✏️', label: 'Renomear episódio', onClick: () => renameSession(id, s?.title || '') },
+    { icon: '🗑️', label: 'Apagar episódio', danger: true, onClick: () => deleteSession(id) },
   ]);
 }
 
 async function renameSession(id, current) {
-  const title = await promptDialog({ title: 'Renomear conversa', value: current, placeholder: 'Novo título' });
+  const title = await promptDialog({ title: 'Renomear episódio', value: current, placeholder: 'Novo título' });
   if (!title) return;
   await fetch(`/api/sessions/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
@@ -83,7 +83,7 @@ async function renameSession(id, current) {
 
 async function deleteSession(id) {
   const ok = await confirmDialog({
-    title: 'Apagar conversa?', body: 'Esta ação não pode ser desfeita.',
+    title: 'Apagar episódio?', body: 'Esta ação não pode ser desfeita.',
     confirmLabel: 'Apagar', danger: true,
   });
   if (!ok) return;

@@ -1164,6 +1164,56 @@ def test_document_agent_enabled_in_engine():
     assert {"docs.read", "docs.create"} <= names
 
 
+def test_resume_last_continuous_conversation(tmp_path: Path):
+    """Fase 10: ao 'reabrir', resume_last retoma a conversa mais recente e
+    reconstrói o contexto p/ o LLM (UX de conversa única)."""
+    from aila.core.engine import build_engine
+    from aila.database.store import ConversationStore
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+
+    class F(LLMBackend):
+        name = "ollama"
+        async def chat(self, m, **k):
+            yield ChatChunk(content="x", done=True)
+        async def complete(self, m, **k):
+            return "[]"
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+
+    s = get_settings()
+    s.memory.enabled = False
+    s.routing.enabled = False
+    eng = build_engine(s, F())
+    eng.store = ConversationStore(tmp_path / "conv.db")   # hermético (não toca o DB real)
+    eng.session_id = None
+    eng.context.clear()
+
+    # sem histórico → nada a retomar (pronto p/ criar na 1ª msg)
+    assert eng.resume_last()["id"] is None
+
+    # simula uma conversa gravada
+    sid = eng.ensure_session("primeiro episódio")
+    eng.store.add_message(sid, "user", "lembra do gato?")
+    eng.store.add_message(sid, "assistant", "sim, o gato preto")
+
+    # "reabrir o app": nova conexão, estado em memória zerado
+    eng.session_id = None
+    eng.context.clear()
+    resumed = eng.resume_last()
+    assert resumed["id"] == sid and len(resumed["messages"]) == 2
+    # contexto reconstruído → continuidade real p/ o modelo
+    joined = " ".join(mm.get("content", "") for mm in eng.context.build())
+    assert "lembra do gato?" in joined
+
+    # reconexão com episódio já ativo NÃO troca de episódio
+    again = eng.resume_last()
+    assert again["id"] == sid
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig

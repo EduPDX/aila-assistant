@@ -159,6 +159,20 @@ class AilaEngine:
             elif m["role"] == "assistant":
                 self.context.add_assistant(m["content"])
 
+    def resume_last(self) -> dict:
+        """UX de conversa única: retoma a conversa mais recente (reconstruindo o
+        contexto p/ o LLM), em vez de começar vazio. Se já houver um episódio
+        ativo (reconexão), mantém-no. Sem histórico → pronto p/ criar na 1ª msg."""
+        if self.store is None:
+            return {"id": None, "messages": []}
+        if self.session_id is None:
+            sessions = self.store.list_sessions()      # DESC por data
+            if sessions:
+                self.load_session(sessions[0]["id"])
+        if self.session_id is None:
+            return {"id": None, "messages": []}
+        return {"id": self.session_id, "messages": self.store.get_messages(self.session_id)}
+
     def _persist(self, role: str, content: str) -> None:
         if self.store is None or not content:
             return

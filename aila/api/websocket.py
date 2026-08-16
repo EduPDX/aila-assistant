@@ -80,6 +80,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     engine.permissions.set_confirm_handler(session.confirm)
     await session.emit("system.status", {"message": "conectado"})
 
+    # Conversa única: ao conectar, retoma a última conversa em vez de vazio.
+    resumed = engine.resume_last()
+    if resumed["id"] is not None:
+        await session.emit("session.loaded",
+                           {"id": resumed["id"], "messages": resumed["messages"], "resumed": True})
+
     async def run_message(text: str, mode: str) -> None:
         try:
             await engine.process(text, session.emit, mode=mode)
