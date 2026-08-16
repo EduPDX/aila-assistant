@@ -51,6 +51,20 @@ async def cognition(request: Request, n: int = 20) -> dict:
     return tracker.cognitive_summary(n)
 
 
+@router.get("/graph")
+async def graph(kind: str = "code", limit: int = 1500) -> dict:
+    """Grafo do subconsciente p/ visualização: nós + arestas + comunidades.
+    kind=code (Code Graph real da Aila) | knowledge (aprendido das conversas).
+    Construído sob demanda; só metadados estruturais."""
+    from aila.cognition.graph.service import get_service
+
+    k = "knowledge" if kind == "knowledge" else "code"
+    try:
+        return get_service().view(k, max(1, min(limit, 4000)))
+    except Exception as exc:  # noqa: BLE001 - a UI degrada com grafo vazio
+        return {"kind": k, "nodes": [], "edges": [], "communities": [], "error": str(exc)}
+
+
 class TaskBody(BaseModel):
     goal: str
 

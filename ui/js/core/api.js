@@ -19,6 +19,7 @@ export const api = {
   metrics: () => j('/api/metrics'),                   // cpu/ram/gpu/vram/tps/uptime
   events: (n = 40) => j(`/api/events?n=${n}`),         // atividade recente (redigida) + state + provider
   cognition: (n = 20) => j(`/api/cognition?n=${n}`),   // feed do subconsciente: {totals, recent}
+  graph: (kind = 'code', limit = 1500) => j(`/api/graph?kind=${kind}&limit=${limit}`),  // {nodes,edges,communities}
   tasks: () => j('/api/tasks'),                       // { tasks: [...] }
   task: (id) => j(`/api/tasks/${id}`),
   memory: (n = 20) => j(`/api/memory?n=${n}`),         // { enabled, count, recent }

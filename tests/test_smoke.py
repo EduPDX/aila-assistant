@@ -1214,6 +1214,41 @@ def test_resume_last_continuous_conversation(tmp_path: Path):
     assert again["id"] == sid
 
 
+def test_graph_view_for_subconscious(tmp_path: Path):
+    """Grafo do subconsciente: to_view converte o Code Graph em nós+arestas+
+    comunidades (por pacote) p/ a UI renderizar."""
+    from aila.cognition.graph import CodeGraph, GraphStore
+    from aila.cognition.graph.view import to_view
+
+    pkg = tmp_path / "proj" / "aila" / "core"
+    pkg.mkdir(parents=True)
+    (tmp_path / "proj" / "aila" / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "engine.py").write_text(
+        "class Engine:\n    def run(self):\n        return helper()\n\ndef helper():\n    return 1\n",
+        encoding="utf-8")
+
+    store = GraphStore(tmp_path / "cg.db")
+    CodeGraph(store, tmp_path / "proj").build(subdir="aila")
+    view = to_view(store, "code")
+
+    assert view["kind"] == "code"
+    assert view["counts"]["nodes"] > 0 and view["counts"]["edges"] > 0
+    # todo nó tem comunidade; classes/funções de aila.core caem no pacote 'aila.core'
+    assert all("community" in n and "degree" in n for n in view["nodes"])
+    assert any(n["community"] == "aila.core" for n in view["nodes"])
+    # comunidades ordenadas por contagem (desc)
+    counts = [c["count"] for c in view["communities"]]
+    assert counts == sorted(counts, reverse=True)
+    # arestas só entre nós presentes
+    ids = {n["id"] for n in view["nodes"]}
+    assert all(e["source"] in ids and e["target"] in ids for e in view["edges"])
+
+    # knowledge vazio (ainda não populado) → estrutura válida, sem quebrar
+    empty = to_view(GraphStore(tmp_path / "kg.db"), "knowledge")
+    assert empty["nodes"] == [] and empty["communities"] == []
+
+
 def test_permission_levels_and_autonomy(tmp_path: Path):
     """Níveis de risco (SAFE/REVIEW/DANGER/BLOCKED) + gate por autonomia (L1-L5)."""
     from aila.core.config import SecurityConfig
