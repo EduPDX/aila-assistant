@@ -10,9 +10,14 @@ export function createLipSyncLayer() {
   return {
     name: 'lipsync',
     update(rig, buf, ctx, dt) {
-      // boca (viseme 'aa') a partir do envelope de áudio
+      // boca (viseme 'aa') a partir do envelope de áudio. O viseme CEDE um pouco
+      // à boca emocional (não a apaga): quanto mais forte a face (sorriso etc.),
+      // um pouco menos de abertura de 'aa' → os dois se misturam (P3).
       mouthNow += (ctx.mouth - mouthNow) * Math.min(1, dt * 20);
-      if (mouthNow > 0.001) buf.setExpr('aa', mouthNow);
+      if (mouthNow > 0.001) {
+        const face = Math.min(1, ctx.faceWeight || 0);
+        buf.setExpr('aa', mouthNow * (1 - 0.4 * face));
+      }
 
       // aceno leve da cabeça enquanto fala — NÃO mexe nos braços
       const g = Math.min(1, ctx.speech);

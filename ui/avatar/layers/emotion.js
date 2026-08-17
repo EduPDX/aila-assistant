@@ -27,6 +27,8 @@ export function createEmotionLayer() {
         cur[e] += (goal - cur[e]) * k;
         if (cur[e] > 0.001) buf.setExpr(e, cur[e]);
       }
+      // publica a força da boca emocional p/ o lip-sync CEDER a ela (não apagá-la)
+      ctx.faceWeight = target === 'neutral' ? 0 : (cur[target] || 0);
     },
   };
 }
