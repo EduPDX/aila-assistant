@@ -263,6 +263,30 @@ export class ForceGraph3D {
     p.needsUpdate = true;
   }
 
+  // realce da seleção: apaga não-vizinhos + destaca as arestas do nó selecionado
+  // (mesmo comportamento do 2D). Só roda ao selecionar (não a cada frame).
+  _recolor() {
+    if (!this._nodeMesh || !this._edgeLines) return;
+    const sel = this.selected, nbr = this._nbr;
+    const white = this._white || (this._white = new THREE.Color(0xffffff));
+    const hot = this._hot || (this._hot = new THREE.Color(0x9fd8ff));
+    const tmp = this._tmp || (this._tmp = new THREE.Color());
+    this.nodes.forEach((n, i) => {
+      tmp.copy(this._colHex.get(n.community) || white);
+      if (sel && n !== sel && !nbr.has(n.id)) tmp.multiplyScalar(0.16);   // apaga não-vizinhos
+      this._nodeMesh.setColorAt(i, tmp);
+    });
+    if (this._nodeMesh.instanceColor) this._nodeMesh.instanceColor.needsUpdate = true;
+    const col = this._edgeLines.geometry.getAttribute('color');
+    this.links.forEach((l, i) => {
+      if (!sel) tmp.copy(this._colHex.get(l.s.community) || white);
+      else if (l.s === sel || l.t === sel) tmp.copy(hot);                // acende as ligações do nó
+      else tmp.copy(this._colHex.get(l.s.community) || white).multiplyScalar(0.1);
+      col.setXYZ(i * 2, tmp.r, tmp.g, tmp.b); col.setXYZ(i * 2 + 1, tmp.r, tmp.g, tmp.b);
+    });
+    col.needsUpdate = true;
+  }
+
   // -------------------------------------------------------- loop
   _loop() {
     const step = () => {
@@ -295,6 +319,7 @@ export class ForceGraph3D {
       if (l.s === node) { this._nbr.add(l.t.id); out.push(l.t); }
       else if (l.t === node) { this._nbr.add(l.s.id); out.push(l.s); }
     }
+    this._recolor();   // apaga não-vizinhos + destaca as ligações do nó
     if (this.opts.onNode) this.opts.onNode(node, out);
   }
   selectById(id) { const n = this.byId.get(id); if (n) this.select(n); }
