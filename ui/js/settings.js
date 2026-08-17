@@ -6,6 +6,7 @@ import { avatarReload } from './avatar.js';
 import { renderProviders } from './views/providers.js';
 import { api } from './core/api.js';
 import { confirmDialog } from './ui.js';
+import { CATEGORIES, CUSTOM_HTML } from './settings-schema.js';
 
 const THEMES = [
   { id: 'aqua', c: '#38e1d0' }, { id: 'cyber', c: '#c257ff' }, { id: 'rose', c: '#ff6fae' },
@@ -18,17 +19,115 @@ export function setTheme(id) {
   $$('.swatch').forEach((s) => s.classList.toggle('active', s.dataset.id === id));
 }
 
-export const openSettings = () => byId('settings-overlay').classList.add('show');
+export const openSettings = () => { byId('settings-overlay').classList.add('show'); loadConfig().then(renderAllFields); };
 export const closeSettings = () => byId('settings-overlay').classList.remove('show');
+
+// renderers dos blocos "custom" (widgets já prontos), por nome
+const CUSTOM_RENDER = {
+  providers: renderProviders, memory: renderMemory, autonomy: renderAutonomy,
+  permissions: renderPermissions, network: renderNetwork, system: loadStatus,
+};
+
 export function settingsTab(p) {
   $$('.snav').forEach((b) => b.classList.toggle('active', b.dataset.p === p));
   $$('.spane').forEach((s) => s.classList.toggle('active', s.id === 'sp-' + p));
-  if (p === 'modelos') renderProviders();     // provedores (local + nuvem)
-  if (p === 'autonomia') renderAutonomy();
-  if (p === 'permissoes') renderPermissions();
-  if (p === 'memoria') renderMemory();
-  if (p === 'rede') renderNetwork();
-  if (p === 'voz') loadStatus();              // refaz o status de voz
+  const cat = CATEGORIES.find((c) => c.id === p); if (!cat) return;
+  for (const b of cat.blocks) if (b.custom && CUSTOM_RENDER[b.custom]) CUSTOM_RENDER[b.custom]();
+}
+
+/* ---------- editor de config (schema → PATCH /api/config) ---------- */
+let _cfg = {};
+const getPath = (o, path) => path.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
+async function loadConfig() { try { _cfg = await api.config(); } catch { _cfg = {}; } }
+
+function commit(path, value) {
+  const patch = {}; let cur = patch; const parts = path.split('.');
+  parts.forEach((k, i) => { if (i === parts.length - 1) cur[k] = value; else cur = (cur[k] = {}); });
+  api.patchConfig(patch).catch(() => {});
+}
+function showRestart() { byId('cfg-restart')?.classList.add('show'); }
+
+function control(f) {
+  const v = getPath(_cfg, f.path);
+  const onChange = (val) => { commit(f.path, val); if (f.restart) showRestart(); };
+  if (f.type === 'toggle') {
+    const t = el('div', { class: 'toggle' + (v ? ' on' : ''), onclick: () => { const on = !t.classList.contains('on'); t.classList.toggle('on', on); onChange(on); } }, el('div', { class: 'sw' }));
+    return t;
+  }
+  if (f.type === 'select') {
+    const s = el('select', { class: 'cfg-input' });
+    (f.options || []).forEach((o) => s.append(el('option', { value: o }, o)));
+    s.value = v ?? (f.options?.[0] ?? '');
+    s.onchange = () => onChange(s.value);
+    return s;
+  }
+  if (f.type === 'textarea') {
+    const a = el('textarea', { class: 'cfg-input cfg-area', rows: 3 }); a.value = v ?? '';
+    a.onchange = () => onChange(a.value);
+    return a;
+  }
+  if (f.type === 'tags') {
+    const i = el('input', { class: 'cfg-input', type: 'text' }); i.value = Array.isArray(v) ? v.join(', ') : (v ?? '');
+    i.onchange = () => onChange(i.value.split(',').map((x) => x.trim()).filter(Boolean));
+    return i;
+  }
+  // number | text
+  const i = el('input', { class: 'cfg-input', type: f.type === 'number' ? 'number' : 'text' });
+  if (f.min != null) i.min = f.min; if (f.max != null) i.max = f.max; if (f.step != null) i.step = f.step;
+  i.value = v ?? '';
+  i.onchange = () => onChange(f.type === 'number' ? Number(i.value) : i.value);
+  return i;
+}
+
+function renderAllFields() {
+  $$('.cfg-fields').forEach((box) => {
+    const fields = JSON.parse(box.dataset.fields || '[]');
+    box.innerHTML = '';
+    fields.forEach((f) => box.append(
+      el('div', { class: 'cfg-row' },
+        el('div', { class: 'cfg-meta' },
+          el('label', { class: 'cfg-label' }, f.label + (f.restart ? ' ↻' : '')),
+          f.hint ? el('div', { class: 'cfg-hint muted' }, f.hint) : null),
+        el('div', { class: 'cfg-ctl' }, control(f)),
+      )));
+  });
+}
+
+function prefToggle(p) {
+  const on = (localStorage.getItem(p.key) ?? String(p.default)) === 'true';
+  const t = el('div', { class: 'toggle' + (on ? ' on' : ''), onclick: () => {
+    const now = !t.classList.contains('on'); t.classList.toggle('on', now);
+    localStorage.setItem(p.key, String(now));
+  } }, el('div', { class: 'sw' }));
+  return el('div', { class: 'cfg-row' },
+    el('div', { class: 'cfg-meta' }, el('label', { class: 'cfg-label' }, p.label)),
+    el('div', { class: 'cfg-ctl' }, t));
+}
+
+/* gera a navegação + os painéis a partir do schema (uma vez) */
+function buildSettings() {
+  const nav = byId('settings-nav'); const main = byId('settings-main');
+  if (!nav || !main) return;
+  nav.innerHTML = '<div class="settings-title">⚙️ Configurações</div>';
+  main.innerHTML = '<div class="cfg-restart" id="cfg-restart">↻ Reinicie a Aila para aplicar algumas mudanças.</div>';
+
+  CATEGORIES.forEach((cat, idx) => {
+    nav.append(el('button', { class: 'snav' + (idx === 0 ? ' active' : ''), 'data-p': cat.id,
+      onclick: () => settingsTab(cat.id) }, `${cat.icon} ${cat.label}`));
+
+    const pane = el('section', { class: 'spane' + (idx === 0 ? ' active' : ''), id: 'sp-' + cat.id },
+      el('h3', {}, cat.label));
+    cat.blocks.forEach((b) => {
+      if (b.title) pane.append(el('div', { class: 'cfg-block-t' }, b.title));
+      if (b.fields) pane.append(el('div', { class: 'cfg-fields', 'data-fields': JSON.stringify(b.fields) }));
+      if (b.custom) pane.append(el('div', { class: 'html', html: CUSTOM_HTML[b.custom] || '' }));
+      if (b.pref) b.pref.forEach((p) => pane.append(prefToggle(p)));
+      if (b.note) pane.append(el('p', { class: 'muted cfg-note' }, b.note));
+    });
+    main.append(pane);
+  });
+  nav.append(el('div', { class: 'spacer' }));
+  nav.append(el('button', { class: 'btn', id: 'btn-settings-close', onclick: closeSettings }, 'Fechar'));
 }
 
 /* ---------- Memória (/api/memory — leitura) ---------- */
@@ -194,13 +293,17 @@ function bindStatusRows() {
 }
 
 export function initSettings() {
-  // swatches de tema
+  buildSettings();     // gera nav + painéis a partir do schema
+
+  // swatches de tema (o container #themes é gerado no bloco custom de "Geral")
   const box = byId('themes');
-  THEMES.forEach((t) => {
-    const s = document.createElement('div');
-    s.className = 'swatch'; s.dataset.id = t.id; s.style.background = t.c; s.title = t.id;
-    s.onclick = () => setTheme(t.id); box.appendChild(s);
-  });
+  if (box) {
+    THEMES.forEach((t) => {
+      const s = document.createElement('div');
+      s.className = 'swatch'; s.dataset.id = t.id; s.style.background = t.c; s.title = t.id;
+      s.onclick = () => setTheme(t.id); box.appendChild(s);
+    });
+  }
   setTheme(localStorage.getItem('aila-theme') || 'aqua');
 
   // fechar clicando fora
@@ -210,24 +313,31 @@ export function initSettings() {
   byId('mem-search')?.addEventListener('input', (e) => drawMemory(e.target.value));
 
   // trocar VRM
-  byId('pickvrm').onclick = () => byId('vrmfile').click();
-  byId('vrmfile').onchange = async (ev) => {
-    const f = ev.target.files[0]; if (!f) return;
-    byId('vrmnote').textContent = 'enviando…';
-    try {
-      const fd = new FormData(); fd.append('file', f, f.name);
-      const r = await fetch('/api/avatar/vrm', { method: 'POST', body: fd });
-      byId('vrmnote').textContent = r.ok ? '✓ trocado' : 'falhou';
-      if (r.ok) avatarReload();
-    } catch (e) { byId('vrmnote').textContent = 'falhou'; }
-    setTimeout(() => byId('vrmnote').textContent = '', 4000); ev.target.value = '';
-  };
+  const pv = byId('pickvrm');
+  if (pv) {
+    pv.onclick = () => byId('vrmfile').click();
+    byId('vrmfile').onchange = async (ev) => {
+      const f = ev.target.files[0]; if (!f) return;
+      byId('vrmnote').textContent = 'enviando…';
+      try {
+        const fd = new FormData(); fd.append('file', f, f.name);
+        const r = await fetch('/api/avatar/vrm', { method: 'POST', body: fd });
+        byId('vrmnote').textContent = r.ok ? '✓ trocado' : 'falhou';
+        if (r.ok) avatarReload();
+      } catch (e) { byId('vrmnote').textContent = 'falhou'; }
+      setTimeout(() => byId('vrmnote').textContent = '', 4000); ev.target.value = '';
+    };
+  }
 
-  // toggle de voz
-  byId('tg-voice').onclick = () => {
-    const on = !State.get('voiceOut'); State.set({ voiceOut: on });
-    byId('tg-voice').classList.toggle('on', on);
-  };
+  // toggle de voz (ao vivo)
+  const tg = byId('tg-voice');
+  if (tg) {
+    tg.classList.toggle('on', State.get('voiceOut') !== false);
+    tg.onclick = () => {
+      const on = !State.get('voiceOut'); State.set({ voiceOut: on });
+      tg.classList.toggle('on', on);
+    };
+  }
 
   bindStatusRows();   // linhas do painel de Status espelham o State global
 }

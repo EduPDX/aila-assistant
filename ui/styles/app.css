@@ -278,6 +278,25 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .settings-main h3 { margin-bottom: var(--s-2); }
 .spane { display: none; } .spane.active { display: block; animation: fadeIn var(--dur-2) var(--ease); }
 
+/* ---------- editor de config (schema-driven) ---------- */
+.cfg-restart { display: none; margin: 0 0 14px; padding: 8px 12px; font-size: var(--fs-sm);
+  color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 10%, transparent); border-radius: var(--r-md); }
+.cfg-restart.show { display: block; }
+.cfg-block-t { margin: 20px 0 8px; font-size: var(--fs-xs); text-transform: uppercase;
+  letter-spacing: 1.5px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 14px; }
+.cfg-note { margin-top: 12px; font-size: var(--fs-sm); }
+.cfg-row { display: flex; align-items: center; gap: 16px; padding: 9px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
+.cfg-meta { flex: 1; min-width: 0; }
+.cfg-label { font-size: var(--fs-sm); color: var(--text); }
+.cfg-hint { font-size: var(--fs-xs); margin-top: 2px; }
+.cfg-ctl { flex-shrink: 0; display: flex; align-items: center; }
+.cfg-input { width: 190px; max-width: 46vw; padding: 6px 10px; background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--text); font-size: var(--fs-sm); }
+.cfg-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.cfg-area { width: 100%; resize: vertical; font-family: inherit; }
+.cfg-row:has(.cfg-area) { flex-direction: column; align-items: stretch; gap: 6px; }
+
 .themes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: var(--s-3); }
 .swatch { width: 34px; height: 34px; border-radius: var(--r-md); cursor: pointer; border: 2px solid transparent; transition: transform var(--dur-1); }
 .swatch:hover { transform: scale(1.08); }
