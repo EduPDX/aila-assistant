@@ -162,17 +162,40 @@ const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
 loader.register((parser) => new VRMAnimationLoaderPlugin(parser));   // P6: carrega .vrma
 
-// ---------------- clips VRMA (gestos autorais) ----------------
-function loadClip(url, opts) {
-  if (!vrm || !controller) return;
-  loader.load(url, (gltf) => {
-    const va = gltf.userData.vrmAnimations && gltf.userData.vrmAnimations[0];
-    if (!va) { console.warn('sem VRMA em', url); return; }
-    controller.playClip(createVRMAnimationClip(va, vrm), opts);
-  }, undefined, (e) => console.warn('falha ao carregar clip', url, e?.message || e));
+// ---------------- biblioteca de gestos VRMA (P7) ----------------
+//  Intenção → arquivo .vrma (em ui/models/gestures/). Opt-in e com FALLBACK:
+//  se o clip não existe (ou clips desligados), cai no gesto procedural de sempre.
+const GESTURE_CLIPS = { wave: 'wave.vrma', nod: 'nod.vrma', shake: 'shake.vrma', point: 'point.vrma', shrug: 'shrug.vrma' };
+const clipCache = {};   // intenção -> AnimationClip | 'loading' | 'fail'
+const clipsEnabled = () => localStorage.getItem('aila.avatar.clips') !== 'false';
+
+async function probeGestureClips() {   // marca os que faltam como 'fail' → fallback limpo
+  for (const [g, file] of Object.entries(GESTURE_CLIPS)) {
+    try { const r = await fetch('/static/models/gestures/' + file, { method: 'HEAD' }); if (!r.ok) clipCache[g] = 'fail'; }
+    catch (e) { clipCache[g] = 'fail'; }
+  }
 }
-// teste/console: ailaPlayClip() usa o gesto de exemplo; aceita url própria
-window.ailaPlayClip = (url = '/static/models/gesture-wave.vrma', opts) => loadClip(url, opts);
+
+// devolve true se um CLIP cobre a intenção (tocando ou carregando); false → procedural
+function playGestureClip(name) {
+  if (!clipsEnabled() || !vrm || !controller) return false;
+  const file = GESTURE_CLIPS[name];
+  if (!file) return false;
+  const c = clipCache[name];
+  if (c === 'fail') return false;
+  if (c === 'loading') return true;
+  if (c) { controller.playClip(c); return true; }
+  clipCache[name] = 'loading';
+  loader.load('/static/models/gestures/' + file, (gltf) => {
+    const va = gltf.userData.vrmAnimations && gltf.userData.vrmAnimations[0];
+    if (!va) { clipCache[name] = 'fail'; return; }
+    clipCache[name] = createVRMAnimationClip(va, vrm);
+    controller.playClip(clipCache[name]);           // toca assim que carrega (1ª vez)
+  }, undefined, () => { clipCache[name] = 'fail'; });
+  return true;
+}
+// teste/console: dispara uma intenção pela biblioteca (ex.: ailaPlayClip('wave'))
+window.ailaPlayClip = (name = 'wave') => playGestureClip(name) || (controller && controller.triggerGesture(name));
 
 function disposeVRM() {
   if (!vrm) return;
@@ -194,6 +217,8 @@ function loadVRM(url) {
     window.vrm = vrm;
     controller = new AnimationController(vrm, scene, camera);   // ← animação em camadas
     window.ailaAnim = controller;                              // debug/console
+    controller.clipFor = playGestureClip;                      // P7: gestos por clip (fallback procedural)
+    probeGestureClips();                                       // sabe quais .vrma existem
     debug.attach(controller);                                  // Debug Mode segue o VRM atual
     try { vrm.springBoneManager?.reset?.(); } catch(e){}       // molas assentadas
     clock.getDelta();                                          // zera o dt (evita saia "explodir")

@@ -78,6 +78,7 @@ export class AnimationController {
     this.layerW = new Map();                    // peso/fade por CAMADA (P5) — name -> {cur,target,k}
     this.mixer = null;                          // AnimationMixer p/ clips VRMA (P6, lazy)
     this._clipAction = null;                    // clip ativo (ou null)
+    this.clipFor = null;                        // resolvedor intenção→clip (P7; avatar3d o seta)
   }
 
   /** toca um CLIP VRMA (gesto autoral) sobrepondo o corpo, com blend (fadeIn/out).
@@ -155,6 +156,9 @@ export class AnimationController {
 
   triggerGesture(name) {
     if (!name) return;
+    // P7: se houver um CLIP VRMA para esta intenção, ele cobre o gesto (autoral);
+    // senão, cai no gesto PROCEDURAL de sempre (fallback gracioso).
+    if (name !== 'rest' && name !== 'none' && this.clipFor && this.clipFor(name)) return;
     if (ANIM_GESTURES.has(name)) {          // gesto animado (cabeça): nod/shake
       this.ctx.anim = { type: name, t: 0, dur: name === 'shake' ? 0.9 : 0.8 };
       return;
