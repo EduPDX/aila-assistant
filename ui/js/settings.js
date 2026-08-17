@@ -26,8 +26,29 @@ export const closeSettings = () => byId('settings-overlay').classList.remove('sh
 const CUSTOM_RENDER = {
   providers: renderProviders, memory: renderMemory, autonomy: renderAutonomy,
   permissions: renderPermissions, network: renderNetwork, system: loadStatus,
-  agents: renderAgents, reset: renderReset,
+  agents: renderAgents, reset: renderReset, rebuild: renderRebuild,
 };
+
+/* ---------- Reconstruir grafo de Conhecimento (backfill) ---------- */
+function renderRebuild() {
+  const b = byId('btn-rebuild-kg'); if (!b || b._wired) return;
+  b._wired = true;
+  const note = byId('rebuild-note');
+  b.onclick = async () => {
+    const orig = b.textContent;
+    b.disabled = true; b.textContent = 'reconstruindo…';
+    if (note) note.textContent = 'lendo memórias e extraindo tópicos…';
+    try {
+      const r = await api.rebuildKnowledge();
+      if (note) note.textContent = `pronto: ${r.nodes} conceitos, ${r.edges} ligações `
+        + `(${r.backfilled} memórias processadas).`;
+    } catch {
+      if (note) note.textContent = 'falhou — verifique se a memória está ativa.';
+    } finally {
+      b.disabled = false; b.textContent = orig;
+    }
+  };
+}
 
 /* ---------- Apagar tudo (recomeçar do zero) ---------- */
 function renderReset() {

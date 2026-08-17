@@ -292,15 +292,64 @@ class AilaEngine:
         return n
 
     async def _remember(self, user_text: str, answer: str) -> None:
-        """Grava a troca como memória EPISÓDICA (best-effort)."""
+        """Grava a troca como memória EPISÓDICA (best-effort). As entidades já
+        saem gravadas na hora (heurística); aqui só disparamos o refino por LLM
+        em background, que melhora os nós do Knowledge Graph sem travar o turno."""
         if self.mem is None or not self.settings.memory.store_conversations:
             return
         if len(user_text.strip()) < 8:  # ignora saudações triviais
             return
         try:
-            await self.mem.remember_exchange(user_text, answer, self.session_id)
+            mem_id = await self.mem.remember_exchange(user_text, answer, self.session_id)
         except Exception as exc:  # noqa: BLE001
             log.warning(f"gravação de memória falhou: {exc!r}")
+            return
+        self._refine_entities_later(mem_id, f"Usuário: {user_text}\nAila: {answer}")
+
+    def _refine_entities_later(self, mem_id: int, text: str) -> None:
+        """Refina as entidades de UMA memória via LLM em BACKGROUND (a heurística
+        já foi gravada). Não bloqueia a resposta; offline mantém a heurística."""
+        if self.memory is None or mem_id is None or mem_id < 0:
+            return
+
+        async def _run() -> None:
+            try:
+                from aila.cognition.memory.entities import extract_llm
+                ents = await extract_llm(self.llm.complete, text)
+                if ents:
+                    self.memory.set_entities(mem_id, ents)
+            except Exception as exc:  # noqa: BLE001 - nunca deve derrubar o chat
+                log.debug(f"refino de entidades falhou: {exc!r}")
+
+        try:
+            asyncio.create_task(_run())
+        except RuntimeError:           # sem event loop (ex.: testes síncronos)
+            pass
+
+    async def rebuild_knowledge(self) -> dict:
+        """Preenche entidades faltantes (heurística) em TODAS as memórias e
+        reconstrói o Knowledge Graph. Idempotente — pode ser chamado à vontade
+        (backfill de conversas antigas + rebuild sob demanda pela UI)."""
+        empty = {"nodes": 0, "edges": 0, "backfilled": 0}
+        if self.memory is None or self.consolidator is None:
+            return empty
+        from aila.cognition.memory.entities import extract
+
+        # zera o grafo (dado DERIVADO, reconstruível das memórias) p/ não deixar
+        # nós órfãos de extrações antigas.
+        if self.kgraph is not None:
+            self.kgraph.conn.execute("DELETE FROM kg_edge")
+            self.kgraph.conn.execute("DELETE FROM kg_node")
+            self.kgraph.conn.commit()
+            self.kgraph._loaded = False
+        # reprocessa TODAS as memórias episódicas (não só as vazias) → o botão
+        # reconstrói o grafo do zero, aplicando a extração/stoplist mais recente.
+        rows = [r for r in self.memory.by_kind("chat", 100_000) if len(r["text"]) > 60]
+        for r in rows:
+            self.memory.set_entities(r["id"], extract(r["text"]))
+        rep = await self.consolidator.consolidate()
+        rep["backfilled"] = len(rows)
+        return rep
 
     def _messages_with_memory(self, mem_block: str | None) -> list[dict]:
         msgs = self.context.build()

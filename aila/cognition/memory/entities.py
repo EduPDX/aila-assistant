@@ -28,6 +28,11 @@ _STOP = {
     "fazer", "faz", "ver", "ser", "ter", "tem", "está", "esta", "estou", "vamos",
     "bom", "boa", "certo", "certa", "agora", "aqui", "ali", "lá", "cada", "todo",
     "toda", "todos", "todas", "outro", "outra", "coisa", "coisas", "algo", "tipo",
+    # ruído recorrente: segmentos de caminho do Windows + verbos imperativos comuns
+    "users", "onedrive", "documentos", "desktop", "downloads", "appdata", "arquivos",
+    "rode", "execute", "crie", "diga", "mostre", "conte", "escreva", "liste", "fale",
+    "get", "set", "date", "print", "definição", "definicao", "exemplo", "quanto",
+    "explique", "método", "metodo", "responda", "gere",
 }
 
 

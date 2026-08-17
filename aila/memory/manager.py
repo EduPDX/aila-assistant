@@ -59,11 +59,16 @@ class MemoryManager:
     async def save(self, text: str, kind: str = FACT, session_id: int | None = None) -> int:
         return await self.store.add(text, kind=normalize_kind(kind), session_id=session_id)
 
-    async def remember_exchange(self, user_text: str, answer: str, session_id: int | None) -> None:
-        # entidades ficam vazias aqui; são extraídas DEPOIS, em background (LLM >
-        # heurística p/ prosa em PT) → alimentam o Knowledge Graph por co-ocorrência.
-        await self.store.add(f"Usuário: {user_text}\nAila: {answer}",
-                             kind=EPISODIC, session_id=session_id)
+    async def remember_exchange(self, user_text: str, answer: str, session_id: int | None) -> int:
+        """Grava a troca como memória episódica. Extrai entidades JÁ na gravação
+        (heurística, offline, determinística) → o Knowledge Graph nunca nasce
+        vazio. O engine refina com LLM depois, em background (qualidade melhor
+        p/ prosa em PT) sem bloquear a resposta. Retorna o id da memória."""
+        from aila.cognition.memory.entities import extract
+
+        text = f"Usuário: {user_text}\nAila: {answer}"
+        return await self.store.add(text, kind=EPISODIC, session_id=session_id,
+                                    entities=extract(text))
 
     def forget(self, mem_id: int) -> None:
         self.store.delete(mem_id)

@@ -465,6 +465,17 @@ async def delete_memory(request: Request, mem_id: int) -> dict:
     return {"ok": True, "count": engine.memory.count()}
 
 
+@router.post("/knowledge/rebuild")
+async def rebuild_knowledge(request: Request) -> dict:
+    """Reconstrói o grafo de Conhecimento: preenche entidades faltantes nas
+    memórias (heurística) e reconsolida. Útil p/ backfill de conversas antigas
+    e rebuild sob demanda. NÃO apaga nada — é idempotente e aditivo."""
+    engine = request.app.state.engine
+    if engine.memory is None:
+        raise HTTPException(status_code=404, detail="Memória desativada.")
+    return await engine.rebuild_knowledge()
+
+
 @router.post("/reset")
 async def reset(request: Request) -> dict:
     """Apaga TODO o histórico interno — memória de longo prazo, grafo de
