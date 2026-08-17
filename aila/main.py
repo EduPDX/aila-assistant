@@ -107,6 +107,17 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
     app.include_router(voice_router)
 
+    @app.middleware("http")
+    async def _no_cache_ui(request, call_next):  # noqa: ANN001, ANN202
+        # A UI (HTML/JS/CSS) NÃO pode ser cacheada de forma "esperta" pelo
+        # Chromium do Electron, senão após um update ele serve os módulos ES
+        # antigos. Força revalidação (ETag do StaticFiles cuida do 304).
+        resp = await call_next(request)
+        p = request.url.path
+        if p == "/" or p.startswith("/static"):
+            resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return resp
+
     @app.websocket("/ws")
     async def ws(websocket: WebSocket):  # noqa: ANN202
         await websocket_endpoint(websocket)
@@ -114,7 +125,7 @@ def create_app() -> FastAPI:
     @app.get("/")
     async def index():  # noqa: ANN202
         # UI modular (avatar central + sidebar + painel de status + config/temas)
-        return FileResponse(UI_DIR / "app.html")
+        return FileResponse(UI_DIR / "app.html", headers={"Cache-Control": "no-cache"})
 
     # modelos VRM ficam numa pasta gravável; na 1ª execução copia o VRM padrão
     # do bundle. O mount específico vem ANTES do /static geral (precedência).

@@ -11,6 +11,10 @@ const path = require('path');
 const http = require('http');
 const fs = require('fs');
 
+// App LOCAL (localhost): nunca cachear a UI → após um update, os módulos ES/CSS
+// novos carregam na hora (sem servir versão antiga do cache do Chromium).
+app.commandLine.appendSwitch('disable-http-cache');
+
 const REPO_ROOT = path.resolve(__dirname, '..', '..'); // desktop/electron -> repo
 const PORT = process.env.AILA_PORT || 8770;
 const URL = `http://127.0.0.1:${PORT}/`;
@@ -79,7 +83,8 @@ function createWindow() {
     webPreferences: { contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
   });
   win.removeMenu();
-  win.loadURL(URL);
+  // limpa qualquer cache antigo (de uma versão instalada antes) antes de carregar
+  win.webContents.session.clearCache().catch(() => {}).finally(() => win.loadURL(URL));
   win.on('closed', () => { win = null; });
 }
 
