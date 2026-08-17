@@ -68,6 +68,18 @@ class GraphService:
         store = self.knowledge_store() if kind == "knowledge" else self.code_store()
         return to_view(store, "knowledge" if kind == "knowledge" else "code", limit)
 
+    def project_view(self, slug: str, limit: int = 1500) -> dict[str, Any]:
+        """Grafo de um projeto anexado (mesmo render do Code Graph da Aila)."""
+        from aila.cognition.graph.projects import get_registry
+        from aila.cognition.graph.view import to_view
+
+        store = get_registry().store(slug)
+        store.recompute_importance()
+        v = to_view(store, "code", limit)
+        v["kind"] = "project"
+        v["project"] = slug
+        return v
+
 
 _service: GraphService | None = None
 

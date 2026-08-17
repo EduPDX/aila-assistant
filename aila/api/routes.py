@@ -52,17 +52,59 @@ async def cognition(request: Request, n: int = 20) -> dict:
 
 
 @router.get("/graph")
-async def graph(kind: str = "code", limit: int = 1500) -> dict:
+async def graph(kind: str = "code", limit: int = 1500, project: str | None = None) -> dict:
     """Grafo do subconsciente p/ visualização: nós + arestas + comunidades.
-    kind=code (Code Graph real da Aila) | knowledge (aprendido das conversas).
+    kind=code (Code Graph da Aila) | knowledge (aprendido das conversas) |
+    project (Code Graph de um projeto anexado — exige ?project=<slug>).
     Construído sob demanda; só metadados estruturais."""
     from aila.cognition.graph.service import get_service
 
+    lim = max(1, min(limit, 4000))
+    if kind == "project":
+        if not project:
+            return {"kind": "project", "nodes": [], "edges": [], "communities": [],
+                    "error": "faltou ?project=<slug>"}
+        try:
+            return get_service().project_view(project, lim)
+        except Exception as exc:  # noqa: BLE001 - a UI degrada com grafo vazio
+            return {"kind": "project", "nodes": [], "edges": [], "communities": [], "error": str(exc)}
     k = "knowledge" if kind == "knowledge" else "code"
     try:
-        return get_service().view(k, max(1, min(limit, 4000)))
+        return get_service().view(k, lim)
     except Exception as exc:  # noqa: BLE001 - a UI degrada com grafo vazio
         return {"kind": k, "nodes": [], "edges": [], "communities": [], "error": str(exc)}
+
+
+@router.get("/projects")
+async def list_projects() -> dict:
+    """Projetos anexados (cada um com Code Graph próprio)."""
+    from aila.cognition.graph.projects import get_registry
+
+    return {"projects": get_registry().list()}
+
+
+class ProjectBody(BaseModel):
+    path: str
+    name: str | None = None
+
+
+@router.post("/projects")
+async def add_project(body: ProjectBody) -> dict:
+    """Anexa uma PASTA local: constrói o Code Graph do projeto e registra.
+    Local-first — o backend lê a pasta direto; só varre .py, nunca escreve nela."""
+    from aila.cognition.graph.projects import get_registry
+
+    try:
+        return get_registry().add(body.path, body.name)
+    except (NotADirectoryError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/projects/{slug}")
+async def remove_project(slug: str) -> dict:
+    from aila.cognition.graph.projects import get_registry
+
+    return {"ok": get_registry().remove(slug)}
 
 
 class TaskBody(BaseModel):

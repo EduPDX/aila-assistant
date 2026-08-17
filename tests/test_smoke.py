@@ -697,6 +697,39 @@ def test_code_graph(tmp_path: Path):
     assert graph.counts() == c1
 
 
+def test_project_registry(tmp_path: Path):
+    """Registro de PROJETOS: anexar uma pasta constrói o Code Graph próprio,
+    lista, é idempotente por caminho e remove (grafo + entrada do índice)."""
+    from aila.cognition.graph.projects import ProjectRegistry, _slugify
+
+    proj = tmp_path / "src" / "Meu Projeto"
+    proj.mkdir(parents=True)
+    (proj / "core.py").write_text(
+        "class Motor:\n    def liga(self):\n        return 1\n\n"
+        "def start():\n    return Motor().liga()\n", encoding="utf-8")
+
+    reg = ProjectRegistry.__new__(ProjectRegistry)     # sem tocar em data/ real
+    reg.root = tmp_path / "reg"
+    reg.root.mkdir()
+    reg.index_path = reg.root / "index.json"
+    reg._stores = {}
+
+    assert _slugify("Meu Projeto") == "meu-projeto"
+    meta = reg.add(str(proj), "Meu Projeto")
+    assert meta["slug"] == "meu-projeto"
+    assert meta["nodes"] > 0 and meta["files"] == 1
+    assert len(reg.list()) == 1 and reg.get("meu-projeto")["name"] == "Meu Projeto"
+
+    # idempotente por CAMINHO: reanexar a mesma pasta não duplica
+    meta2 = reg.add(str(proj))
+    assert meta2["slug"] == "meu-projeto" and len(reg.list()) == 1
+
+    # store serve o mesmo grafo; remover apaga grafo + índice
+    assert reg.store("meu-projeto").counts()["nodes"] == meta["nodes"]
+    assert reg.remove("meu-projeto") is True
+    assert reg.list() == []
+
+
 def test_code_agent_graph_tools(tmp_path: Path):
     """Fase 6: o Code Agent usa o Code Graph (repo-map, definição, callers,
     impacto) — tudo read-only (SAFE/L1) e ancorado no código REAL da Aila."""
