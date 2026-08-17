@@ -132,10 +132,14 @@ async def deactivate_project() -> dict:
 async def pick_folder() -> dict:
     """Abre o diálogo NATIVO de pasta do SO (explorador de arquivos) e devolve o
     caminho escolhido — SEM upload. Local-first: o backend está na mesma máquina.
-    Roda o tkinter num SUBPROCESSO (não conflita com o loop async do servidor).
-    No .exe empacotado, quem faz isso é o Electron (window.aila.pickFolder)."""
+    Roda o tkinter num SUBPROCESSO, dentro de uma THREAD (subprocess.run) — assim
+    não depende do tipo de event loop do uvicorn (no Windows o Selector loop NÃO
+    suporta create_subprocess_exec). No .exe, quem faz é o Electron."""
     import asyncio
+    import os
+    import subprocess
     import sys
+    from pathlib import Path
 
     if getattr(sys, "frozen", False):
         return {"path": None, "native": False}   # no .exe: usa o picker do Electron
@@ -145,15 +149,20 @@ async def pick_folder() -> dict:
         "p=filedialog.askdirectory(title='Escolha a pasta para a Aila ler');"
         "r.destroy();print(p or '')"
     )
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-c", code,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-        )
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=180)
-        return {"path": (out.decode(errors="ignore").strip() or None)}
-    except Exception as exc:  # noqa: BLE001
-        return {"path": None, "error": str(exc)}
+    pyw = Path(sys.executable).with_name("pythonw.exe")   # sem console piscando
+    exe = str(pyw) if pyw.exists() else sys.executable
+
+    def _run() -> str | None:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+        try:
+            r = subprocess.run([exe, "-c", code], capture_output=True, text=True,
+                               timeout=300, creationflags=flags)
+            return (r.stdout or "").strip() or None
+        except Exception:  # noqa: BLE001
+            return None
+
+    path = await asyncio.to_thread(_run)
+    return {"path": path}
 
 
 class FolderBody(BaseModel):
