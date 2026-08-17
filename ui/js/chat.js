@@ -153,8 +153,13 @@ export async function attachFiles(files, onDone) {
 // projeto, o caminho é a aba 🧠 ▸ Projetos.
 export async function attachFolder(onDone) {
   let path = null;
+  // 1) Electron (.exe): diálogo nativo do sistema. 2) do FONTE: o backend abre o
+  // explorador nativo (tkinter). 3) último recurso: pede o caminho.
   try { if (window.aila && window.aila.pickFolder) path = await window.aila.pickFolder(); }
   catch (e) { /* sem bridge Electron */ }
+  if (!path) {
+    try { const r = await api.pickFolder(); path = r && r.path; } catch (e) { /* sem picker nativo */ }
+  }
   if (!path) path = window.prompt('Caminho da pasta (a Aila lê direto do disco):');
   path = (path || '').trim();
   if (!path) return;

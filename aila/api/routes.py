@@ -128,6 +128,34 @@ async def deactivate_project() -> dict:
     return {"active": get_registry().set_active(None)}
 
 
+@router.post("/pick-folder")
+async def pick_folder() -> dict:
+    """Abre o diálogo NATIVO de pasta do SO (explorador de arquivos) e devolve o
+    caminho escolhido — SEM upload. Local-first: o backend está na mesma máquina.
+    Roda o tkinter num SUBPROCESSO (não conflita com o loop async do servidor).
+    No .exe empacotado, quem faz isso é o Electron (window.aila.pickFolder)."""
+    import asyncio
+    import sys
+
+    if getattr(sys, "frozen", False):
+        return {"path": None, "native": False}   # no .exe: usa o picker do Electron
+    code = (
+        "import tkinter as tk;from tkinter import filedialog;"
+        "r=tk.Tk();r.withdraw();r.attributes('-topmost',True);"
+        "p=filedialog.askdirectory(title='Escolha a pasta para a Aila ler');"
+        "r.destroy();print(p or '')"
+    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", code,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=180)
+        return {"path": (out.decode(errors="ignore").strip() or None)}
+    except Exception as exc:  # noqa: BLE001
+        return {"path": None, "error": str(exc)}
+
+
 class FolderBody(BaseModel):
     path: str
 
