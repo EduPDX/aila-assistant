@@ -134,8 +134,8 @@ export const CATEGORIES = [
   { id: 'tarefas', icon: '📋', label: 'Tarefas', blocks: [
     { note: 'Limites das tarefas autônomas (várias etapas). Protegem contra loops e travamentos.' },
     { fields: [
-      { path: 'security.max_tool_calls', type: 'slider', min: 1, max: 60, step: 1, label: 'Máx. de ferramentas por tarefa',
-        hint: 'Orçamento de ações que uma tarefa autônoma pode usar antes de parar.', restart: true },
+      { path: 'security.max_tool_calls', type: 'slider', min: 5, max: 200, step: 5, label: 'Máx. de ferramentas por tarefa',
+        hint: 'Orçamento de ações por tarefa antes de parar. Suba (100+) para análises profundas de código (ler muitos arquivos, rodar testes). O guarda anti-loop é o "máx. repetições".', restart: true },
       { path: 'security.max_repeated_calls', type: 'slider', min: 1, max: 10, step: 1, label: 'Máx. repetições da mesma ação',
         hint: 'Se repetir a mesma ferramenta+argumentos além disso, considera loop e para.', restart: true },
       { path: 'security.tool_timeout', type: 'slider', min: 0, max: 600, step: 10, unit: ' s', label: 'Timeout por ferramenta',
