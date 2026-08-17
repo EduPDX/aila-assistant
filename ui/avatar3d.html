@@ -162,6 +162,15 @@ const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
 loader.register((parser) => new VRMAnimationLoaderPlugin(parser));   // P6: carrega .vrma
 
+// Loader DEDICADO aos clips: alguns .vrma (Mixamo) referenciam uma textura
+// externa (Image_0.jpg) que NÃO usamos (só a animação importa) → o GLTFLoader
+// buscava e dava 404. Aqui um pixel transparente responde no lugar (sem 404).
+const _blankPNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const _clipMgr = new THREE.LoadingManager();
+_clipMgr.setURLModifier((u) => (/\.(jpe?g|png|webp|bmp|gif)$/i.test(u) ? _blankPNG : u));
+const clipLoader = new GLTFLoader(_clipMgr);
+clipLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+
 // ---------------- biblioteca de gestos VRMA (P7) ----------------
 //  Intenção → arquivo .vrma (em ui/models/gestures/). Opt-in e com FALLBACK:
 //  se o clip não existe (ou clips desligados), cai no gesto procedural de sempre.
@@ -188,7 +197,7 @@ function playGestureClip(name) {
   if (c === 'loading') return true;
   if (c) { controller.playClip(c); return true; }
   clipCache[name] = 'loading';
-  loader.load('/static/models/gestures/' + file, (gltf) => {
+  clipLoader.load('/static/models/gestures/' + file, (gltf) => {
     const va = gltf.userData.vrmAnimations && gltf.userData.vrmAnimations[0];
     if (!va) { clipCache[name] = 'fail'; return; }
     const clip = createVRMAnimationClip(va, vrm);
