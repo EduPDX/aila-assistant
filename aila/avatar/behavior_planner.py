@@ -86,7 +86,7 @@ class BehaviorPlanner:
             posture=posture,
             gaze=gaze,
             motion=Motion(amplitude=amp, speed=speed, breath=breath),
-            gestures=self._gestures(text, str(emo.gesture), est),
+            gestures=self._gestures(text, est),
             est_speech_seconds=est,
             text=text[:200],
         )
@@ -108,9 +108,14 @@ class BehaviorPlanner:
             return "explanation"
         return "conversation"
 
-    def _gestures(self, text: str, emo_gesture: str, est_seconds: float) -> list[GestureCue]:
-        """Timeline de gestos: cada cue no tempo em que a palavra é falada
-        (estimado pela posição do texto × duração da fala)."""
+    def _gestures(self, text: str, est_seconds: float) -> list[GestureCue]:
+        """Timeline de gestos: cada cue no tempo em que a palavra-gatilho é
+        falada (posição no texto × duração da fala). SEM gatilho léxico não
+        forçamos gesto nenhum — a gesticulação ambiente da fala (frontend)
+        cuida do movimento das mãos, então ela não fica engessada num gesto de
+        pose durante toda a resposta. (O relógio no controller só começa a
+        contar quando a fala inicia, então at_time=0 = 'ao começar a falar',
+        nunca antes.)"""
         n = max(1, len(text))
         found: dict[str, tuple[float, str]] = {}
         for pat, g in _GESTURE_CUES:
@@ -122,6 +127,4 @@ class BehaviorPlanner:
             GestureCue(type=g, at_time=at, at_word=word)
             for g, (at, word) in sorted(found.items(), key=lambda kv: kv[1][0])
         ]
-        if not cues and emo_gesture and emo_gesture != "none":
-            cues = [GestureCue(type=emo_gesture, at_time=0.0)]
         return cues[:4]

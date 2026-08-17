@@ -25,7 +25,9 @@ import { createJointLimits } from './solvers/joint-limits.js';
 import { createArmIK } from './solvers/ik.js';
 import { createSelfCollision } from './solvers/self-collision.js';
 
-const GESTURE_HOLD = 2.8;   // seg que um gesto de pose fica antes de voltar ao rest
+const GESTURE_HOLD = 1.6;   // seg que um gesto de pose fica antes de voltar ao rest
+                            //  (curto de propósito: gesto é PONTUAÇÃO; entre eles
+                            //   a gesticulação ambiente da fala assume as mãos)
 const ANIM_GESTURES = new Set(['nod', 'shake']);   // gestos ANIMADOS (cabeça)
 
 export class AnimationController {
@@ -131,8 +133,11 @@ export class AnimationController {
       if (this._gestureTimer <= 0) ctx.gesture = 'rest';
     }
 
-    // timeline de gestos (F5): dispara cada gesto no seu at_time (relativo à fala)
-    if (this._queue.length) {
+    // timeline de gestos (F5): dispara cada gesto no seu at_time (relativo à fala).
+    // O relógio só COMEÇA a correr quando a fala inicia de fato (boca/envelope) —
+    // assim nenhum gesto dispara no vão entre o plano e o áudio do TTS (fim da
+    // "tremida antes de falar"); at_time=0 vira "ao começar a falar".
+    if (this._queue.length && (this._clock > 0 || ctx.speech > 0.06)) {
       this._clock += dt;
       while (this._queue.length && this._queue[0].at <= this._clock) {
         this.triggerGesture(this._queue.shift().type);
