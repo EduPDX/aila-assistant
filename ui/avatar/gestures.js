@@ -29,4 +29,8 @@ export const GESTURES = {
   think:     { side: 'right', target: [0.10, 0.28, 0.34], hand: 'thinking', head: [10, -8, 0] },
   // explicar: OS DOIS braços à frente, mãos abertas (o x é espelhado por lado)
   hand_explain: { side: 'both', target: [0.34, -0.02, 0.52], hand: 'open' },
+  // levantar as DUAS mãos: alvo alto (y) + um pouco pra fora (x, espelhado) e à
+  // frente (z). IK + colisão posicionam natural → sem cruzar/clipar (ao contrário
+  // da pose FK). Palmas p/ frente.
+  raise_both: { side: 'both', target: [0.30, 0.60, 0.30], hand: 'open', orient: { ref: 'palm', dir: 'forward' } },
 };

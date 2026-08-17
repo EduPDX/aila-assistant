@@ -64,7 +64,6 @@ export const POSES = {
   cheer:       { leftUpperArm: [0, 0, -165], rightUpperArm: [0, 0, 165] },
   raise_right: { rightUpperArm: [0, 0, 168] },
   raise_left:  { leftUpperArm: [0, 0, -168] },
-  raise_both:  { leftUpperArm: [0, 0, -168], rightUpperArm: [0, 0, 168] },   // as DUAS mãos pra cima
 };
 export const GESTURE_ALIASES = { nice: 'thumbs_up', none: 'rest', nod: 'rest' };
 

@@ -171,11 +171,21 @@ class OllamaBackend(LLMBackend):
     async def embed(
         self, texts: list[str], *, model: str | None = None
     ) -> list[list[float]]:
-        resp = await self._client.post(
-            "/api/embed",
-            json={"model": model or "nomic-embed-text", "input": texts},
-        )
-        resp.raise_for_status()
+        m = model or "nomic-embed-text"
+        try:
+            resp = await self._client.post("/api/embed", json={"model": m, "input": texts})
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:  # modelo de embeddings não baixado
+                raise RuntimeError(
+                    f"O modelo de embeddings '{m}' não está no Ollama. "
+                    f"Rode no terminal:  ollama pull {m}") from exc
+            raise
+        except httpx.ConnectError as exc:
+            raise RuntimeError(
+                "O Ollama não está acessível — a memória precisa dele p/ gerar "
+                "embeddings. Inicie o Ollama (ollama serve) e rode: "
+                f"ollama pull {m}") from exc
         return resp.json().get("embeddings", [])
 
     async def list_models(self) -> list[str]:

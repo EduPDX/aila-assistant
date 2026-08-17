@@ -28,13 +28,28 @@ class GraphService:
 
     def code_store(self) -> GraphStore:
         if self._code is None:
+            import shutil
+            from pathlib import Path
+
             from aila.cognition.graph import CodeGraph, GraphStore
             from aila.core.config import PROJECT_ROOT, data_path
 
-            st = GraphStore(data_path("code_graph.db"))
+            db = data_path("code_graph.db")
+            st = GraphStore(db)
             if st.counts()["nodes"] == 0:
                 rep = CodeGraph(st, PROJECT_ROOT).build(subdir="aila")
                 log.info(f"code graph construído p/ a UI: {rep}")
+                if st.counts()["nodes"] == 0:
+                    # app empacotado (.exe): sem fontes .py p/ varrer → usa o grafo
+                    # PRÉ-CONSTRUÍDO embutido no build (desktop/prebuild_graph.py).
+                    prebuilt = PROJECT_ROOT / "code_graph.prebuilt.db"
+                    if prebuilt.exists():
+                        st.close()
+                        for ext in ("", "-wal", "-shm"):
+                            Path(f"{db}{ext}").unlink(missing_ok=True)
+                        shutil.copyfile(prebuilt, db)
+                        st = GraphStore(db)
+                        log.info(f"code graph carregado do pré-build ({st.counts()})")
             st.recompute_importance()   # importância=grau → a amostra do mini pega os hubs
             self._code = st
         return self._code

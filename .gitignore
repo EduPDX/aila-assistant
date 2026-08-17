@@ -58,3 +58,7 @@ Thumbs.db
 # workspace do usuário (não versionar conteúdo)
 workspace/**
 !workspace/.gitkeep
+
+# SQLite WAL sidecars (artefatos de runtime)
+*.db-wal
+*.db-shm
