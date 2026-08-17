@@ -74,6 +74,26 @@ export class AnimationController {
     this._behavior = null;                      // overlay do BehaviorSpec (F4)
     this._queue = [];                           // timeline de gestos (F5)
     this._clock = 0;                            // relógio da fala (p/ a timeline)
+    this.layerW = new Map();                    // peso/fade por CAMADA (P5) — name -> {cur,target,k}
+  }
+
+  /** faz uma CAMADA inteira aparecer/sumir suavemente (peso alvo 0..1) sem "pop".
+   *  Base p/ clips (P6): a camada de clipe pode entrar/sair coexistindo com as
+   *  demais (aditivas) em vez de brigar por sobrescrita. Existing layers ficam
+   *  em peso 1 → comportamento idêntico. */
+  fadeLayer(name, target, seconds = 0.4) {
+    const e = this.layerW.get(name) || { cur: 1, target: 1, k: 6 };
+    e.target = Math.max(0, Math.min(1, target));
+    e.k = seconds > 0 ? 3.2 / seconds : 999;
+    this.layerW.set(name, e);
+  }
+  _layerWeight(name, dt) {
+    const e = this.layerW.get(name);
+    if (!e) return 1;
+    e.cur = damp(e.cur, e.target, e.k, dt);
+    // assentou de volta em 1 → remove a entrada e volta ao caminho rápido
+    if (e.target >= 0.999 && e.cur > 0.998) { this.layerW.delete(name); return 1; }
+    return e.cur;
   }
 
   /** aplica um BehaviorSpec (do Behavior Planner): decide emoção/olhar/ritmo/
@@ -173,7 +193,14 @@ export class AnimationController {
     // 1) camadas escrevem no PoseBuffer
     const buf = this.rig.buffer;
     buf.reset();
-    for (const layer of this.layers) layer.update(this.rig, buf, ctx, dt);
+    // cada camada contribui com o seu PESO (P5). Sem fades ativos → peso 1 p/
+    // todas (idêntico ao anterior); o buffer escala rot/expr/handTarget por _w.
+    const fading = this.layerW.size > 0;
+    for (const layer of this.layers) {
+      buf._w = fading ? this._layerWeight(layer.name, dt) : 1;
+      layer.update(this.rig, buf, ctx, dt);
+    }
+    buf._w = 1;
     if (ctx.handTarget) {                        // gesto por IK (alvo de mão)
       const t = ctx.handTarget;
       buf.setHandTarget(t.side, t.x, t.y, t.z, t.weight);

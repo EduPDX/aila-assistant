@@ -30,29 +30,34 @@ export class PoseBuffer {
     this.expr = new Map();    // expressão -> valor 0..1 (último a escrever vence)
     this.gaze = { x: 0, y: 0, z: 0, active: false };  // alvo de olhar (mundo)
     this.ik = new Map();      // side('left'/'right') -> {x,y,z,weight} alvo da mão (mundo)
+    this._w = 1;              // PESO da camada ATUAL (P5): o controller seta antes
+                              // de cada layer.update; escala rot/expr/handTarget →
+                              // uma camada inteira aparece/some sem "pop".
   }
   reset() {
     for (const v of this.rot.values()) { v[0] = 0; v[1] = 0; v[2] = 0; }
     this.expr.clear();
     this.gaze.active = false;
     this.ik.clear();
+    this._w = 1;
   }
   /** define o alvo de mundo da MÃO (side='left'|'right'); o IK resolve o braço.
    *  orient (opcional) = {ref:'thumb'|'palm', dir:[x,y,z] mundo, weight} → o IK
    *  rola a mão p/ orientar (ex.: polegar pra cima, palma pra frente). */
   setHandTarget(side, x, y, z, weight = 1, orient = null) {
-    this.ik.set(side, { x, y, z, weight, orient });
+    this.ik.set(side, { x, y, z, weight: weight * this._w, orient });
   }
-  /** soma rotação (rad) num osso */
+  /** soma rotação (rad) num osso — escalada pelo peso da camada atual (_w) */
   addRot(bone, x, y, z) {
+    const w = this._w;
     let v = this.rot.get(bone);
     if (!v) { v = [0, 0, 0]; this.rot.set(bone, v); }
-    v[0] += x; v[1] += y; v[2] += z;
+    v[0] += x * w; v[1] += y * w; v[2] += z * w;
   }
   /** soma rotação em GRAUS (conveniência) */
   addDeg(bone, x, y, z) { this.addRot(bone, x * DEG, y * DEG, z * DEG); }
-  /** define peso de blendshape (0..1) */
-  setExpr(name, value) { this.expr.set(name, value); }
+  /** define peso de blendshape (0..1) — escalado pelo peso da camada atual */
+  setExpr(name, value) { this.expr.set(name, value * this._w); }
   /** define o ponto que os olhos/corpo devem encarar (coordenadas de mundo) */
   setGaze(x, y, z) { this.gaze.x = x; this.gaze.y = y; this.gaze.z = z; this.gaze.active = true; }
 }
