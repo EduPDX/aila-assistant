@@ -386,7 +386,14 @@ class AilaEngine:
         if backend is not self.llm:
             await emit("model.selected", {"provider": backend.name})
         final_text = ""
-        for _ in range(MAX_TOOL_ITERS):
+        # orçamento anti-loop do turno (total + repetição da mesma ferramenta).
+        budget = CallBudget(
+            max_total=self.settings.security.max_tool_calls,
+            max_repeat=self.settings.security.max_repeated_calls,
+        )
+        # rodadas de ferramenta: configurável (Configurações ▸ Segurança). Antes
+        # era fixo em 5 → "analisar o código" (ler arquivos, grep, testes) estourava.
+        for _ in range(max(MAX_TOOL_ITERS, self.settings.security.max_tool_calls)):
             collected: list[str] = []
             tool_calls: list[dict] = []
             # adapta o histórico ao provedor (externo: tool-history vira texto)
@@ -440,6 +447,10 @@ class AilaEngine:
                         args = json.loads(args)
                     except json.JSONDecodeError:
                         args = {}
+                over = budget.check(name, args)   # anti-loop / orçamento do turno
+                if over is not None:
+                    self.context.add_tool(name, over)   # o modelo vê e deve concluir
+                    continue
                 tools_used.append(name)
                 await emit("agent.invoked", {"tool": name, "args": args})
                 await emit("aila.state", {"status": _tool_status(name), "tool": name})
@@ -513,7 +524,7 @@ class AilaEngine:
                 max_total=self.settings.security.max_tool_calls,
                 max_repeat=self.settings.security.max_repeated_calls,
             )
-        for _ in range(MAX_TOOL_ITERS):
+        for _ in range(max(MAX_TOOL_ITERS, self.settings.security.max_tool_calls)):
             if task.cancelled:
                 break
             collected: list[str] = []
