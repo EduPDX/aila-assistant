@@ -127,7 +127,7 @@ class DocumentAgent(BaseAgent):
     # ------------------------------ leitura ---------------------------- #
     async def _read(self, args: dict) -> ToolResult:
         await self.authorize("docs.read", args)          # leitura → SAFE
-        path = self.sandbox.resolve(args["path"])
+        path = self.sandbox.resolve(args["path"], read=True)   # lê pastas anexadas
         if not path.is_file():
             return ToolResult.error(f"Arquivo não encontrado: {args['path']}")
         ext = path.suffix.lower()

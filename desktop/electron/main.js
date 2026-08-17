@@ -5,7 +5,13 @@
 //   3. abre uma janela com a interface do avatar (localhost)
 //   4. encerra o backend ao fechar
 // ============================================================================
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+
+// Seletor NATIVO de pasta (sem upload): devolve o caminho absoluto p/ a Aila ler.
+ipcMain.handle('aila:pick-folder', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
+  return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
+});
 const { spawn, execFile } = require('child_process');
 const path = require('path');
 const http = require('http');

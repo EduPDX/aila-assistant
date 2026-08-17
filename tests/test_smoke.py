@@ -31,6 +31,27 @@ def test_sandbox_blocks_escape(tmp_path: Path):
         sb.resolve("../../etc/passwd")
 
 
+def test_sandbox_read_root_reads_but_not_writes(tmp_path: Path):
+    """Pasta anexada pelo usuário → LEITURA liberada, ESCRITA continua bloqueada."""
+    ws = tmp_path / "ws"
+    ext = tmp_path / "docs"        # "pasta anexada" fora do workspace
+    ext.mkdir()
+    (ext / "a.txt").write_text("oi", encoding="utf-8")
+    sb = PathSandbox(ws)
+
+    # antes de anexar: nem ler
+    with pytest.raises(SandboxViolation):
+        sb.resolve(ext / "a.txt", read=True)
+
+    sb.add_read_root(ext)
+    # depois: LÊ o arquivo da pasta anexada
+    assert sb.resolve(ext / "a.txt", read=True).name == "a.txt"
+    # mas ESCRITA (read=False, padrão) segue bloqueada fora do workspace
+    with pytest.raises(SandboxViolation):
+        sb.resolve(ext / "novo.txt")
+    assert ext in sb.read_bases()
+
+
 def test_readonly_blocks_writes(tmp_path: Path):
     s = get_settings()
     s.security.read_only = True

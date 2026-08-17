@@ -91,7 +91,7 @@ class FileAgent(BaseAgent):
     # ------------------------------------------------------------------ #
     async def _read(self, args: dict) -> ToolResult:
         await self.authorize("file.read", args)
-        path = self.sandbox.resolve(args["path"])
+        path = self.sandbox.resolve(args["path"], read=True)
         if not path.is_file():
             return ToolResult.error(f"Arquivo não encontrado: {args['path']}")
         data = path.read_bytes()[:MAX_READ_BYTES]
@@ -111,7 +111,7 @@ class FileAgent(BaseAgent):
 
     async def _list(self, args: dict) -> ToolResult:
         await self.authorize("file.list", args)
-        target = self.sandbox.resolve(args.get("path") or ".")
+        target = self.sandbox.resolve(args.get("path") or ".", read=True)
         if not target.is_dir():
             return ToolResult.error(f"Não é um diretório: {args.get('path')}")
         entries = []
@@ -127,18 +127,21 @@ class FileAgent(BaseAgent):
         query = args["query"].lower()
         in_content = bool(args.get("in_content"))
         hits: list[str] = []
-        for p in self.sandbox.root.rglob("*"):
-            if not p.is_file():
-                continue
-            rel = p.relative_to(self.sandbox.root)
-            if query in p.name.lower():
-                hits.append(f"{rel} (nome)")
-            elif in_content:
-                try:
-                    if query in p.read_text(encoding="utf-8", errors="ignore").lower():
-                        hits.append(f"{rel} (conteúdo)")
-                except OSError:
+        for base in self.sandbox.read_bases():   # workspace + pastas anexadas
+            for p in base.rglob("*"):
+                if not p.is_file():
                     continue
+                rel = p.relative_to(base)
+                if query in p.name.lower():
+                    hits.append(f"{rel} (nome)")
+                elif in_content:
+                    try:
+                        if query in p.read_text(encoding="utf-8", errors="ignore").lower():
+                            hits.append(f"{rel} (conteúdo)")
+                    except OSError:
+                        continue
+                if len(hits) >= 100:
+                    break
             if len(hits) >= 100:
                 break
         return ToolResult.success("\n".join(hits) or "Nenhum resultado.", count=len(hits))

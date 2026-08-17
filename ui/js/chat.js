@@ -4,6 +4,7 @@ import { State } from './state.js';
 import { wsSend, wsReady } from './ws.js';
 import { speak } from './voice.js';
 import { renderMarkdown, enhanceCodeBlocks } from './markdown.js';
+import { api } from './core/api.js';
 
 let aiBubble = null;
 let attached = [];
@@ -98,11 +99,16 @@ export function sendUserText(t) { if (!t || !wsReady()) return; _send(t, t); }
 // classificação de anexo por extensão → roteia p/ a ferramenta certa
 const RE_IMG = /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i;
 const RE_DOC = /\.(pdf|docx?|xlsx?|pptx?|csv|md|markdown|txt|rtf|odt|json|log)$/i;
-const attachIcon = (a) => (RE_IMG.test(a.name) ? '🖼' : RE_DOC.test(a.name) ? '📄' : '📎');
+const attachIcon = (a) => (a.folder ? '📁' : RE_IMG.test(a.name) ? '🖼' : RE_DOC.test(a.name) ? '📄' : '📎');
 
 /** Dica para a IA saber COMO ler cada anexo (Document Agent / Vision / texto). */
 function attachHint(a) {
   const n = a.name, p = a.path;
+  if (a.folder)                             // PASTA: a Aila lê direto do disco (sem upload)
+    return `\n[Pasta anexada: ${p} — você pode LER esta pasta direto do disco. `
+      + `Use file.list para ver a estrutura; leia os arquivos com file.read (texto), `
+      + `docs.read (PDF/Word/Excel/PPT) ou vision.analyze_image (imagens). Foque no que o `
+      + `usuário pediu; não precisa listar tudo. (Para grafo de código do projeto, há a aba Projetos.)]\n`;
   if (a.text != null)                       // texto já veio no upload → embute (sem tool)
     return `\n[Anexo: ${n} — em ${p}]\n\`\`\`\n${a.text.slice(0, 20000)}\n\`\`\`\n`;
   if (RE_IMG.test(n)) return `\n[Anexo (imagem): ${n} — em ${p}. Veja com vision.analyze_image.]\n`;
@@ -140,24 +146,25 @@ export async function attachFiles(files, onDone) {
   renderChips(); if (onDone) onDone();
 }
 
-// Anexa uma PASTA inteira (documentos/fotos). Filtra só o que a Aila sabe ler
-// (imagens + documentos), pula lixo (.git/node_modules/ocultos/grandes) e limita
-// a quantidade p/ não inundar o chat. Para código-fonte/repositório, use a aba
-// 🧠 ▸ Projetos (constrói o grafo de código do projeto).
-const FOLDER_MAX = 30;
-const FOLDER_SKIP = /(^|\/)(\.git|node_modules|\.venv|__pycache__|dist|build|\.next|vendor)(\/|$)/i;
-export async function attachFolder(fileList, onDone) {
-  const all = [...fileList];
-  const good = all.filter((f) => {
-    const rel = f.webkitRelativePath || f.name;
-    if (FOLDER_SKIP.test(rel) || f.name.startsWith('.')) return false;
-    if (!(RE_IMG.test(f.name) || RE_DOC.test(f.name))) return false;   // só o que ela lê
-    if (f.size > 25 * 1024 * 1024) return false;                        // pula arquivos enormes
-    return true;
-  });
-  if (!good.length) { onSys('nenhum documento/imagem legível nessa pasta.'); if (onDone) onDone(); return; }
-  const pick = good.slice(0, FOLDER_MAX);
-  if (good.length > FOLDER_MAX) onSys(`pasta com ${good.length} arquivos — anexando os primeiros ${FOLDER_MAX}.`);
-  onSys(`anexando ${pick.length} arquivo(s) da pasta…`);
-  await attachFiles(pick, onDone);
+// Anexa uma PASTA para a Aila LER DIRETO DO DISCO — SEM upload (local-first).
+// O caminho vira uma raiz de leitura autorizada no backend; o agente explora com
+// file.list / file.read / docs.read / vision. Usa o seletor NATIVO do Electron
+// (caminho absoluto); no navegador, pede o caminho. Para grafo de código de um
+// projeto, o caminho é a aba 🧠 ▸ Projetos.
+export async function attachFolder(onDone) {
+  let path = null;
+  try { if (window.aila && window.aila.pickFolder) path = await window.aila.pickFolder(); }
+  catch (e) { /* sem bridge Electron */ }
+  if (!path) path = window.prompt('Caminho da pasta (a Aila lê direto do disco):');
+  path = (path || '').trim();
+  if (!path) return;
+  try {
+    const r = await api.attachFolder(path);
+    attached.push({ name: r.name || path, path: r.path, folder: true });
+    renderChips();
+    onSys(`📁 pasta anexada: ${r.name} — a Aila lê direto do disco (sem upload).`);
+  } catch (e) {
+    onSys('não consegui anexar essa pasta: ' + (e.message || e));
+  }
+  if (onDone) onDone();
 }

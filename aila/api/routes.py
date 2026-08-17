@@ -128,6 +128,31 @@ async def deactivate_project() -> dict:
     return {"active": get_registry().set_active(None)}
 
 
+class FolderBody(BaseModel):
+    path: str
+
+
+@router.post("/attach/folder")
+async def attach_folder(request: Request, body: FolderBody) -> dict:
+    """Anexa uma PASTA local para a Aila LER direto do disco (sem upload): o
+    caminho vira uma raiz de LEITURA autorizada no sandbox (o usuário escolheu →
+    autorização). O agente explora com file.list / file.read / docs.read. Escrita
+    continua restrita ao workspace."""
+    from pathlib import Path
+
+    p = Path(body.path).expanduser()
+    if not p.exists() or not p.is_dir():
+        raise HTTPException(status_code=400, detail=f"não é uma pasta válida: {body.path}")
+    sandbox = request.app.state.engine.agents.deps.sandbox
+    root = sandbox.add_read_root(p)
+    # prévia do topo (nomes) p/ a UI mostrar o que foi anexado
+    try:
+        top = sorted(x.name + ("/" if x.is_dir() else "") for x in root.iterdir())[:50]
+    except OSError:
+        top = []
+    return {"ok": True, "path": str(root), "name": root.name, "entries": top}
+
+
 class TaskBody(BaseModel):
     goal: str
 

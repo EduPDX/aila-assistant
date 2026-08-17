@@ -97,7 +97,7 @@ class VisionAgent(BaseAgent):
 
     def _encode_workspace_image(self, rel_path: str) -> tuple[str | None, str | None]:
         """Retorna (base64, erro). Valida sandbox e existência."""
-        path = self.deps.sandbox.resolve(rel_path)
+        path = self.deps.sandbox.resolve(rel_path, read=True)   # lê pastas anexadas
         if not path.is_file():
             return None, f"Imagem não encontrada no workspace: {rel_path}"
         data = path.read_bytes()
