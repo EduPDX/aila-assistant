@@ -72,8 +72,8 @@ body[data-mode="error"]        { --mode-accent: var(--danger); }
 
 /* ---------- toggle ---------- */
 .toggle { display: inline-flex; align-items: center; gap: var(--s-2); cursor: pointer; font-size: var(--fs-md); }
-.toggle .sw { width: 38px; height: 21px; border-radius: var(--r-pill); background: var(--border); position: relative; transition: background var(--dur-2); }
-.toggle .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: var(--muted); transition: left var(--dur-2) var(--ease-spring), background var(--dur-2); }
+.toggle .sw { width: 38px; height: 21px; border-radius: 3px; background: var(--border); position: relative; transition: background var(--dur-2); }
+.toggle .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 2px; background: var(--muted); transition: left var(--dur-2) var(--ease-spring), background var(--dur-2); }  /* knob QUADRADO (estética HUD) */
 .toggle.on .sw { background: color-mix(in srgb, var(--accent) 80%, transparent); }
 .toggle.on .sw::after { left: 19px; background: #fff; }
 
@@ -296,6 +296,17 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .cfg-input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 .cfg-area { width: 100%; resize: vertical; font-family: inherit; }
 .cfg-row:has(.cfg-area) { flex-direction: column; align-items: stretch; gap: 6px; }
+/* slider */
+.cfg-slider { display: flex; align-items: center; gap: 10px; }
+.cfg-range { width: 150px; max-width: 40vw; accent-color: var(--accent); cursor: pointer; }
+.cfg-val { min-width: 52px; text-align: right; font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--accent); }
+/* lista de agentes */
+.agents-list { display: flex; flex-direction: column; gap: 6px; margin-top: var(--s-2); }
+.agent-item { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--r-md); background: color-mix(in srgb, var(--panel) 45%, transparent); }
+.agent-info { flex: 1; min-width: 0; }
+.agent-name { font-size: var(--fs-sm); color: var(--text); }
+.agent-desc { font-size: var(--fs-xs); margin-top: 2px; }
 
 .themes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: var(--s-3); }
 .swatch { width: 34px; height: 34px; border-radius: var(--r-md); cursor: pointer; border: 2px solid transparent; transition: transform var(--dur-1); }

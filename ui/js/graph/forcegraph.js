@@ -32,6 +32,9 @@ export class ForceGraph {
     if (opts.interactive) this._bindEvents();
     this._ro = new ResizeObserver(() => { this._resize(); this.kick(0.2); });
     this._ro.observe(canvas.parentElement || canvas);
+    // preferências (cor das linhas / spin) mudaram → re-renderiza / re-anima
+    this._onPref = () => this.kick(0.05);
+    window.addEventListener('aila:pref', this._onPref);
   }
 
   // -------------------------------------------------------- dados
@@ -90,6 +93,7 @@ export class ForceGraph {
       let active = false;
       if (this.alpha > 0.02) { this._tick(); this.alpha *= 0.975; active = true; }
       else if (this.opts.mini) { this.alpha = 0.06; this._tick(); active = true; }  // mini nunca congela
+      else if (localStorage.getItem('aila.graph.spin') === 'true') { this.alpha = 0.03; this._tick(); active = true; }  // movimento contínuo
       else if (!this._fitted) { this.fit(); this._fitted = true; }   // assentou → reenquadra 1x
       if (this.opts.mini && (((this._frame = (this._frame || 0) + 1)) % 12 === 0)) this.fit();  // mini: sempre enquadrado
       this.draw();
@@ -167,14 +171,18 @@ export class ForceGraph {
     ctx.save(); ctx.translate(x, y); ctx.scale(k, k);
     const vis = this.visible;
     const shown = (n) => !vis || vis.has(n.community);
-    // arestas
-    ctx.lineWidth = 0.5 / k;
+    // arestas — coloridas (cor do nó de origem) ou cinza, conforme preferência
+    const colored = (localStorage.getItem('aila.graph.edges') || 'coloridas') !== 'cinza';
+    ctx.lineWidth = 0.6 / k;
     for (const l of this.links) {
       if (!shown(l.s) || !shown(l.t)) continue;
       const hot = this.selected && (l.s === this.selected || l.t === this.selected);
-      ctx.strokeStyle = hot ? 'rgba(120,200,255,.6)' : 'rgba(150,170,200,.16)';
+      if (hot) { ctx.globalAlpha = 0.7; ctx.strokeStyle = '#8fd0ff'; }
+      else if (colored) { ctx.globalAlpha = this.selected ? 0.12 : 0.24; ctx.strokeStyle = this.colorOf(l.s); }
+      else { ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(150,170,200,.14)'; }
       ctx.beginPath(); ctx.moveTo(l.s.x, l.s.y); ctx.lineTo(l.t.x, l.t.y); ctx.stroke();
     }
+    ctx.globalAlpha = 1;
     // nós
     for (const n of this.nodes) {
       if (!shown(n)) continue;
@@ -238,25 +246,32 @@ export class ForceGraph {
 
   _bindEvents() {
     const cv = this.canvas;
-    let drag = null, moved = false, node = null;
+    const dragOn = () => (localStorage.getItem('aila.graph.drag') ?? 'true') !== 'false';
+    let drag = null, moved = false, node = null, moveNode = false;
     cv.addEventListener('mousedown', (e) => {
       const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
       node = this._at(px, py); moved = false;
+      moveNode = !!node && dragOn();               // só ARRASTA o nó se a pref permitir
       drag = { px, py, tx: this.t.x, ty: this.t.y, nx: node?.x, ny: node?.y };
-      if (node) node.fixed = true;
+      if (moveNode) node.fixed = true;
     });
     window.addEventListener('mousemove', (e) => {
       if (!drag) return;
       const r = cv.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
       if (Math.abs(px - drag.px) + Math.abs(py - drag.py) > 3) moved = true;
-      if (node) { node.x = drag.nx + (px - drag.px) / this.t.k; node.y = drag.ny + (py - drag.py) / this.t.k; this.kick(0.3); }
-      else { this.t.x = drag.tx + (px - drag.px); this.t.y = drag.ty + (py - drag.py); this.draw(); }
+      if (moveNode) {
+        // move SÓ o nó arrastado, sem re-aquecer a simulação → o resto NÃO treme
+        node.x = drag.nx + (px - drag.px) / this.t.k; node.y = drag.ny + (py - drag.py) / this.t.k;
+        this.draw();
+      } else {
+        this.t.x = drag.tx + (px - drag.px); this.t.y = drag.ty + (py - drag.py); this.draw();
+      }
     });
     window.addEventListener('mouseup', () => {
-      if (drag && node) node.fixed = false;
+      if (moveNode && node) node.fixed = false;
       if (drag && node && !moved) this.select(node);
       else if (drag && !node && !moved) this.select(null);
-      drag = null; node = null;
+      drag = null; node = null; moveNode = false;
     });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -281,6 +296,7 @@ export class ForceGraph {
   destroy() {
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null; this._ro?.disconnect();
+    if (this._onPref) window.removeEventListener('aila:pref', this._onPref);
     clearTimeout(this._pt);
   }
 }

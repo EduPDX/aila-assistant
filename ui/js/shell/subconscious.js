@@ -22,6 +22,9 @@ export function initSubconscious() {
   stage.appendChild(el);
 
   fg = new ForceGraph(document.getElementById('subc-canvas'), { mini: true });
+  const applyPref = () => { el.style.display = (localStorage.getItem('aila.subc.mini') === 'false') ? 'none' : ''; };
+  applyPref();
+  window.addEventListener('aila:pref', (e) => { if (e.detail?.key === 'aila.subc.mini') applyPref(); });
   load();
   // "pensa" periodicamente: destaca um nó, dando a sensação de processar
   setInterval(() => { if (fg && document.getElementById('subc')?.offsetParent) fg.think(); }, 2600);

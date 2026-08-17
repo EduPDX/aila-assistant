@@ -6,7 +6,7 @@ import { avatarReload } from './avatar.js';
 import { renderProviders } from './views/providers.js';
 import { api } from './core/api.js';
 import { confirmDialog } from './ui.js';
-import { CATEGORIES, CUSTOM_HTML } from './settings-schema.js';
+import { CATEGORIES, CUSTOM_HTML, KNOWN_AGENTS } from './settings-schema.js';
 
 const THEMES = [
   { id: 'aqua', c: '#38e1d0' }, { id: 'cyber', c: '#c257ff' }, { id: 'rose', c: '#ff6fae' },
@@ -26,7 +26,28 @@ export const closeSettings = () => byId('settings-overlay').classList.remove('sh
 const CUSTOM_RENDER = {
   providers: renderProviders, memory: renderMemory, autonomy: renderAutonomy,
   permissions: renderPermissions, network: renderNetwork, system: loadStatus,
+  agents: renderAgents,
 };
+
+/* ---------- Agentes (lista com toggles) — grava agents.enabled ---------- */
+function renderAgents() {
+  const box = byId('agents-list'); if (!box) return;
+  const enabled = new Set((getPath(_cfg, 'agents.enabled')) || []);
+  box.innerHTML = '';
+  KNOWN_AGENTS.forEach(([id, label, desc]) => {
+    const on = enabled.has(id);
+    const t = el('div', { class: 'toggle' + (on ? ' on' : ''), onclick: () => {
+      const now = !t.classList.contains('on'); t.classList.toggle('on', now);
+      now ? enabled.add(id) : enabled.delete(id);
+      commit('agents.enabled', [...enabled]); showRestart();
+    } }, el('div', { class: 'sw' }));
+    box.append(el('div', { class: 'agent-item' },
+      el('div', { class: 'agent-info' },
+        el('div', { class: 'agent-name' }, label),
+        el('div', { class: 'agent-desc muted' }, desc)),
+      t));
+  });
+}
 
 export function settingsTab(p) {
   $$('.snav').forEach((b) => b.classList.toggle('active', b.dataset.p === p));
@@ -61,6 +82,16 @@ function control(f) {
     s.onchange = () => onChange(s.value);
     return s;
   }
+  if (f.type === 'slider') {
+    const fmt = (n) => (f.signed && n >= 0 ? '+' : '') + n + (f.unit || '');
+    const num = f.str ? (parseFloat(String(v ?? '').replace(/[^\d.-]/g, '')) || 0) : (v ?? f.min ?? 0);
+    const range = el('input', { type: 'range', class: 'cfg-range', min: f.min, max: f.max, step: f.step || 1 });
+    range.value = num;
+    const out = el('span', { class: 'cfg-val' }, fmt(num));
+    range.oninput = () => { out.textContent = fmt(Number(range.value)); };
+    range.onchange = () => onChange(f.str ? fmt(Number(range.value)) : Number(range.value));
+    return el('div', { class: 'cfg-slider' }, range, out);
+  }
   if (f.type === 'textarea') {
     const a = el('textarea', { class: 'cfg-input cfg-area', rows: 3 }); a.value = v ?? '';
     a.onchange = () => onChange(a.value);
@@ -93,15 +124,26 @@ function renderAllFields() {
   });
 }
 
-function prefToggle(p) {
-  const on = (localStorage.getItem(p.key) ?? String(p.default)) === 'true';
-  const t = el('div', { class: 'toggle' + (on ? ' on' : ''), onclick: () => {
-    const now = !t.classList.contains('on'); t.classList.toggle('on', now);
-    localStorage.setItem(p.key, String(now));
-  } }, el('div', { class: 'sw' }));
+// preferência LOCAL (localStorage) — toggle ou select. Dispara 'aila:pref' p/ quem escuta (grafo).
+function renderPref(p) {
+  const cur = localStorage.getItem(p.key) ?? String(p.default);
+  const set = (v) => { localStorage.setItem(p.key, String(v)); window.dispatchEvent(new CustomEvent('aila:pref', { detail: { key: p.key, value: String(v) } })); };
+  let ctl;
+  if (p.type === 'select') {
+    ctl = el('select', { class: 'cfg-input' });
+    (p.options || []).forEach((o) => ctl.append(el('option', { value: o }, o)));
+    ctl.value = cur; ctl.onchange = () => set(ctl.value);
+  } else {
+    const on = cur === 'true';
+    ctl = el('div', { class: 'toggle' + (on ? ' on' : ''), onclick: () => {
+      const now = !ctl.classList.contains('on'); ctl.classList.toggle('on', now); set(now);
+    } }, el('div', { class: 'sw' }));
+  }
   return el('div', { class: 'cfg-row' },
-    el('div', { class: 'cfg-meta' }, el('label', { class: 'cfg-label' }, p.label)),
-    el('div', { class: 'cfg-ctl' }, t));
+    el('div', { class: 'cfg-meta' },
+      el('label', { class: 'cfg-label' }, p.label),
+      p.hint ? el('div', { class: 'cfg-hint muted' }, p.hint) : null),
+    el('div', { class: 'cfg-ctl' }, ctl));
 }
 
 /* gera a navegação + os painéis a partir do schema (uma vez) */
@@ -121,7 +163,7 @@ function buildSettings() {
       if (b.title) pane.append(el('div', { class: 'cfg-block-t' }, b.title));
       if (b.fields) pane.append(el('div', { class: 'cfg-fields', 'data-fields': JSON.stringify(b.fields) }));
       if (b.custom) pane.append(el('div', { class: 'html', html: CUSTOM_HTML[b.custom] || '' }));
-      if (b.pref) b.pref.forEach((p) => pane.append(prefToggle(p)));
+      if (b.pref) b.pref.forEach((p) => pane.append(renderPref(p)));
       if (b.note) pane.append(el('p', { class: 'muted cfg-note' }, b.note));
     });
     main.append(pane);
