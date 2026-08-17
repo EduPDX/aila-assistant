@@ -95,19 +95,29 @@ function _send(fullText, label) {
 /** envia um texto simples (usado pelo microfone) */
 export function sendUserText(t) { if (!t || !wsReady()) return; _send(t, t); }
 
+// classificação de anexo por extensão → roteia p/ a ferramenta certa
+const RE_IMG = /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i;
+const RE_DOC = /\.(pdf|docx?|xlsx?|pptx?|csv|md|markdown|txt|rtf|odt|json|log)$/i;
+const attachIcon = (a) => (RE_IMG.test(a.name) ? '🖼' : RE_DOC.test(a.name) ? '📄' : '📎');
+
+/** Dica para a IA saber COMO ler cada anexo (Document Agent / Vision / texto). */
+function attachHint(a) {
+  const n = a.name, p = a.path;
+  if (a.text != null)                       // texto já veio no upload → embute (sem tool)
+    return `\n[Anexo: ${n} — em ${p}]\n\`\`\`\n${a.text.slice(0, 20000)}\n\`\`\`\n`;
+  if (RE_IMG.test(n)) return `\n[Anexo (imagem): ${n} — em ${p}. Veja com vision.analyze_image.]\n`;
+  if (RE_DOC.test(n)) return `\n[Anexo (documento): ${n} — em ${p}. Extraia o texto com docs.read.]\n`;
+  return `\n[Anexo: ${n} — em ${p}. Tente docs.read; se for binário, use o Binary Agent.]\n`;
+}
+
 export function send() {
   const input = byId('input');
   const t = input.value.trim();
   if (!t && !attached.length) return;
   let payload = '';
-  for (const a of attached) {
-    payload += `\n[Anexo: ${a.name} — salvo no workspace em: ${a.path}]\n`;
-    payload += (a.text != null)
-      ? '```\n' + a.text.slice(0, 20000) + '\n```\n'
-      : '(arquivo binário; use os agentes de arquivo/binário para inspecioná-lo)\n';
-  }
+  for (const a of attached) payload += attachHint(a);
   const full = (payload ? payload + '\n' : '') + t;
-  const label = attached.map((a) => '📎 ' + a.name).join('  ') + (t ? (attached.length ? '\n' : '') + t : '');
+  const label = attached.map((a) => attachIcon(a) + ' ' + a.name).join('  ') + (t ? (attached.length ? '\n' : '') + t : '');
   _send(full, label || '(anexos)');
   input.value = ''; input.style.height = 'auto';
   attached = []; renderChips();
@@ -116,7 +126,7 @@ export function send() {
 // anexos
 function renderChips() {
   byId('attachments').innerHTML = attached
-    .map((a, i) => `<span class="chip">📎 ${a.name}<button data-i="${i}" title="remover">✕</button></span>`)
+    .map((a, i) => `<span class="chip">${attachIcon(a)} ${a.name}<button data-i="${i}" title="remover">✕</button></span>`)
     .join('');
   byId('attachments').querySelectorAll('button').forEach((b) =>
     b.onclick = () => { attached.splice(+b.dataset.i, 1); renderChips(); });
