@@ -116,16 +116,23 @@ export class ForceGraph3D {
   }
 
   _fitCube(force) {
-    if (!this.nodes.length) return;
-    let ext = 1;
-    for (const n of this.nodes) ext = Math.max(ext, Math.abs(n.x), Math.abs(n.y), Math.abs(n.z));
-    const size = Math.ceil((ext + 14) / 20) * 20 * 2;   // cubo cresce com o grafo (em degraus)
-    if (!force && Math.abs(size - this._cubeSize) < this._cubeSize * 0.08) return;
+    const N = this.nodes.length; if (!N) return;
+    // recentraliza o grafo no ORIGEM (o cubo é centrado em 0 → abraça o núcleo)
+    let mx = 0, my = 0, mz = 0;
+    for (const n of this.nodes) { mx += n.x; my += n.y; mz += n.z; }
+    mx /= N; my /= N; mz /= N;
+    for (const n of this.nodes) { n.x -= mx; n.y -= my; n.z -= mz; }
+    // extensão ROBUSTA (92º percentil da coord. máxima) → nós isolados jogados
+    // longe NÃO inflam o cubo; ele fica do tamanho do aglomerado do grafo.
+    const ds = this.nodes.map((n) => Math.max(Math.abs(n.x), Math.abs(n.y), Math.abs(n.z))).sort((a, b) => a - b);
+    const ext = ds[Math.floor(N * 0.92)] || 1;
+    const size = Math.max(40, Math.ceil((ext + 6) / 10) * 10 * 2);
+    if (!force && Math.abs(size - this._cubeSize) < this._cubeSize * 0.1) return;
     this._cubeSize = size;
     if (this._cube) { this.world.remove(this._cube); this._cube.geometry.dispose(); }
     this._cube = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(size, size, size)), this._cubeMat);
     this.world.add(this._cube);
-    this.camera.position.z = size * 0.92;   // enquadra (cabe o cubo com folga)
+    this.camera.position.z = size * 0.85;   // enquadra o cubo justinho
   }
 
   setVisible(set) {
@@ -273,7 +280,7 @@ export class ForceGraph3D {
     });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.camera.position.z = Math.max(60, Math.min(6000, this.camera.position.z * (e.deltaY < 0 ? 0.9 : 1.11)));
+      this.camera.position.z = Math.max(20, Math.min(6000, this.camera.position.z * (e.deltaY < 0 ? 0.88 : 1.13)));
     }, { passive: false });
   }
 
