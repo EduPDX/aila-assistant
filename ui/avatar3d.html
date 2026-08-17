@@ -189,8 +189,13 @@ function playGestureClip(name) {
   loader.load('/static/models/gestures/' + file, (gltf) => {
     const va = gltf.userData.vrmAnimations && gltf.userData.vrmAnimations[0];
     if (!va) { clipCache[name] = 'fail'; return; }
-    clipCache[name] = createVRMAnimationClip(va, vrm);
-    controller.playClip(clipCache[name]);           // toca assim que carrega (1ª vez)
+    const clip = createVRMAnimationClip(va, vrm);
+    // remove ROOT MOTION (faixas de posição, ex.: hips.position) — os .vrma de
+    // Mixamo deslocam o quadril e faziam o avatar "sumir pra baixo e voltar".
+    // Gesto fica NO LUGAR (só rotações + expressões/olhar).
+    clip.tracks = clip.tracks.filter((t) => !t.name.endsWith('.position'));
+    clipCache[name] = clip;
+    controller.playClip(clip);                      // toca assim que carrega (1ª vez)
   }, undefined, () => { clipCache[name] = 'fail'; });
   return true;
 }
