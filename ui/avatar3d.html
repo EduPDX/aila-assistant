@@ -241,14 +241,18 @@ addEventListener('keydown', (e) => {                        // tecla D liga/desl
 
 // ---------------- loop ----------------
 const clock = new THREE.Clock();
+let paused = false;   // P8: pausa quando o avatar NÃO está visível (chat/🧠) ou a
+                      // aba está em segundo plano → não renderiza um VRM à toa.
 function animate() {
   requestAnimationFrame(animate);
+  if (paused || document.hidden) { clock.getDelta(); return; }   // zera o dt e sai
   const dt = Math.min(clock.getDelta(), 0.05);   // limita o dt: molas não explodem
   if (controller) controller.update(dt);          // camadas → PoseBuffer → VRM
   debug.update();                                 // helpers só quando ligado
   controls.update();
   renderer.render(scene, camera);
 }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) clock.getDelta(); });
 animate();
 loadVRM(MODEL_URL);
 
@@ -291,6 +295,8 @@ addEventListener('message', (e) => {
     case 'aila:emotion':   applyEmotion(d.value, d.gesture); if (d.state) $('state').textContent = d.state; break;
     case 'aila:behavior':  controller?.applyBehavior(d.spec); if (d.spec) $('emotion').textContent = d.spec.emotion || 'neutral'; break;
     case 'aila:status':    applyStatus(d.value); break;
+    case 'aila:show':      paused = false; clock.getDelta(); break;   // volta ao palco → retoma
+    case 'aila:hide':      paused = true; break;                       // saiu do palco → pausa render
     case 'aila:mouth':     controller?.setMouth(d.value); break;
     case 'aila:gesture':   controller?.triggerGesture(d.value); break;
   }

@@ -12,3 +12,5 @@ export const avatarBehavior = (spec) => toAvatar({ type: 'aila:behavior', spec }
 export const avatarGesture = (name) => toAvatar({ type: 'aila:gesture', value: name });
 export const avatarMouth = (v) => toAvatar({ type: 'aila:mouth', value: v });
 export const avatarReload = () => toAvatar({ type: 'aila:reloadVRM' });
+// P8: pausa/retoma o render do avatar conforme ele está (ou não) na tela
+export const avatarShow = (on) => toAvatar({ type: on ? 'aila:show' : 'aila:hide' });

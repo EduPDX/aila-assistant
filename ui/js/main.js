@@ -29,6 +29,7 @@ function showTab(t) {
   });
   document.body.dataset.tab = t;      // CSS esconde o mini-subconsciente na aba 🧠
   mind.showMind(t === 'mind');
+  avatar.avatarShow(t === 'avatar');  // P8: só renderiza o avatar quando ele está no palco
 }
 
 /** abre a aba do grafo (Mente) já no grafo pedido (código | conhecimento) */
