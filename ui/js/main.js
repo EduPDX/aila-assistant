@@ -11,6 +11,7 @@ import * as avatar from './avatar.js';
 import * as voice from './voice.js';
 import { initSettings, openSettings, closeSettings, settingsTab, loadStatus, setLlm } from './settings.js';
 import { ingest } from './core/events.js';
+import { cognitiveAvatar } from './cognitive-avatar.js';
 import { humanizeTool } from './core/humanize.js';
 import { initDirector } from './core/director.js';
 import { initTopbar, refreshStatus } from './shell/topbar.js';
@@ -141,7 +142,7 @@ initHud();          // telemetria HUD sobre o palco (dono do poll de /api/metric
 initSubconscious(); // mini-subconsciente: atividade cognitiva sutil (poll /api/cognition)
 wireUI();
 connectWS({
-  onMessage: (m) => { ingest(m); route(m); },   // ingest = estado/atividade; route = UI (chat/avatar)
+  onMessage: (m) => { ingest(m); route(m); cognitiveAvatar(m); },   // ingest=estado · route=UI · cognitiveAvatar=reações do avatar a eventos cognitivos
   onOpen: () => { State.set({ connection: 'online' }); refreshStatus(); },
   onClose: () => { State.set({ connection: 'offline', llmOnline: false }); setLlm(false); },
 });
