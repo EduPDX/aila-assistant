@@ -7,15 +7,18 @@
 import { api } from './core/api.js';
 import { ForceGraph } from './graph/forcegraph.js';
 import { ForceGraph3D } from './graph/forcegraph3d.js';
+import { graphThumbnail } from './graph/thumbnail.js';
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let fg = null;
 let kind = 'code';
 let communities = [];
 let visible = null;          // Set de comunidades visíveis
 let built = false;
+let currentProject = null;   // slug do projeto aberto (só quando kind='project')
+let projectList = [];        // cache dos projetos (nome/contagens p/ a grade)
 
 export function showMind(on) {
   if (on && !built) build();
@@ -25,7 +28,27 @@ export function showMind(on) {
 export function showKind(k) {
   kind = (k === 'knowledge') ? 'knowledge' : 'code';
   if (!built) build();           // build() lê `kind` e carrega o certo
-  else { updateKindButtons(); load(kind); }
+  else { updateKindButtons(); refresh(); }
+}
+
+// roteia a view conforme o `kind`: 'project' sem projeto aberto → grade;
+// projeto aberto ou code/knowledge → grafo único.
+function refresh() {
+  if (kind === 'project' && !currentProject) { showGrid(); return; }
+  load(kind);
+}
+
+// alterna entre a GRADE de projetos e a view de GRAFO único (esconde/mostra os
+// elementos certos: canvas, painel lateral, stats, botão voltar).
+function setMode(mode) {
+  const grid = mode === 'grid';
+  $('mind-grid').hidden = !grid;
+  const side = document.querySelector('.mind-side');
+  if (side) side.style.display = grid ? 'none' : '';
+  const cv = $('mind-canvas'); if (cv) cv.style.visibility = grid ? 'hidden' : '';
+  $('mind-stats').style.display = grid ? 'none' : '';
+  $('mind-back').hidden = !(mode === 'graph' && currentProject);
+  if (grid) $('mind-empty').hidden = true;
 }
 
 function updateKindButtons() {
@@ -56,10 +79,12 @@ function build() {
   $('mind-kindsel').querySelectorAll('button').forEach((b) => {
     b.onclick = () => {
       kind = b.dataset.k;
+      if (kind !== 'project') currentProject = null;
       $('mind-kindsel').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
-      load(kind);
+      refresh();
     };
   });
+  $('mind-back').onclick = () => { currentProject = null; refresh(); };
   $('mind-all').onchange = (e) => {
     const on = e.target.checked;
     visible = on ? null : new Set();
@@ -71,12 +96,17 @@ function build() {
   search.addEventListener('input', () => { if (!search.value) fg.select(null); });
 
   updateKindButtons();
-  load(kind);
+  refresh();
 }
 
 async function load(k) {
+  setMode('graph');
   let data;
-  try { data = await api.graph(k, 1500); } catch (e) { data = { nodes: [], edges: [], communities: [] }; }
+  try {
+    data = (k === 'project')
+      ? await api.graph('project', 1500, currentProject)
+      : await api.graph(k, 1500);
+  } catch (e) { data = { nodes: [], edges: [], communities: [] }; }
   communities = data.communities || [];
   visible = null;
   const empty = $('mind-empty');
@@ -84,7 +114,9 @@ async function load(k) {
     empty.hidden = false;
     empty.innerHTML = k === 'knowledge'
       ? '🌙 O grafo de conhecimento ainda está vazio.<br><span class="muted">A Aila constrói isso conforme conversa e consolida o que aprende.</span>'
-      : 'sem dados de código';
+      : k === 'project'
+        ? 'sem código Python mapeável neste projeto'
+        : 'sem dados de código';
     $('mind-stats').textContent = '';
     fg.setData({ nodes: [], edges: [], communities: [] });
     renderCommunities();
@@ -144,3 +176,86 @@ function doSearch(q) {
     || fg.nodes.find((n) => (n.label || '').toLowerCase().includes(q));
   if (hit) fg.selectById(hit.id);
 }
+
+// ---------------------------------------------------------------- Projetos
+async function showGrid() {
+  setMode('grid');
+  const grid = $('mind-grid');
+  grid.innerHTML = '<div class="muted" style="padding:20px">carregando projetos…</div>';
+  try { projectList = (await api.projects()).projects || []; }
+  catch (e) { projectList = []; }
+  renderCards();
+}
+
+function cardHTML(p) {
+  return `<div class="mind-card" data-slug="${esc(p.slug)}">
+      <button class="mind-card-del" title="Remover projeto">✕</button>
+      <div class="mind-card-thumb"><img alt=""></div>
+      <div class="mind-card-body">
+        <div class="mind-card-name" title="${esc(p.name)}">${esc(p.name)}</div>
+        <div class="mind-card-meta">${p.nodes || 0} nós · ${p.edges || 0} arestas · ${p.files || 0} arq.</div>
+        <button class="mind-card-work">Trabalhar no projeto</button>
+      </div>
+    </div>`;
+}
+
+function renderCards() {
+  const grid = $('mind-grid');
+  const add = '<div class="mind-addcard" id="mind-addproj">'
+    + '<div class="plus">+</div><div>Adicionar projeto</div>'
+    + '<div class="muted" style="font-size:11px">anexe uma pasta pra ela mapear</div></div>';
+  grid.innerHTML = add + projectList.map(cardHTML).join('');
+  $('mind-addproj').onclick = addProjectFlow;
+  grid.querySelectorAll('.mind-card').forEach((cardEl) => {
+    const slug = cardEl.dataset.slug;
+    const p = projectList.find((x) => x.slug === slug) || {};
+    const open = () => openProject(slug);
+    cardEl.querySelector('.mind-card-thumb').onclick = open;
+    cardEl.querySelector('.mind-card-name').onclick = open;
+    cardEl.querySelector('.mind-card-work').onclick = (e) => { e.stopPropagation(); open(); };
+    cardEl.querySelector('.mind-card-del').onclick = (e) => { e.stopPropagation(); removeProjectFlow(slug, p.name); };
+  });
+  fillThumbs();
+}
+
+// gera as miniaturas uma a uma (sequencial → não martela o backend nem a CPU)
+async function fillThumbs() {
+  for (const p of projectList) {
+    const img = document.querySelector(`.mind-card[data-slug="${cssq(p.slug)}"] img`);
+    if (!img) continue;
+    try {
+      const data = await api.graph('project', 800, p.slug);
+      img.src = graphThumbnail(data, 156);
+    } catch (e) { /* miniatura é best-effort */ }
+  }
+}
+
+async function openProject(slug) {
+  currentProject = slug;
+  kind = 'project';
+  updateKindButtons();
+  await load('project');
+}
+
+async function addProjectFlow() {
+  const path = window.prompt('Caminho da pasta do projeto\n(ex.: E:\\Projetos\\meu-app):');
+  if (!path || !path.trim()) return;
+  const add = $('mind-addproj');
+  if (add) add.innerHTML = '<div class="mind-card-building">construindo grafo…</div>';
+  try {
+    await api.addProject(path.trim(), null);
+    await showGrid();
+  } catch (e) {
+    window.alert('Não consegui anexar essa pasta. Verifique se o caminho existe e tem código Python.');
+    renderCards();
+  }
+}
+
+async function removeProjectFlow(slug, name) {
+  if (!window.confirm(`Remover o projeto "${name || slug}"?\nO grafo dele será apagado — a pasta original NÃO é tocada.`)) return;
+  try { await api.removeProject(slug); } catch (e) { /* ignora */ }
+  await showGrid();
+}
+
+// escapa aspas p/ usar o slug num seletor CSS
+function cssq(s) { return String(s).replace(/["\\]/g, '\\$&'); }

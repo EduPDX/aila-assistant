@@ -6,7 +6,7 @@
 // ============================================================
 
 // paleta de comunidades (colorida, estilo Graphify)
-const PALETTE = [
+export const PALETTE = [
   '#6ea8fe', '#f0a35e', '#e06c75', '#57c7b8', '#98c379', '#e5c07b',
   '#c678dd', '#f2809b', '#b08d6a', '#a8b0bd', '#4d9be6', '#d19a66',
   '#8fd3c5', '#7ab8ff', '#e88fb0', '#9aa7ff',
