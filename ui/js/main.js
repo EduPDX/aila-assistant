@@ -104,6 +104,8 @@ function wireUI() {
   byId('btn-stop').onclick = voice.stopSpeaking;   // ⏹ interrompe a fala
   byId('attach').onclick = () => byId('attachfile').click();
   byId('attachfile').onchange = (e) => chat.attachFiles(e.target.files, () => { showTab('chat'); e.target.value = ''; });
+  byId('attachdir').onclick = () => byId('attachfolder').click();
+  byId('attachfolder').onchange = (e) => chat.attachFolder(e.target.files, () => { showTab('chat'); e.target.value = ''; });
   byId('perm-deny').onclick = () => respondPerm(false);
   byId('perm-allow').onclick = () => respondPerm(true);
 

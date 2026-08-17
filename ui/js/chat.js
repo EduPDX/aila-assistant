@@ -139,3 +139,25 @@ export async function attachFiles(files, onDone) {
   }
   renderChips(); if (onDone) onDone();
 }
+
+// Anexa uma PASTA inteira (documentos/fotos). Filtra só o que a Aila sabe ler
+// (imagens + documentos), pula lixo (.git/node_modules/ocultos/grandes) e limita
+// a quantidade p/ não inundar o chat. Para código-fonte/repositório, use a aba
+// 🧠 ▸ Projetos (constrói o grafo de código do projeto).
+const FOLDER_MAX = 30;
+const FOLDER_SKIP = /(^|\/)(\.git|node_modules|\.venv|__pycache__|dist|build|\.next|vendor)(\/|$)/i;
+export async function attachFolder(fileList, onDone) {
+  const all = [...fileList];
+  const good = all.filter((f) => {
+    const rel = f.webkitRelativePath || f.name;
+    if (FOLDER_SKIP.test(rel) || f.name.startsWith('.')) return false;
+    if (!(RE_IMG.test(f.name) || RE_DOC.test(f.name))) return false;   // só o que ela lê
+    if (f.size > 25 * 1024 * 1024) return false;                        // pula arquivos enormes
+    return true;
+  });
+  if (!good.length) { onSys('nenhum documento/imagem legível nessa pasta.'); if (onDone) onDone(); return; }
+  const pick = good.slice(0, FOLDER_MAX);
+  if (good.length > FOLDER_MAX) onSys(`pasta com ${good.length} arquivos — anexando os primeiros ${FOLDER_MAX}.`);
+  onSys(`anexando ${pick.length} arquivo(s) da pasta…`);
+  await attachFiles(pick, onDone);
+}
