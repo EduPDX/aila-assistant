@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api")
@@ -131,6 +131,38 @@ async def set_network(request: Request, body: NetworkBody) -> dict:
         raise HTTPException(status_code=503, detail="Política de rede indisponível.")
     mode = engine.network.set_mode(body.mode)
     return {"network_mode": mode}
+
+
+def _redacted_config() -> dict:
+    """Config EFETIVA como dict, com as chaves de API removidas (só has_key)."""
+    from aila.core.config import get_settings
+
+    s = get_settings().model_dump()
+    for cfg in (s.get("providers") or {}).values():
+        if isinstance(cfg, dict) and "api_key" in cfg:
+            cfg["has_key"] = bool(cfg.get("api_key"))
+            cfg["api_key"] = ""
+    return s
+
+
+@router.get("/config")
+async def get_config() -> dict:
+    """Configuração efetiva (para a tela de Configurações). Chaves de API redigidas."""
+    return _redacted_config()
+
+
+@router.patch("/config")
+async def patch_config(body: dict = Body(...)) -> dict:  # noqa: B008
+    """Grava um patch (parcial, aninhado) no local.yaml e recarrega a config.
+    A maioria dos ajustes só entra em vigor ao REINICIAR (são lidos no boot);
+    autonomia/rede têm endpoints próprios que aplicam na hora."""
+    from aila.core.config import get_settings, update_local_yaml
+
+    if not isinstance(body, dict) or not body:
+        raise HTTPException(status_code=400, detail="Corpo vazio ou inválido.")
+    update_local_yaml(body)
+    get_settings.cache_clear()          # próxima leitura pega o novo valor
+    return {"ok": True, "restart_recommended": True, "config": _redacted_config()}
 
 
 class AutonomyBody(BaseModel):
