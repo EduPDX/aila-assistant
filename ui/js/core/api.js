@@ -24,6 +24,7 @@ export const api = {
   task: (id) => j(`/api/tasks/${id}`),
   memory: (n = 20) => j(`/api/memory?n=${n}`),         // { enabled, count, recent }
   deleteMemory: (id) => j(`/api/memory/${id}`, { method: 'DELETE' }),   // esquecer uma memória
+  reset: () => j('/api/reset', { method: 'POST' }),                     // apagar memória+conhecimento+conversas
   config: () => j('/api/config'),                                       // config efetiva (chaves redigidas)
   patchConfig: (patch) => j('/api/config', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }),
   models: () => j('/api/models'),                     // { models: [...] } (Ollama)

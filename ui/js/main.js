@@ -94,8 +94,8 @@ function wireUI() {
   byId('btn-hamb').onclick = () => setDrawer(byId('drawer').classList.contains('collapsed'));
   byId('tab-avatar').onclick = () => showTab('avatar');
   byId('tab-chat').onclick = () => showTab('chat');
-  // acesso ao subconsciente pela sidebar (as abas do topo estão ocultas)
-  document.querySelectorAll('.mind-navbtn').forEach((b) => { b.onclick = () => openGraph(b.dataset.kind); });
+  // acesso ao subconsciente pela sidebar (um botão; código/conhecimento no seletor de dentro)
+  byId('btn-mind').onclick = () => showTab('mind');
   byId('mind-close').onclick = () => showTab('avatar');   // voltar ao palco
   byId('btn-send').onclick = chat.send;
   byId('mic').onclick = voice.toggleMic;

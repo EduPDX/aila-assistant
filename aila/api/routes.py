@@ -463,3 +463,25 @@ async def delete_memory(request: Request, mem_id: int) -> dict:
         raise HTTPException(status_code=404, detail="Memória desativada.")
     engine.memory.delete(mem_id)
     return {"ok": True, "count": engine.memory.count()}
+
+
+@router.post("/reset")
+async def reset(request: Request) -> dict:
+    """Apaga TODO o histórico interno — memória de longo prazo, grafo de
+    Conhecimento e conversas — para recomeçar do zero. NÃO afeta o código da
+    Aila nem o grafo de Código."""
+    engine = request.app.state.engine
+    if engine.memory is not None:
+        engine.memory.clear()
+    kg = getattr(engine, "kgraph", None)
+    if kg is not None:
+        kg.conn.execute("DELETE FROM kg_edge")
+        kg.conn.execute("DELETE FROM kg_node")
+        kg.conn.commit()
+        kg._loaded = False
+    if engine.store is not None:
+        for s in engine.store.list_sessions():
+            engine.store.delete_session(s["id"])
+    engine.session_id = None
+    engine.context.clear()
+    return {"ok": True}

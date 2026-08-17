@@ -937,10 +937,12 @@ body[data-tab="mind"] .subc { display: none; }           /* na aba 🧠, o grafo
   transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease); }
 .mind-navbtn:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   background: color-mix(in srgb, var(--accent) 8%, var(--panel-2)); }
+.mind-open { margin-bottom: 10px; }   /* botão único do subconsciente na sidebar */
 .mind-stats { position: absolute; bottom: 12px; right: 16px; font-family: var(--font-mono);
   font-size: 10px; color: var(--muted); pointer-events: none; }
 .mind-empty { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px;
-  align-items: center; justify-content: center; text-align: center; color: var(--text); }
+  align-items: center; justify-content: center; text-align: center; color: var(--text);
+  pointer-events: none; }   /* não rouba o clique do seletor Código/Conhecimento e do ✕ */
 .mind-empty[hidden] { display: none; }
 .mind-side { width: 268px; flex-shrink: 0; border-left: 1px solid var(--border);
   background: var(--panel); display: flex; flex-direction: column; padding: 14px; gap: 12px; overflow: hidden; }

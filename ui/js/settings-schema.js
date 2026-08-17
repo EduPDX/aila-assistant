@@ -102,6 +102,7 @@ export const CATEGORIES = [
         hint: 'Quão parecida uma memória precisa ser pra entrar. Alto = só o muito relevante.', restart: true },
     ] },
     { title: 'Memórias guardadas', custom: 'memory' },
+    { title: 'Recomeçar do zero', custom: 'reset' },
   ] },
 
   { id: 'autonomia', icon: '🎚️', label: 'Autonomia', blocks: [
@@ -174,6 +175,8 @@ export const CUSTOM_HTML = {
   vrm: '<button class="btn accent" id="pickvrm" style="max-width:260px">📁 Escolher modelo VRM</button>'
     + '<input type="file" id="vrmfile" accept=".vrm" style="display:none" /><div id="vrmnote" class="muted" style="margin-top:8px"></div>',
   voicetoggle: '<div class="toggle on" id="tg-voice"><div class="sw"></div><span>Aila fala as respostas (agora)</span></div>',
+  reset: '<button class="btn danger" id="btn-reset-all" style="max-width:300px">🗑 Apagar tudo e recomeçar</button>'
+    + '<p class="muted" style="margin-top:8px">Apaga memórias, grafo de Conhecimento e todas as conversas — para testar do zero. NÃO afeta o código da Aila nem o grafo de Código.</p>',
 };
 
 // agentes conhecidos (para a lista com toggles) — nome interno → rótulo

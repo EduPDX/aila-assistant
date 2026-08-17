@@ -26,8 +26,26 @@ export const closeSettings = () => byId('settings-overlay').classList.remove('sh
 const CUSTOM_RENDER = {
   providers: renderProviders, memory: renderMemory, autonomy: renderAutonomy,
   permissions: renderPermissions, network: renderNetwork, system: loadStatus,
-  agents: renderAgents,
+  agents: renderAgents, reset: renderReset,
 };
+
+/* ---------- Apagar tudo (recomeçar do zero) ---------- */
+function renderReset() {
+  const b = byId('btn-reset-all'); if (!b || b._wired) return;
+  b._wired = true;
+  b.onclick = async () => {
+    const ok = await confirmDialog({
+      title: 'Apagar tudo e recomeçar?',
+      body: 'Memórias, grafo de Conhecimento e TODAS as conversas serão apagados. '
+        + 'Isso NÃO afeta o código da Aila. Não tem volta.',
+      confirmLabel: 'Apagar tudo', danger: true,
+    });
+    if (!ok) return;
+    b.textContent = 'apagando…';
+    try { await api.reset(); location.reload(); }
+    catch { b.textContent = '🗑 Apagar tudo e recomeçar'; }
+  };
+}
 
 /* ---------- Agentes (lista com toggles) — grava agents.enabled ---------- */
 function renderAgents() {
