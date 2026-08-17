@@ -71,9 +71,10 @@ export class ForceGraph3D {
   }
 
   _clearMeshes() {
-    for (const m of [this._nodeMesh, this._edgeLines, this._cube]) {
+    for (const m of [this._nodeMesh, this._edgeLines]) {
       if (m) { this.world.remove(m); m.geometry?.dispose(); m.material?.dispose(); }
     }
+    if (this._cube) { this.world.remove(this._cube); this._disposeCube(); }
     this._nodeMesh = this._edgeLines = this._cube = null;
   }
 
@@ -109,8 +110,7 @@ export class ForceGraph3D {
     }));
     this.world.add(this._edgeLines);
 
-    // cubo wireframe (redimensionado no _fitCube)
-    this._cubeMat = new THREE.LineBasicMaterial({ color: 0x7ab8ff, transparent: true, opacity: 0.18 });
+    // cubo (caprichado, redimensionado no _fitCube)
     this._cubeSize = 0;
     this._fitCube(true);
   }
@@ -125,14 +125,44 @@ export class ForceGraph3D {
     // extensão ROBUSTA (92º percentil da coord. máxima) → nós isolados jogados
     // longe NÃO inflam o cubo; ele fica do tamanho do aglomerado do grafo.
     const ds = this.nodes.map((n) => Math.max(Math.abs(n.x), Math.abs(n.y), Math.abs(n.z))).sort((a, b) => a - b);
-    const ext = ds[Math.floor(N * 0.92)] || 1;
-    const size = Math.max(40, Math.ceil((ext + 6) / 10) * 10 * 2);
+    const ext = ds[Math.floor(N * 0.96)] || 1;   // 96º percentil → cabe quase tudo
+    const size = Math.max(40, Math.ceil((ext * 1.12 + 8) / 10) * 10 * 2);
     if (!force && Math.abs(size - this._cubeSize) < this._cubeSize * 0.1) return;
     this._cubeSize = size;
-    if (this._cube) { this.world.remove(this._cube); this._cube.geometry.dispose(); }
-    this._cube = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(size, size, size)), this._cubeMat);
+    if (this._cube) { this.world.remove(this._cube); this._disposeCube(); }
+    this._cube = this._makeCube(size);
     this.world.add(this._cube);
-    this.camera.position.z = size * 0.85;   // enquadra o cubo justinho
+    this.camera.position.z = size * 0.92;   // enquadra o cubo com folga
+  }
+
+  // cubo "caprichado": faces de vidro bem sutis + arestas fracas + CANTOS em
+  // destaque (brackets estilo HUD). Retorna um Group.
+  _makeCube(size) {
+    const g = new THREE.Group();
+    const box = new THREE.BoxGeometry(size, size, size);
+    // faces translúcidas (vidro) — BackSide p/ não tampar o grafo de frente
+    g.add(new THREE.Mesh(box.clone(), new THREE.MeshBasicMaterial({
+      color: 0x1b3a66, transparent: true, opacity: 0.05, side: THREE.BackSide, depthWrite: false })));
+    // arestas fracas
+    g.add(new THREE.LineSegments(new THREE.EdgesGeometry(box),
+      new THREE.LineBasicMaterial({ color: 0x7ab8ff, transparent: true, opacity: 0.12 })));
+    // cantos em destaque (3 segmentos curtos por vértice)
+    const h = size / 2, L = size * 0.16, pts = [];
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+      const cx = sx * h, cy = sy * h, cz = sz * h;
+      pts.push(cx, cy, cz, cx - sx * L, cy, cz);
+      pts.push(cx, cy, cz, cx, cy - sy * L, cz);
+      pts.push(cx, cy, cz, cx, cy, cz - sz * L);
+    }
+    const cg = new THREE.BufferGeometry();
+    cg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    g.add(new THREE.LineSegments(cg, new THREE.LineBasicMaterial({
+      color: 0xaddcff, transparent: true, opacity: 0.6 })));
+    return g;
+  }
+
+  _disposeCube() {
+    this._cube?.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
   }
 
   setVisible(set) {
@@ -190,9 +220,12 @@ export class ForceGraph3D {
         }
       }
       const o = cc.get(n.community);
-      n.vx += (o.x - n.x) * COMM * a + o.fx * a + (cx - n.x) * GRAV * a;
-      n.vy += (o.y - n.y) * COMM * a + o.fy * a + (cy - n.y) * GRAV * a;
-      n.vz += (o.z - n.z) * COMM * a + o.fz * a + (cz - n.z) * GRAV * a;
+      // nós ISOLADOS (sem ligações) tendem a flutuar p/ fora (só repulsão) → puxa
+      // com gravidade bem mais forte p/ ficarem dentro do aglomerado/cubo.
+      const g = ((n.degree || 0) === 0) ? GRAV * 10 : GRAV;
+      n.vx += (o.x - n.x) * COMM * a + o.fx * a + (cx - n.x) * g * a;
+      n.vy += (o.y - n.y) * COMM * a + o.fy * a + (cy - n.y) * g * a;
+      n.vz += (o.z - n.z) * COMM * a + o.fz * a + (cz - n.z) * g * a;
     }
     for (const l of this.links) {
       let dx = l.t.x - l.s.x, dy = l.t.y - l.s.y, dz = l.t.z - l.s.z;
@@ -260,22 +293,33 @@ export class ForceGraph3D {
 
   _bindEvents() {
     const cv = this.canvas;
-    let drag = null, moved = false;
+    let drag = null, moved = false, mode = 'rotate';
     cv.style.cursor = 'grab';
+    cv.addEventListener('contextmenu', (e) => e.preventDefault());   // botão direito = pan
     cv.addEventListener('mousedown', (e) => {
       const r = cv.getBoundingClientRect();
-      drag = { px: e.clientX, py: e.clientY, rx: this.rot.x, ry: this.rot.y, cx: e.clientX - r.left, cy: e.clientY - r.top };
-      moved = false; this._dragging = true; cv.style.cursor = 'grabbing';
+      mode = (e.button === 2 || e.shiftKey) ? 'pan' : 'rotate';       // direito/Shift = arrastar a cena
+      drag = { px: e.clientX, py: e.clientY, rx: this.rot.x, ry: this.rot.y,
+        wx: this.world.position.x, wy: this.world.position.y, h: r.height,
+        cx: e.clientX - r.left, cy: e.clientY - r.top };
+      moved = false; this._dragging = true; cv.style.cursor = mode === 'pan' ? 'move' : 'grabbing';
     });
     window.addEventListener('mousemove', (e) => {
       if (!drag) return;
       const dx = e.clientX - drag.px, dy = e.clientY - drag.py;
       if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
-      this.rot.y = drag.ry + dx * 0.006;
-      this.rot.x = Math.max(-1.4, Math.min(1.4, drag.rx + dy * 0.006));
+      if (mode === 'pan') {
+        // desloca a cena (mundo) no plano da tela — pixels → unidades de mundo
+        const s = (2 * this.camera.position.z * Math.tan(this.camera.fov * Math.PI / 360)) / drag.h;
+        this.world.position.x = drag.wx + dx * s;
+        this.world.position.y = drag.wy - dy * s;
+      } else {
+        this.rot.y = drag.ry + dx * 0.006;
+        this.rot.x = Math.max(-1.4, Math.min(1.4, drag.rx + dy * 0.006));
+      }
     });
-    window.addEventListener('mouseup', (e) => {
-      if (drag && !moved) this._pick(drag.cx, drag.cy);
+    window.addEventListener('mouseup', () => {
+      if (drag && !moved && mode === 'rotate') this._pick(drag.cx, drag.cy);
       drag = null; this._dragging = false; cv.style.cursor = 'grab';
     });
     cv.addEventListener('wheel', (e) => {
