@@ -20,6 +20,9 @@ export function createSpeechGestureLayer() {
   return {
     name: 'speech-gesture',
     update(rig, buf, ctx, dt) {
+      // se a fala está sendo gesticulada por CLIPS (natural, corpo inteiro),
+      // a gesticulação procedural (mais "robótica") fica quieta.
+      if (ctx.talkClips) { active = false; w.left = 0; w.right = 0; return; }
       const speaking = ctx.speech > 0.08 && ctx.gesture === 'rest' && !ctx.handTarget;
       // expressividade (emoção × intensidade × ritmo), limitada
       const expr = Math.max(0.4, Math.min(1.4, (ctx.emotion?.amp ?? 1) * (ctx.intensity ?? 1) * (ctx.motion?.amp ?? 1)));

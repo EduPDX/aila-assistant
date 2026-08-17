@@ -165,7 +165,9 @@ loader.register((parser) => new VRMAnimationLoaderPlugin(parser));   // P6: carr
 // ---------------- biblioteca de gestos VRMA (P7) ----------------
 //  Intenção → arquivo .vrma (em ui/models/gestures/). Opt-in e com FALLBACK:
 //  se o clip não existe (ou clips desligados), cai no gesto procedural de sempre.
-const GESTURE_CLIPS = { wave: 'wave.vrma', nod: 'nod.vrma', shake: 'shake.vrma', point: 'point.vrma', shrug: 'shrug.vrma' };
+const GESTURE_CLIPS = { wave: 'wave.vrma', nod: 'nod.vrma', shake: 'shake.vrma', point: 'point.vrma', shrug: 'shrug.vrma',
+  talk1: 'talk1.vrma', talk2: 'talk2.vrma', talk3: 'talk3.vrma', talk4: 'talk4.vrma' };
+const TALK = ['talk1', 'talk2', 'talk3', 'talk4'];   // clips de "conversa" (gesticulação natural da fala)
 const clipCache = {};   // intenção -> AnimationClip | 'loading' | 'fail'
 const clipsEnabled = () => localStorage.getItem('aila.avatar.clips') !== 'false';
 
@@ -199,6 +201,14 @@ function playGestureClip(name) {
   }, undefined, () => { clipCache[name] = 'fail'; });
   return true;
 }
+// gesticulação natural da FALA: toca um clip de "conversa" aleatório (o controller
+// chama isso em intervalos enquanto ela fala). Devolve true se há clips disponíveis.
+function playRandomTalkClip() {
+  if (!clipsEnabled()) return false;
+  const avail = TALK.filter((t) => clipCache[t] !== 'fail');
+  if (!avail.length) return false;
+  return playGestureClip(avail[Math.floor(Math.random() * avail.length)]);
+}
 // teste/console: dispara uma intenção pela biblioteca (ex.: ailaPlayClip('wave'))
 window.ailaPlayClip = (name = 'wave') => playGestureClip(name) || (controller && controller.triggerGesture(name));
 
@@ -223,6 +233,7 @@ function loadVRM(url) {
     controller = new AnimationController(vrm, scene, camera);   // ← animação em camadas
     window.ailaAnim = controller;                              // debug/console
     controller.clipFor = playGestureClip;                      // P7: gestos por clip (fallback procedural)
+    controller.playTalkClip = playRandomTalkClip;              // gesticulação natural da fala por clips
     probeGestureClips();                                       // sabe quais .vrma existem
     debug.attach(controller);                                  // Debug Mode segue o VRM atual
     try { vrm.springBoneManager?.reset?.(); } catch(e){}       // molas assentadas

@@ -79,6 +79,9 @@ export class AnimationController {
     this.mixer = null;                          // AnimationMixer p/ clips VRMA (P6, lazy)
     this._clipAction = null;                    // clip ativo (ou null)
     this.clipFor = null;                        // resolvedor intenção→clip (P7; avatar3d o seta)
+    this.playTalkClip = null;                   // toca um clip de "conversa" aleatório (fala)
+    this._talkT = 0.5;                          // timer da gesticulação de fala
+    this._talkAvail = undefined;                // há clips de conversa? (por turno de fala)
   }
 
   /** toca um CLIP VRMA (gesto autoral) sobrepondo o corpo, com blend (fadeIn/out).
@@ -203,6 +206,25 @@ export class AnimationController {
       while (this._queue.length && this._queue[0].at <= this._clock) {
         this.triggerGesture(this._queue.shift().type);
       }
+    }
+
+    // Gesticulação da FALA por CLIPS (natural, corpo inteiro): enquanto ela fala
+    // e sem gesto explícito, toca clips de "conversa" com intervalos. Quando isso
+    // está ativo, ctx.talkClips avisa a camada procedural (robótica) p/ ficar
+    // quieta. Sem clips de conversa disponíveis → cai no procedural (fallback).
+    const speaking = ctx.speech > 0.25 && ctx.gesture === 'rest';
+    if (speaking && this.playTalkClip && this._talkAvail !== false) {
+      if (!this._clipAction) {
+        this._talkT -= dt;
+        if (this._talkT <= 0) {
+          this._talkAvail = this.playTalkClip();          // true se tocou um clip
+          this._talkT = 2.6 + Math.random() * 3.4;        // próximo gesto de fala
+        }
+      }
+      ctx.talkClips = this._talkAvail === true;
+    } else {
+      ctx.talkClips = false;
+      if (ctx.speech < 0.1) { this._talkT = 0.5; this._talkAvail = undefined; }
     }
 
     const st = STATES[ctx.status] || STATES.IDLE, em = ctx.emotion;
