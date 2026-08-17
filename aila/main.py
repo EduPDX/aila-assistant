@@ -8,6 +8,7 @@ Rodar:
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -151,11 +152,15 @@ app = create_app()
 
 def run() -> None:
     settings = get_settings()
+    # AILA_RELOAD=1 → reinicia o backend sozinho ao editar um .py (modo fonte/dev;
+    # a própria Aila se auto-modificando é refletida na hora). Só observa 'aila/'.
+    reload = os.environ.get("AILA_RELOAD") == "1"
     uvicorn.run(
         "aila.main:app",
         host=settings.host,
         port=settings.port,
-        reload=False,
+        reload=reload,
+        reload_dirs=["aila"] if reload else None,
         log_level=settings.log_level.lower(),
     )
 
