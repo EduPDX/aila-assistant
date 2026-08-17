@@ -282,6 +282,7 @@ export class ForceGraph3D {
   // -------------------------------------------------------- interação
   select(node) {
     this.selected = node; this._nbr = new Set();
+    this.autoRot = !node;   // nó selecionado → pausa a auto-rotação; clicou fora → volta
     const out = [];
     if (node) for (const l of this.links) {
       if (l.s === node) { this._nbr.add(l.t.id); out.push(l.t); }
