@@ -252,7 +252,14 @@ export class ForceGraph3D {
     });
     this._nodeMesh.instanceMatrix.needsUpdate = true;
     const p = this._edgeLines.geometry.getAttribute('position');
-    this.links.forEach((l, i) => { p.setXYZ(i * 2, l.s.x, l.s.y, l.s.z); p.setXYZ(i * 2 + 1, l.t.x, l.t.y, l.t.z); });
+    const shown = (n) => !vis || vis.has(n.community);
+    this.links.forEach((l, i) => {
+      if (shown(l.s) && shown(l.t)) {
+        p.setXYZ(i * 2, l.s.x, l.s.y, l.s.z); p.setXYZ(i * 2 + 1, l.t.x, l.t.y, l.t.z);
+      } else {                          // aresta de comunidade escondida → colapsa (não renderiza)
+        p.setXYZ(i * 2, l.s.x, l.s.y, l.s.z); p.setXYZ(i * 2 + 1, l.s.x, l.s.y, l.s.z);
+      }
+    });
     p.needsUpdate = true;
   }
 
