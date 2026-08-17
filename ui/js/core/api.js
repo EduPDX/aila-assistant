@@ -23,6 +23,7 @@ export const api = {
   tasks: () => j('/api/tasks'),                       // { tasks: [...] }
   task: (id) => j(`/api/tasks/${id}`),
   memory: (n = 20) => j(`/api/memory?n=${n}`),         // { enabled, count, recent }
+  deleteMemory: (id) => j(`/api/memory/${id}`, { method: 'DELETE' }),   // esquecer uma memória
   models: () => j('/api/models'),                     // { models: [...] } (Ollama)
   tools: () => j('/api/tools'),
   audit: (n = 50) => j(`/api/audit?n=${n}`),

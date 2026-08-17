@@ -421,3 +421,13 @@ async def memory(request: Request, n: int = 20) -> dict:
         "count": engine.memory.count(),
         "recent": engine.memory.recent(n),
     }
+
+
+@router.delete("/memory/{mem_id}")
+async def delete_memory(request: Request, mem_id: int) -> dict:
+    """Esquece uma memória específica (controle direto pela UI de Configurações)."""
+    engine = request.app.state.engine
+    if engine.memory is None:
+        raise HTTPException(status_code=404, detail="Memória desativada.")
+    engine.memory.delete(mem_id)
+    return {"ok": True, "count": engine.memory.count()}

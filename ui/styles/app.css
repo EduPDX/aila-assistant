@@ -315,7 +315,12 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .mem-item[data-kind="project"] { border-left-color: var(--warn); }
 .mem-kind { flex-shrink: 0; font-size: 9px; text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
   padding: 3px 7px; border-radius: var(--r-pill); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
-.mem-text { font-size: var(--fs-sm); line-height: 1.45; word-break: break-word; color: var(--text); }
+.mem-text { flex: 1; font-size: var(--fs-sm); line-height: 1.45; word-break: break-word; color: var(--text); }
+.mem-search { width: 100%; margin-top: var(--s-3); padding: 8px 10px; background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text); font-size: var(--fs-sm); }
+.mem-del { flex-shrink: 0; background: none; border: none; cursor: pointer; font-size: 13px; opacity: .5;
+  padding: 2px 4px; border-radius: var(--r-sm); transition: opacity var(--dur-1), background var(--dur-1); }
+.mem-del:hover { opacity: 1; background: color-mix(in srgb, var(--danger) 18%, transparent); }
 
 /* ---------- Permissões (níveis de risco) ---------- */
 .risk-list { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-3); }

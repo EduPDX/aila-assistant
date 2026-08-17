@@ -34,20 +34,42 @@ export function settingsTab(p) {
 /* ---------- Memória (/api/memory — leitura) ---------- */
 const KIND_LABEL = { chat: 'Conversa', fact: 'Fato', preference: 'Preferência',
                      project: 'Projeto', semantic: 'Semântica' };
+let _mems = [];
 async function renderMemory() {
   const box = byId('memory-list'); if (!box) return;
   box.textContent = 'carregando…';
   try {
-    const d = await api.memory(25);
+    const d = await api.memory(50);
     byId('memory-count').textContent = d.count ?? 0;
-    box.innerHTML = '';
-    if (!d.enabled) { box.append(el('div', { class: 'act-empty' }, 'Memória desativada na configuração.')); return; }
-    if (!d.recent || !d.recent.length) { box.append(el('div', { class: 'act-empty' }, 'Nenhuma memória ainda.')); return; }
-    d.recent.forEach((m) => box.append(el('div', { class: 'mem-item', 'data-kind': m.kind },
-      el('span', { class: 'mem-kind' }, KIND_LABEL[m.kind] || m.kind || 'memória'),
-      el('div', { class: 'mem-text' }, (m.text || '').replace(/\s+/g, ' ').slice(0, 220)),
-    )));
+    if (!d.enabled) { box.innerHTML = ''; box.append(el('div', { class: 'act-empty' }, 'Memória desativada na configuração.')); return; }
+    _mems = d.recent || [];
+    drawMemory(byId('mem-search')?.value || '');
   } catch { box.textContent = 'não foi possível carregar a memória.'; }
+}
+
+function drawMemory(q) {
+  const box = byId('memory-list'); if (!box) return;
+  box.innerHTML = '';
+  const ql = (q || '').trim().toLowerCase();
+  const list = _mems.filter((m) => !ql || (m.text || '').toLowerCase().includes(ql));
+  if (!list.length) {
+    box.append(el('div', { class: 'act-empty' }, ql ? 'nada encontrado' : 'Nenhuma memória ainda.'));
+    return;
+  }
+  list.forEach((m) => box.append(el('div', { class: 'mem-item', 'data-kind': m.kind },
+    el('span', { class: 'mem-kind' }, KIND_LABEL[m.kind] || m.kind || 'memória'),
+    el('div', { class: 'mem-text' }, (m.text || '').replace(/\s+/g, ' ').slice(0, 220)),
+    el('button', { class: 'mem-del', title: 'Esquecer esta memória', onclick: () => delMemory(m.id) }, '🗑'),
+  )));
+}
+
+async function delMemory(id) {
+  try {
+    const r = await api.deleteMemory(id);
+    _mems = _mems.filter((m) => m.id !== id);
+    byId('memory-count').textContent = r.count ?? '';
+    drawMemory(byId('mem-search')?.value || '');
+  } catch { /* silencioso */ }
 }
 
 /* ---------- Permissões (explicador + estado atual) ---------- */
@@ -183,6 +205,9 @@ export function initSettings() {
 
   // fechar clicando fora
   byId('settings-overlay').addEventListener('click', (e) => { if (e.target.id === 'settings-overlay') closeSettings(); });
+
+  // busca nas memórias (filtra a lista carregada)
+  byId('mem-search')?.addEventListener('input', (e) => drawMemory(e.target.value));
 
   // trocar VRM
   byId('pickvrm').onclick = () => byId('vrmfile').click();
