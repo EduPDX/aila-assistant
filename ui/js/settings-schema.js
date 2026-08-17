@@ -16,6 +16,8 @@ export const CATEGORIES = [
   { id: 'aparencia', icon: '🎨', label: 'Aparência', blocks: [
     { title: 'Tema', custom: 'themes' },
     { title: 'Visualização do grafo (subconsciente)', pref: [
+      { key: 'aila.graph.mode', type: 'select', options: ['2d', '3d'], default: '2d',
+        label: 'Modo de visualização', hint: '3D = grafo dentro de um cubo que você gira com o mouse (mais bonito, usa a GPU).' },
       { key: 'aila.graph.edges', type: 'select', options: ['coloridas', 'cinza'], default: 'coloridas',
         label: 'Ligações entre os nós', hint: 'Coloridas = a linha usa a cor do nó de origem (como no Graphify).' },
       { key: 'aila.graph.drag', type: 'toggle', default: true,

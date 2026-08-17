@@ -6,6 +6,7 @@
 // ============================================================
 import { api } from './core/api.js';
 import { ForceGraph } from './graph/forcegraph.js';
+import { ForceGraph3D } from './graph/forcegraph3d.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -32,9 +33,25 @@ function updateKindButtons() {
     .forEach((b) => b.classList.toggle('active', b.dataset.k === kind));
 }
 
+// cria o renderizador conforme a preferência (2D canvas ou 3D three.js). Como um
+// <canvas> não troca de contexto (2d↔webgl), sempre uso um canvas NOVO.
+function makeGraph() {
+  const old = $('mind-canvas');
+  const cv = document.createElement('canvas'); cv.id = 'mind-canvas';
+  old.replaceWith(cv);
+  const Renderer = localStorage.getItem('aila.graph.mode') === '3d' ? ForceGraph3D : ForceGraph;
+  return new Renderer(cv, { interactive: true, onNode: renderNodeInfo });
+}
+
 function build() {
   built = true;
-  fg = new ForceGraph($('mind-canvas'), { interactive: true, onNode: renderNodeInfo });
+  fg = makeGraph();
+  // trocar 2D↔3D nas Configurações → recria o grafo e recarrega
+  window.addEventListener('aila:pref', (e) => {
+    if (e.detail?.key !== 'aila.graph.mode' || !built) return;
+    try { fg.destroy(); } catch (_) {}
+    fg = makeGraph(); load(kind);
+  });
 
   $('mind-kindsel').querySelectorAll('button').forEach((b) => {
     b.onclick = () => {
