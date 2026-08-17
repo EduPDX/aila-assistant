@@ -33,6 +33,10 @@
     <div>Aila · avatar 3D (VRM)</div>
     <div>emoção: <span id="emotion">neutral</span> · <span id="state">idle</span></div>
   </div>
+  <!-- Debug Mode (P0): oculto por padrão; tecla D, ?debug=1 ou window.ailaDebug.toggle() -->
+  <div id="dbg" style="display:none;position:fixed;left:14px;bottom:12px;z-index:20;font-size:11px;
+    line-height:1.6;color:#c7d3e0;background:rgba(10,14,20,.82);border:1px solid #e06c7566;
+    border-radius:8px;padding:9px 12px;max-width:60vw;font-family:ui-monospace,monospace"></div>
   <div id="controls" style="position:fixed;right:14px;top:12px;display:flex;gap:8px;align-items:center">
     <span id="vrmnote" style="font-size:11px;color:var(--muted)"></span>
     <button id="pick" style="background:var(--panel);border:1px solid var(--border);
@@ -70,6 +74,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { AnimationController } from './avatar/animation-controller.js';
+import { AvatarDebug } from './avatar/debug.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -174,6 +179,7 @@ function loadVRM(url) {
     window.vrm = vrm;
     controller = new AnimationController(vrm, scene, camera);   // ← animação em camadas
     window.ailaAnim = controller;                              // debug/console
+    debug.attach(controller);                                  // Debug Mode segue o VRM atual
     try { vrm.springBoneManager?.reset?.(); } catch(e){}       // molas assentadas
     clock.getDelta();                                          // zera o dt (evita saia "explodir")
     frameVRM();
@@ -185,12 +191,21 @@ function loadVRM(url) {
   });
 }
 
+// ---------------- Debug Mode (P0) ----------------
+const debug = new AvatarDebug(scene, camera, $('dbg'));
+window.ailaDebug = debug;                                   // console: ailaDebug.toggle()
+if (params.get('debug') === '1') debug.toggle(true);        // ?debug=1 já liga
+addEventListener('keydown', (e) => {                        // tecla D liga/desliga
+  if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey && !e.altKey) debug.toggle();
+});
+
 // ---------------- loop ----------------
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);   // limita o dt: molas não explodem
   if (controller) controller.update(dt);          // camadas → PoseBuffer → VRM
+  debug.update();                                 // helpers só quando ligado
   controls.update();
   renderer.render(scene, camera);
 }

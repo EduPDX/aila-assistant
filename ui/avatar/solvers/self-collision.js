@@ -17,7 +17,7 @@ export function createSelfCollision() {
   const cp = V(), d = V(), ab = V(), ap = V(), P = V();
   // pool de colliders reusado (type 0=esfera[a,r], 1=cápsula[a,b,r])
   const pool = []; for (let i = 0; i < 6; i++) pool.push({ type: 0, a: V(), b: V(), r: 0 });
-  let nCol = 0;
+  let nCol = 0, sw = 0;   // sw = largura de ombros (escala do corpo), setada por build()
   const state = { left: { on: false, t: V() }, right: { on: false, t: V() } };
 
   const wpos = (rig, name, out) => { const b = rig.bone(name); return b ? out.setFromMatrixPosition(b.matrixWorld) : null; };
@@ -47,23 +47,29 @@ export function createSelfCollision() {
     return pushed;
   }
 
+  // monta os colliders do frame a partir dos ossos (raios ∝ escala do corpo).
+  // Separado do solve() p/ o Debug Mode poder visualizá-los mesmo sem gesto.
+  function build(rig) {
+    if (!wpos(rig, 'hips', hips) || !wpos(rig, 'leftUpperArm', lU) || !wpos(rig, 'rightUpperArm', rU)) return false;
+    sw = lU.distanceTo(rU);                  // largura de ombros → escala do corpo
+    if (sw < 1e-4) return false;
+    wpos(rig, 'neck', neck); wpos(rig, 'head', head);
+    const legs = wpos(rig, 'leftUpperLeg', lLeg) && wpos(rig, 'leftLowerLeg', lKnee)
+              && wpos(rig, 'rightUpperLeg', rLeg) && wpos(rig, 'rightLowerLeg', rKnee);
+    nCol = 0;
+    addCapsule(hips, neck, sw * 0.36);       // tronco
+    addSphere(hips, sw * 0.40);              // pelve
+    addSphere(head, sw * 0.38);              // cabeça
+    if (legs) { addCapsule(lLeg, lKnee, sw * 0.26); addCapsule(rLeg, rKnee, sw * 0.26); }
+    return true;
+  }
+
   return {
     name: 'self-collision',
+    // DEBUG (P0): reconstrói e devolve os colliders p/ visualização (read-only).
+    colliders(rig) { return build(rig) ? pool.slice(0, nCol) : []; },
     solve(rig, buf, ctx, dt) {
-      if (!wpos(rig, 'hips', hips) || !wpos(rig, 'leftUpperArm', lU) || !wpos(rig, 'rightUpperArm', rU)) return;
-      const sw = lU.distanceTo(rU);           // largura de ombros → escala do corpo
-      if (sw < 1e-4) return;
-      wpos(rig, 'neck', neck); wpos(rig, 'head', head);
-      const legs = wpos(rig, 'leftUpperLeg', lLeg) && wpos(rig, 'leftLowerLeg', lKnee)
-                && wpos(rig, 'rightUpperLeg', rLeg) && wpos(rig, 'rightLowerLeg', rKnee);
-
-      // monta os colliders do frame (raios proporcionais à escala; justos p/
-      // só pegar penetração real e não "inchar" a gesticulação)
-      nCol = 0;
-      addCapsule(hips, neck, sw * 0.36);      // tronco
-      addSphere(hips, sw * 0.40);             // pelve
-      addSphere(head, sw * 0.38);             // cabeça
-      if (legs) { addCapsule(lLeg, lKnee, sw * 0.26); addCapsule(rLeg, rKnee, sw * 0.26); }
+      if (!build(rig)) return;
 
       // PROATIVO: constrange o ALVO DA MÃO (empurra p/ fora do corpo) ANTES do
       // IK, preservando orientação/peso. Só age nos alvos que existem (buf.ik).
