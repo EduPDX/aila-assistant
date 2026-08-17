@@ -60,12 +60,10 @@ class MemoryManager:
         return await self.store.add(text, kind=normalize_kind(kind), session_id=session_id)
 
     async def remember_exchange(self, user_text: str, answer: str, session_id: int | None) -> None:
-        from aila.cognition.memory.entities import extract
-
-        text = f"Usuário: {user_text}\nAila: {answer}"
-        # entidades alimentam o Knowledge Graph via consolidação (co-ocorrência).
-        await self.store.add(text, kind=EPISODIC, session_id=session_id,
-                             entities=extract(text))
+        # entidades ficam vazias aqui; são extraídas DEPOIS, em background (LLM >
+        # heurística p/ prosa em PT) → alimentam o Knowledge Graph por co-ocorrência.
+        await self.store.add(f"Usuário: {user_text}\nAila: {answer}",
+                             kind=EPISODIC, session_id=session_id)
 
     def forget(self, mem_id: int) -> None:
         self.store.delete(mem_id)

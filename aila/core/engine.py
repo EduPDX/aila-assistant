@@ -92,7 +92,9 @@ class AilaEngine:
         if memory is not None:
             from aila.cognition.memory.consolidation import Consolidator
 
-            self.consolidator = Consolidator(memory, self.kgraph, bus=self.bus)
+            # min_evidence=1: tópicos discutidos JUNTOS numa conversa já se ligam
+            # (relatedness conversacional); repetições entre conversas reforçam o peso.
+            self.consolidator = Consolidator(memory, self.kgraph, bus=self.bus, min_evidence=1)
         self._consolidating = False
         self._turns = 0
         self.emotions = EmotionEngine()
@@ -257,6 +259,7 @@ class AilaEngine:
 
         async def _run() -> None:
             try:
+                await self._enrich_entities()      # extrai tópicos (LLM) das memórias novas
                 rep = await self.consolidator.consolidate()
                 log.info(f"consolidação (background): {rep}")
             except Exception as exc:  # noqa: BLE001 - nunca deve derrubar o chat
@@ -268,6 +271,25 @@ class AilaEngine:
             asyncio.create_task(_run())
         except RuntimeError:           # sem event loop (ex.: testes síncronos)
             self._consolidating = False
+
+    async def _enrich_entities(self, cap: int = 8) -> int:
+        """Extrai TÓPICOS das memórias novas (LLM > heurística p/ PT) e grava —
+        alimentam o Knowledge Graph. Best-effort; offline cai na heurística."""
+        if self.memory is None:
+            return 0
+        rows = self.memory.recent_empty_entities(cap)
+        if not rows:
+            return 0
+        from aila.cognition.memory.entities import extract, extract_llm
+
+        n = 0
+        for r in rows:
+            ents = await extract_llm(self.llm.complete, r["text"])
+            if ents is None:                       # LLM offline/falhou → heurística
+                ents = extract(r["text"])
+            self.memory.set_entities(r["id"], ents)
+            n += 1
+        return n
 
     async def _remember(self, user_text: str, answer: str) -> None:
         """Grava a troca como memória EPISÓDICA (best-effort)."""

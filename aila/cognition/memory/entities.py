@@ -10,7 +10,9 @@ só com evidência (≥ min_evidence), então ruído que aparece uma vez não vi
 
 from __future__ import annotations
 
+import json
 import re
+from typing import Any
 
 _TOKEN = re.compile(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9_]*(?:\.[A-Za-zÀ-ÿ0-9_]+)*")
 
@@ -52,3 +54,37 @@ def extract(text: str, max_n: int = 8) -> list[str]:
         if len(out) >= max_n:
             break
     return out
+
+
+async def extract_llm(complete_fn: Any, text: str, model: str | None = None) -> list[str] | None:
+    """Extrai TÓPICOS via LLM (bem melhor que a heurística p/ prosa em PT: pega
+    'buraco negro', 'universo', 'poema'…). Roda em BACKGROUND (não bloqueia a
+    resposta). Retorna None se falhar/offline → o chamador cai na heurística."""
+    try:
+        out = await complete_fn(
+            [
+                {"role": "system", "content":
+                    "Você extrai TÓPICOS. Responda SÓ com uma lista JSON de 2 a 6 "
+                    "strings curtas (conceitos, nomes, temas principais do texto). "
+                    "Sem explicação, sem markdown."},
+                {"role": "user", "content": (text or "")[:1500]},
+            ],
+            model=model,
+        )
+    except Exception:  # noqa: BLE001 - offline / modelo indisponível
+        return None
+    m = re.search(r"\[.*\]", out or "", re.DOTALL)
+    if not m:
+        return None
+    try:
+        arr = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return None
+    seen: set[str] = set()
+    ents: list[str] = []
+    for x in arr:
+        s = str(x).strip().strip('"').strip()
+        if 2 <= len(s) <= 40 and s.lower() not in seen and s.lower() not in _STOP:
+            seen.add(s.lower())
+            ents.append(s)
+    return ents[:6] or None

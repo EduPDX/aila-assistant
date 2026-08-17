@@ -1276,13 +1276,13 @@ def test_knowledge_graph_grows_from_conversation(tmp_path: Path):
     async def go():
         store = MemoryStore(tmp_path / "mem.db", embed)
         graph = GraphStore(tmp_path / "know.db")
-        mgr = MemoryManager(store, graph=graph)
 
-        # duas conversas em que ModelRouter e Gemini CO-OCORREM (evidência ≥ 2)
-        await mgr.remember_exchange("falei do ModelRouter e do Gemini hoje",
-                                    "o ModelRouter escolhe o Gemini", 1)
-        await mgr.remember_exchange("o ModelRouter chama o Gemini quando precisa",
-                                    "sim, ModelRouter usa Gemini", 1)
+        # duas conversas em que ModelRouter e Gemini CO-OCORREM (evidência ≥ 2).
+        # entities já preenchidas (como o enriquecimento em background faz).
+        await store.add("falei do ModelRouter e do Gemini hoje; o ModelRouter escolhe o Gemini",
+                        kind="chat", entities=["ModelRouter", "Gemini"])
+        await store.add("o ModelRouter chama o Gemini quando precisa; ModelRouter usa Gemini",
+                        kind="chat", entities=["ModelRouter", "Gemini"])
 
         rep = await Consolidator(store, graph, min_evidence=2).consolidate()
         assert rep["nodes"] > 0 and rep["edges"] >= 1
@@ -1301,8 +1301,42 @@ def test_knowledge_graph_grows_from_conversation(tmp_path: Path):
         assert all("community" in n and "degree" in n for n in view["nodes"])
 
         # recall agora é HÍBRIDO (grafo presente) e NÃO reforça (ajuste v2 #2)
-        hits = await mgr.recall("ModelRouter", top_k=3)
+        hits = await MemoryManager(store, graph=graph).recall("ModelRouter", top_k=3)
         assert isinstance(hits, list)
+
+    asyncio.run(go())
+
+
+def test_extract_llm_topics_and_enrichment(tmp_path: Path):
+    """Extração de tópicos via LLM (melhor que heurística p/ PT) + fluxo de
+    enriquecimento no store (recent_empty_entities → set_entities)."""
+    from aila.cognition.memory.entities import extract_llm
+    from aila.memory.store import MemoryStore
+
+    async def good(msgs, model=None):
+        return 'Claro: ["buraco negro", "gravidade", "Einstein"]'
+    async def not_json(msgs, model=None):
+        return 'não consegui'
+    async def offline(msgs, model=None):
+        raise RuntimeError("sem modelo")
+
+    async def embed(texts):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    async def go():
+        ents = await extract_llm(good, "fale de buracos negros")
+        assert ents == ["buraco negro", "gravidade", "Einstein"]
+        assert await extract_llm(not_json, "x") is None       # sem JSON → None
+        assert await extract_llm(offline, "x") is None         # offline → None (cai na heurística)
+
+        # store: memória episódica longa sem entidades aparece p/ enriquecer; some depois
+        store = MemoryStore(tmp_path / "m.db", embed)
+        mid = await store.add(
+            "Usuário: me fale curiosidades sobre buracos negros e o universo\n"
+            "Aila: um buraco negro deforma o espaço-tempo...", kind="chat")
+        assert any(r["id"] == mid for r in store.recent_empty_entities())
+        store.set_entities(mid, ["buraco negro", "universo"])
+        assert all(r["id"] != mid for r in store.recent_empty_entities())
 
     asyncio.run(go())
 

@@ -219,6 +219,22 @@ class MemoryStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def set_entities(self, mem_id: int, entities: list) -> None:
+        self.conn.execute("UPDATE memories SET entities = ? WHERE id = ?",
+                          (_dump(entities), int(mem_id)))
+        self.conn.commit()
+
+    def recent_empty_entities(self, limit: int = 8) -> list[dict]:
+        """Memórias episódicas ativas SEM entidades (p/ enriquecer via LLM em
+        background). Mais recentes primeiro → o usuário vê os tópicos novos logo."""
+        rows = self.conn.execute(
+            "SELECT id, text FROM memories WHERE status='active' AND kind='chat' "
+            "AND (entities IS NULL OR entities='' OR entities='[]') "
+            "AND length(text) > 60 "               # pula saudações triviais
+            "ORDER BY id DESC LIMIT ?", (int(limit),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0])
 

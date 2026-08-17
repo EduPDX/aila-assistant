@@ -19,7 +19,7 @@ log = get_logger("avatar_agent")
 
 # gestos disponíveis (devem existir na biblioteca POSES do ui/avatar3d.html)
 GESTURES = [
-    "wave", "raise_right", "raise_left", "thumbs_up", "point",
+    "wave", "raise_right", "raise_left", "raise_both", "thumbs_up", "point",
     "hand_explain", "shrug", "think", "cheer", "rest",
 ]
 
