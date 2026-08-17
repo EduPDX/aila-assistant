@@ -110,29 +110,30 @@ export class ForceGraph3D {
     }));
     this.world.add(this._edgeLines);
 
-    // cubo (caprichado, redimensionado no _fitCube)
-    this._cubeSize = 0;
-    this._fitCube(true);
+    // cubo UNITÁRIO (caprichado) — a escala acompanha o grafo no _frameFit
+    this._cube = this._makeCube(1);
+    this.world.add(this._cube);
+    this._userMoved = false;   // grafo novo → câmera volta a auto-enquadrar
+    this._frameFit();
   }
 
-  _fitCube(force) {
-    const N = this.nodes.length; if (!N) return;
-    // recentraliza o grafo no ORIGEM (o cubo é centrado em 0 → abraça o núcleo)
-    let mx = 0, my = 0, mz = 0;
-    for (const n of this.nodes) { mx += n.x; my += n.y; mz += n.z; }
-    mx /= N; my /= N; mz /= N;
-    for (const n of this.nodes) { n.x -= mx; n.y -= my; n.z -= mz; }
-    // extensão ROBUSTA (92º percentil da coord. máxima) → nós isolados jogados
-    // longe NÃO inflam o cubo; ele fica do tamanho do aglomerado do grafo.
-    const ds = this.nodes.map((n) => Math.max(Math.abs(n.x), Math.abs(n.y), Math.abs(n.z))).sort((a, b) => a - b);
-    const ext = ds[Math.floor(N * 0.96)] || 1;   // 96º percentil → cabe quase tudo
-    const size = Math.max(40, Math.ceil((ext * 1.12 + 8) / 10) * 10 * 2);
-    if (!force && Math.abs(size - this._cubeSize) < this._cubeSize * 0.1) return;
-    this._cubeSize = size;
-    if (this._cube) { this.world.remove(this._cube); this._disposeCube(); }
-    this._cube = this._makeCube(size);
-    this.world.add(this._cube);
-    this.camera.position.z = size * 0.92;   // enquadra o cubo com folga
+  // ajuste por FRAME: o cubo (unitário) é ESCALADO p/ conter TODOS os nós — a
+  // meia-aresta = maior (|coordenada| + raio do nó), então nenhum nó fica de
+  // fora e o cubo acompanha o grafo automaticamente. Recentraliza enquanto
+  // assenta; enquadra a câmera só até o usuário mexer (aí respeita o zoom).
+  _frameFit() {
+    const N = this.nodes.length; if (!N || !this._cube) return;
+    if (this.alpha > 0.02) {
+      let mx = 0, my = 0, mz = 0;
+      for (const n of this.nodes) { mx += n.x; my += n.y; mz += n.z; }
+      mx /= N; my /= N; mz /= N;
+      for (const n of this.nodes) { n.x -= mx; n.y -= my; n.z -= mz; }
+    }
+    let ext = 1;
+    for (const n of this.nodes) ext = Math.max(ext, Math.abs(n.x) + n.r, Math.abs(n.y) + n.r, Math.abs(n.z) + n.r);
+    const size = (ext + 6) * 2;
+    this._cube.scale.setScalar(size);
+    if (!this._userMoved) this.camera.position.z = size * 0.92;
   }
 
   // cubo "caprichado": faces de vidro bem sutis + arestas fracas + CANTOS em
@@ -291,8 +292,9 @@ export class ForceGraph3D {
   _loop() {
     const step = () => {
       const spin = localStorage.getItem('aila.graph.spin') === 'true';
-      if (this.alpha > 0.02) { this._tick(); this.alpha *= 0.978; this._fitCube(false); }
+      if (this.alpha > 0.02) { this._tick(); this.alpha *= 0.978; }
       else if (spin) { this.alpha = 0.03; this._tick(); }
+      this._frameFit();
       this._sync();
       if (this.autoRot && !this._dragging) this.rot.y += 0.0016;
       this.world.rotation.x = this.rot.x; this.world.rotation.y = this.rot.y;
@@ -357,6 +359,7 @@ export class ForceGraph3D {
     });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
+      this._userMoved = true;   // usuário controlou o zoom → câmera para de auto-enquadrar
       this.camera.position.z = Math.max(20, Math.min(6000, this.camera.position.z * (e.deltaY < 0 ? 0.88 : 1.13)));
     }, { passive: false });
   }
