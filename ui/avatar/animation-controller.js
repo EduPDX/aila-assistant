@@ -6,6 +6,7 @@
 //  Ele NÃO sabe renderizar — só decide o contexto e compõe as camadas.
 //  (No futuro, o Behavior Planner do backend alimenta este contexto.)
 // ============================================================
+import * as THREE from 'three';
 import { Rig, damp } from './rig-core.js';
 import { EMOTIONS, STATES, resolveEmotion } from './profiles.js';
 
@@ -75,6 +76,42 @@ export class AnimationController {
     this._queue = [];                           // timeline de gestos (F5)
     this._clock = 0;                            // relógio da fala (p/ a timeline)
     this.layerW = new Map();                    // peso/fade por CAMADA (P5) — name -> {cur,target,k}
+    this.mixer = null;                          // AnimationMixer p/ clips VRMA (P6, lazy)
+    this._clipAction = null;                    // clip ativo (ou null)
+  }
+
+  /** toca um CLIP VRMA (gesto autoral) sobrepondo o corpo, com blend (fadeIn/out).
+   *  As camadas aditivas de expressão/olhar seguem funcionando (aplicadas no
+   *  finalize, DEPOIS do mixer); o IK é pulado enquanto o clip toca (o clip dona
+   *  os braços). LoopOnce por padrão → some sozinho ao terminar. (P6) */
+  playClip(clip, { loop = false, fade = 0.35 } = {}) {
+    if (!clip || !this.rig?.vrm) return;
+    if (!this.mixer) this.mixer = new THREE.AnimationMixer(this.rig.vrm.scene);
+    const action = this.mixer.clipAction(clip);
+    if (this._clipAction && this._clipAction !== action) this._clipAction.fadeOut(fade);
+    action.reset();
+    action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+    action.clampWhenFinished = !loop;
+    action.fadeIn(fade).play();
+    this._clipAction = action;
+    if (!loop) {
+      const onFin = (e) => {
+        if (e.action !== action) return;
+        this.mixer.removeEventListener('finished', onFin);
+        action.fadeOut(fade);                                   // blend de volta às camadas
+        setTimeout(() => { if (this._clipAction === action) { action.stop(); this._clipAction = null; } }, fade * 1000 + 80);
+      };
+      this.mixer.addEventListener('finished', onFin);
+    }
+  }
+
+  /** interrompe o clip atual (fade out). */
+  stopClip(fade = 0.3) {
+    const a = this._clipAction;
+    if (!a) return;
+    a.fadeOut(fade);
+    this._clipAction = null;
+    setTimeout(() => a.stop(), fade * 1000 + 80);
   }
 
   /** faz uma CAMADA inteira aparecer/sumir suavemente (peso alvo 0..1) sem "pop".
@@ -209,14 +246,17 @@ export class AnimationController {
     this.bufferSolver.solve(this.rig, buf);
     this.rig.applyBones();
     // solvers de posição (colisão→IK + updateMatrices, o passo mais caro) SÓ
-    // quando há alvo de mão (buf.ik). Parada ao lado (sem gesto) = pula tudo.
-    if (buf.ik.size) {
+    // quando há alvo de mão (buf.ik) E não há clip tocando (o clip dona os braços).
+    if (buf.ik.size && !this._clipAction) {
       this.rig.updateMatrices();                     // corpo posado → colliders válidos
       // 3) colisão PROATIVA: constrange o alvo p/ fora do corpo (antes do IK)
       this.collision.solve(this.rig, buf, ctx, dt);
       // 4) IK resolve o braço UMA vez p/ o alvo já seguro (cotovelo + orientação)
       this.ikSolver.solve(this.rig, buf);
     }
+    // 5) CLIP VRMA (P6): sobrepõe o corpo com blend (peso da action). Roda DEPOIS
+    //    da pose aditiva e ANTES do finalize → expressões/olhar seguem por cima.
+    if (this.mixer) this.mixer.update(dt);
     // 6) blendshapes + olhar + física secundária
     this.rig.finalize(dt);
   }

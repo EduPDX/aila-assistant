@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' blob: ws://127.0.0.1:* ws://localhost:* wss://127.0.0.1:* wss://localhost:*; worker-src 'self' blob:; object-src 'none'; base-uri 'self'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' data: blob: ws://127.0.0.1:* ws://localhost:* wss://127.0.0.1:* wss://localhost:*; worker-src 'self' blob:; object-src 'none'; base-uri 'self'" />
 <title>Aila — Avatar 3D</title>
 <style>
   :root { --accent:#35d0ba; --bg:#0a0e14; --panel:#0f1620; --border:#1e2a3a; --muted:#6b7c93; }
@@ -59,7 +59,8 @@
   "imports": {
     "three": "/static/vendor/three.module.js",
     "three/addons/": "/static/vendor/addons/",
-    "@pixiv/three-vrm": "/static/vendor/three-vrm.module.min.js"
+    "@pixiv/three-vrm": "/static/vendor/three-vrm.module.min.js",
+    "@pixiv/three-vrm-animation": "/static/vendor/three-vrm-animation.module.min.js"
   }
 }
 </script>
@@ -73,6 +74,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 import { AnimationController } from './avatar/animation-controller.js';
 import { AvatarDebug } from './avatar/debug.js';
 
@@ -158,6 +160,19 @@ let vrm = null;
 let controller = null;      // AnimationController (sistema em camadas)
 const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
+loader.register((parser) => new VRMAnimationLoaderPlugin(parser));   // P6: carrega .vrma
+
+// ---------------- clips VRMA (gestos autorais) ----------------
+function loadClip(url, opts) {
+  if (!vrm || !controller) return;
+  loader.load(url, (gltf) => {
+    const va = gltf.userData.vrmAnimations && gltf.userData.vrmAnimations[0];
+    if (!va) { console.warn('sem VRMA em', url); return; }
+    controller.playClip(createVRMAnimationClip(va, vrm), opts);
+  }, undefined, (e) => console.warn('falha ao carregar clip', url, e?.message || e));
+}
+// teste/console: ailaPlayClip() usa o gesto de exemplo; aceita url própria
+window.ailaPlayClip = (url = '/static/models/gesture-wave.vrma', opts) => loadClip(url, opts);
 
 function disposeVRM() {
   if (!vrm) return;
