@@ -730,12 +730,20 @@ def test_project_registry(tmp_path: Path):
     assert reg.list() == []
 
 
-def test_code_agent_graph_tools(tmp_path: Path):
+def test_code_agent_graph_tools(tmp_path: Path, monkeypatch):
     """Fase 6: o Code Agent usa o Code Graph (repo-map, definição, callers,
-    impacto) — tudo read-only (SAFE/L1) e ancorado no código REAL da Aila."""
+    impacto) — read-only (SAFE/L1). Ancorado no código da Aila quando não há
+    projeto ativo; passa a consultar o PROJETO quando um é ativado (fatia c)."""
+    import aila.cognition.graph.projects as projmod
     from aila.agents.base import AgentDeps
     from aila.agents.code_agent import CodeAgent
     from aila.cognition.graph import GraphStore
+
+    # registro ISOLADO em tmp (sem projeto ativo) → não depende do data dir real
+    reg = projmod.ProjectRegistry.__new__(projmod.ProjectRegistry)
+    reg.root = tmp_path / "reg"; reg.root.mkdir()
+    reg.index_path = reg.root / "index.json"; reg._stores = {}
+    monkeypatch.setattr(projmod, "_registry", reg)
 
     s = get_settings()
     audit = AuditLog(tmp_path / "a.jsonl")
@@ -764,6 +772,25 @@ def test_code_agent_graph_tools(tmp_path: Path):
         # nome inexistente → erro claro (não quebra)
         miss = await tools["code.definition"].handler({"name": "naoexiste_xyz"})
         assert not miss.ok
+
+        # fatia (c): ativar um PROJETO → as MESMAS ferramentas consultam o grafo
+        # dele (não mais o da Aila).
+        proj = tmp_path / "externo"
+        proj.mkdir()
+        (proj / "z.py").write_text("class Zeta:\n    def zz(self):\n        return 1\n", encoding="utf-8")
+        meta = reg.add(str(proj), "Externo")
+        reg.set_active(meta["slug"])
+
+        m2 = await tools["code.map"].handler({})
+        assert m2.ok and "Externo" in m2.content            # rótulo reflete o projeto
+        assert m2.data["nodes"] < 20                          # projeto pequeno, não a Aila
+        dz = await tools["code.definition"].handler({"name": "zz"})
+        assert dz.ok and "zz" in dz.content                  # símbolo do PROJETO
+        # 'authorize' é da Aila, não do projeto → não encontra mais
+        assert not (await tools["code.definition"].handler({"name": "authorize"})).ok
+
+        reg.set_active(None)                                  # volta pro código da Aila
+        assert (await tools["code.definition"].handler({"name": "authorize"})).ok
 
     asyncio.run(go())
 

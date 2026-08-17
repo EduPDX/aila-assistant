@@ -77,10 +77,11 @@ async def graph(kind: str = "code", limit: int = 1500, project: str | None = Non
 
 @router.get("/projects")
 async def list_projects() -> dict:
-    """Projetos anexados (cada um com Code Graph próprio)."""
+    """Projetos anexados (cada um com Code Graph próprio) + qual está ativo."""
     from aila.cognition.graph.projects import get_registry
 
-    return {"projects": get_registry().list()}
+    reg = get_registry()
+    return {"projects": reg.list(), "active": reg.active()}
 
 
 class ProjectBody(BaseModel):
@@ -105,6 +106,26 @@ async def remove_project(slug: str) -> dict:
     from aila.cognition.graph.projects import get_registry
 
     return {"ok": get_registry().remove(slug)}
+
+
+@router.post("/projects/{slug}/activate")
+async def activate_project(slug: str) -> dict:
+    """Marca o projeto como ATIVO: as ferramentas de code graph do code_agent
+    passam a consultar o grafo dele (não o da Aila). slug='' desativa."""
+    from aila.cognition.graph.projects import get_registry
+
+    try:
+        return {"active": get_registry().set_active(slug or None)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"projeto '{slug}' não existe") from exc
+
+
+@router.post("/projects/deactivate")
+async def deactivate_project() -> dict:
+    """Volta a trabalhar no código da própria Aila."""
+    from aila.cognition.graph.projects import get_registry
+
+    return {"active": get_registry().set_active(None)}
 
 
 class TaskBody(BaseModel):

@@ -24,6 +24,8 @@ export const api = {
   projects: () => j('/api/projects'),                                   // { projects: [...] }
   addProject: (path, name) => jsonPost('/api/projects', { path, name }), // anexar pasta → constrói grafo
   removeProject: (slug) => j(`/api/projects/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
+  activateProject: (slug) => j(`/api/projects/${encodeURIComponent(slug)}/activate`, { method: 'POST' }),  // "trabalhar no projeto"
+  deactivateProject: () => j('/api/projects/deactivate', { method: 'POST' }),                              // voltar ao código da Aila
   tasks: () => j('/api/tasks'),                       // { tasks: [...] }
   task: (id) => j(`/api/tasks/${id}`),
   memory: (n = 20) => j(`/api/memory?n=${n}`),         // { enabled, count, recent }

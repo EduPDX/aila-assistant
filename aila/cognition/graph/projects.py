@@ -58,6 +58,33 @@ class ProjectRegistry:
     def get(self, slug: str) -> dict | None:
         return next((p for p in self._load() if p["slug"] == slug), None)
 
+    # ------------------------------------------------------------- ativo
+    # O projeto ATIVO é aquele em que a Aila está "trabalhando": as ferramentas
+    # de code graph do code_agent passam a consultar o grafo dele (não o da Aila).
+    @property
+    def _active_path(self) -> Path:
+        return self.root / "active"
+
+    def active(self) -> str | None:
+        try:
+            s = self._active_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+        return s if s and self.get(s) else None
+
+    def set_active(self, slug: str | None) -> str | None:
+        if slug and not self.get(slug):
+            raise KeyError(slug)
+        self._active_path.write_text(slug or "", encoding="utf-8")
+        return slug or None
+
+    def rebuild(self, slug: str) -> dict:
+        """Reconstrói o grafo do projeto a partir da pasta registrada."""
+        meta = self.get(slug)
+        if not meta:
+            raise KeyError(slug)
+        return self.add(meta["path"], meta.get("name"))
+
     def _unique_slug(self, base: str, items: list[dict]) -> str:
         slug, taken, i = base, {p["slug"] for p in items}, 2
         while slug in taken:
@@ -138,6 +165,8 @@ class ProjectRegistry:
         if st is not None:
             st.close()
         shutil.rmtree(self.root / slug, ignore_errors=True)
+        if self.active() == slug:          # removeu o ativo → volta p/ o código da Aila
+            self.set_active(None)
         self._save([p for p in items if p["slug"] != slug])
         return True
 

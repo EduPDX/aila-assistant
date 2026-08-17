@@ -19,6 +19,7 @@ let visible = null;          // Set de comunidades visíveis
 let built = false;
 let currentProject = null;   // slug do projeto aberto (só quando kind='project')
 let projectList = [];        // cache dos projetos (nome/contagens p/ a grade)
+let activeProject = null;    // slug do projeto em que a Aila está "trabalhando"
 
 export function showMind(on) {
   if (on && !built) build();
@@ -182,19 +183,24 @@ async function showGrid() {
   setMode('grid');
   const grid = $('mind-grid');
   grid.innerHTML = '<div class="muted" style="padding:20px">carregando projetos…</div>';
-  try { projectList = (await api.projects()).projects || []; }
-  catch (e) { projectList = []; }
+  try {
+    const r = await api.projects();
+    projectList = r.projects || [];
+    activeProject = r.active || null;
+  } catch (e) { projectList = []; activeProject = null; }
   renderCards();
 }
 
 function cardHTML(p) {
-  return `<div class="mind-card" data-slug="${esc(p.slug)}">
+  const active = p.slug === activeProject;
+  return `<div class="mind-card${active ? ' active' : ''}" data-slug="${esc(p.slug)}">
       <button class="mind-card-del" title="Remover projeto">✕</button>
+      ${active ? '<div class="mind-card-badge">● trabalhando</div>' : ''}
       <div class="mind-card-thumb"><img alt=""></div>
       <div class="mind-card-body">
         <div class="mind-card-name" title="${esc(p.name)}">${esc(p.name)}</div>
         <div class="mind-card-meta">${p.nodes || 0} nós · ${p.edges || 0} arestas · ${p.files || 0} arq.</div>
-        <button class="mind-card-work">Trabalhar no projeto</button>
+        <button class="mind-card-work${active ? ' stop' : ''}">${active ? 'Parar de trabalhar' : 'Trabalhar no projeto'}</button>
       </div>
     </div>`;
 }
@@ -210,9 +216,9 @@ function renderCards() {
     const slug = cardEl.dataset.slug;
     const p = projectList.find((x) => x.slug === slug) || {};
     const open = () => openProject(slug);
-    cardEl.querySelector('.mind-card-thumb').onclick = open;
+    cardEl.querySelector('.mind-card-thumb').onclick = open;   // clicar no card = inspecionar
     cardEl.querySelector('.mind-card-name').onclick = open;
-    cardEl.querySelector('.mind-card-work').onclick = (e) => { e.stopPropagation(); open(); };
+    cardEl.querySelector('.mind-card-work').onclick = (e) => { e.stopPropagation(); toggleWork(slug); };
     cardEl.querySelector('.mind-card-del').onclick = (e) => { e.stopPropagation(); removeProjectFlow(slug, p.name); };
   });
   fillThumbs();
@@ -235,6 +241,19 @@ async function openProject(slug) {
   kind = 'project';
   updateKindButtons();
   await load('project');
+}
+
+// "Trabalhar no projeto": ativa (a Aila passa a consultar o grafo dele) e abre.
+// No card já ativo, o botão vira "Parar de trabalhar" (volta ao código da Aila).
+async function toggleWork(slug) {
+  if (slug === activeProject) {
+    try { await api.deactivateProject(); } catch (e) { /* ignora */ }
+    activeProject = null;
+    renderCards();
+    return;
+  }
+  try { await api.activateProject(slug); activeProject = slug; } catch (e) { /* ignora */ }
+  openProject(slug);
 }
 
 async function addProjectFlow() {

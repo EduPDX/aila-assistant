@@ -302,15 +302,36 @@ class CodeAgent(BaseAgent):
 
     # ------------------------- Code Graph (Fase 6) --------------------- #
     def _graph(self, *, refresh: bool = False):
-        """GraphStore do Code Graph, construído sob demanda (índice persistente)."""
+        """GraphStore do Code Graph a consultar. Se houver um PROJETO ativo (a
+        Aila está "trabalhando" nele), usa o grafo DELE; senão, o da própria Aila.
+        Construído sob demanda (índice persistente)."""
         from aila.cognition.graph import CodeGraph, GraphStore
+        from aila.cognition.graph.projects import get_registry
 
+        reg = get_registry()
+        active = reg.active()
+        if active:                                   # trabalhando num projeto anexado
+            if refresh:
+                reg.rebuild(active)
+            try:
+                return reg.store(active)             # grafo do projeto (já construído)
+            except Exception:  # noqa: BLE001 - sem grafo → cai no código da Aila
+                pass
         if self._cg_store is None:
             self._cg_store = GraphStore(data_path("code_graph.db"))
         store = self._cg_store
         if refresh or store.counts()["nodes"] == 0:
             CodeGraph(store, PROJECT_ROOT).build(subdir="aila")
         return store
+
+    def _graph_label(self) -> str:
+        """De quem é o grafo ativo — 'código da Aila' ou o nome do projeto."""
+        from aila.cognition.graph.projects import get_registry
+
+        reg = get_registry()
+        a = reg.active()
+        meta = reg.get(a) if a else None
+        return f"projeto “{meta['name']}”" if meta else "código da Aila"
 
     def _find(self, store, name: str, types: tuple[str, ...]):
         """Nós por nome simples ou por final do qualname (ex.: BaseAgent.authorize)."""
@@ -329,7 +350,7 @@ class CodeAgent(BaseAgent):
             "GROUP BY target ORDER BY n DESC LIMIT 15"
         ).fetchall()
         lines = [
-            f"Code Graph da Aila — {bt.get('module', 0)} módulos, "
+            f"Code Graph — {self._graph_label()} — {bt.get('module', 0)} módulos, "
             f"{bt.get('class', 0)} classes, {bt.get('function', 0)} funções, "
             f"{c['edges']} relações (defines/imports/calls).",
             "\nFunções mais chamadas:",
@@ -345,7 +366,7 @@ class CodeAgent(BaseAgent):
         store = self._graph()
         nodes = self._find(store, args["name"], ("function", "class"))
         if not nodes:
-            return ToolResult.error(f"Não achei definição de '{args['name']}' no código da Aila.")
+            return ToolResult.error(f"Não achei definição de '{args['name']}' no {self._graph_label()}.")
         out = []
         for n in nodes:
             out.append(f"{_qual(n)} ({n.type}) — {self._owner_file(store, n)}"

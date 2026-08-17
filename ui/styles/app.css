@@ -962,6 +962,14 @@ body[data-tab="mind"] .subc { display: none; }           /* na aba 🧠, o grafo
   transition: border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease); }
 .mind-card:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   transform: translateY(-2px); }
+.mind-card.active { border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent); }
+.mind-card-badge { position: absolute; top: 6px; left: 6px; z-index: 2; padding: 2px 7px;
+  background: color-mix(in srgb, var(--accent) 24%, rgba(4,7,13,0.85)); color: var(--accent);
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.5px; text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.mind-card-work.stop { background: none; border: 1px solid var(--border); color: var(--muted); }
+.mind-card-work.stop:hover { border-color: var(--danger, #e06c75); color: var(--danger, #e06c75); }
 .mind-card-thumb { width: 100%; aspect-ratio: 1; background: #05070d; display: block; }
 .mind-card-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .mind-card-body { padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; }
