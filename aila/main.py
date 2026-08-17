@@ -8,6 +8,8 @@ Rodar:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
 from contextlib import asynccontextmanager
 
@@ -63,6 +65,23 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.engine = engine
     app.state.network = network
+
+    # Warm-up (NÃO bloqueia o boot): pré-carrega o modelo de chat E o de
+    # embeddings no Ollama. Sem isso, a PRIMEIRA mensagem paga o cold-start dos
+    # DOIS (a recuperação de memória carrega o embed antes da resposta) — daí a
+    # 1ª pergunta ser lenta e as seguintes rápidas (keep_alive as mantém quentes).
+    if online:
+        async def _warmup() -> None:
+            eff = getattr(llm, "default_model", settings.llm.model)
+            with contextlib.suppress(Exception):
+                async for _ in llm.chat([{"role": "user", "content": "oi"}],
+                                        stream=True, max_tokens=1):
+                    pass
+            if settings.memory.enabled:
+                with contextlib.suppress(Exception):
+                    await llm.embed(["aquecimento"], model=settings.memory.embed_model)
+            log.info(f"warm-up concluído (chat: {eff} · embed: {settings.memory.embed_model})")
+        asyncio.create_task(_warmup())
 
     # Event Bus como backbone: logging estruturado + tracker de estado/atividade.
     from aila.core.event_bus import bus as event_bus
