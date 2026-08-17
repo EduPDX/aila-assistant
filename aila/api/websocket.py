@@ -86,6 +86,21 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         await session.emit("session.loaded",
                            {"id": resumed["id"], "messages": resumed["messages"], "resumed": True})
 
+    # Ponte bus→WS: eventos cognitivos de BACKGROUND (consolidação/grafo/skill)
+    # rodam fora do turno (só no event bus) → encaminha p/ a tela em tempo real.
+    from aila.core.event_bus import bus as _bus
+
+    _FWD = ("memory.consolidated", "graph.updated", "skill.ran")
+
+    async def _forward(event) -> None:  # noqa: ANN001
+        try:
+            await session.emit(event.type, event.payload)
+        except Exception:  # noqa: BLE001 - conexão pode ter caído
+            pass
+
+    for _et in _FWD:
+        _bus.subscribe(_et, _forward)
+
     async def run_message(text: str, mode: str) -> None:
         try:
             await engine.process(text, session.emit, mode=mode)
@@ -137,5 +152,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         except Exception:  # noqa: BLE001
             pass
     finally:
+        for _et in _FWD:                 # desliga a ponte bus→WS desta conexão
+            _bus.unsubscribe(_et, _forward)
         for task in tasks:               # cancela processamentos em voo desta conexão
             task.cancel()

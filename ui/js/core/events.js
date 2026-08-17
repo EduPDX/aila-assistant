@@ -12,6 +12,8 @@ import { humanizeEvent } from './humanize.js';
 const ACTIVITY_TYPES = new Set([
   'agent.invoked', 'agent.result', 'model.selected',
   'permission.request', 'task.created', 'task.state', 'memory.recalled', 'error',
+  // atividade cognitiva (subconsciente) — o que a Aila "pensa" nos bastidores
+  'memory.consolidated', 'graph.updated', 'skill.ran', 'guardrail.triggered',
 ]);
 
 export function ingest(m) {

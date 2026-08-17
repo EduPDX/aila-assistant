@@ -100,12 +100,29 @@ export function humanizeEvent(m) {
     case 'task.created': return { icon: '▶', text: 'Iniciou uma tarefa', tone: 'info' };
     case 'task.state': return { icon: '▹', text: `Tarefa: ${taskStateLabel(m.state)}`, tone: 'info' };
     case 'memory.recalled': return { icon: '🧠', text: `Lembrou de ${m.items?.length ?? 0} memória(s)`, tone: 'info' };
+    // --- atividade cognitiva (subconsciente) ---
+    case 'memory.consolidated': return {
+      icon: '🌙',
+      text: `Consolidou a memória — ${m.merged || 0} fundida(s), ${m.nodes || 0} conceito(s)`,
+      tone: 'info',
+    };
+    case 'graph.updated': return { icon: '🔗', text: `Atualizou o grafo de conhecimento (${m.nodes ?? '—'} nós)`, tone: 'info' };
+    case 'skill.ran': return {
+      icon: '✨',
+      text: `Executou a skill “${m.skill || '—'}”${m.ok === false ? ' — falhou' : ''}`,
+      tone: m.ok === false ? 'error' : 'ok',
+    };
+    case 'guardrail.triggered': return {
+      icon: '🛡',
+      text: `Protegeu a resposta (${(m.kinds || []).join(', ') || 'segredo'})`,
+      tone: 'warn',
+    };
     case 'error': return { icon: '✕', text: 'Ocorreu um erro', tone: 'error' };
     default: return null;
   }
 }
 
-const PROVIDER = { local: 'modelo local', openai: 'OpenAI', gemini: 'Gemini', grok: 'Grok', deepseek: 'DeepSeek' };
+const PROVIDER = { local: 'modelo local', openai: 'OpenAI', gemini: 'Gemini', grok: 'Grok', deepseek: 'DeepSeek', nvidia: 'NVIDIA' };
 export const providerLabel = (p) => PROVIDER[p] || p || 'modelo local';
 export const isLocalProvider = (p) => !p || p === 'local' || p === 'default';
 
