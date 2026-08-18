@@ -62,6 +62,7 @@ export class AnimationController {
       motion: { amp: 1, speed: 1, breath: 1 },  // suavizado
       gazeMode: 'soft',
       gaze: { yaw: 0, pitch: 0 },               // EyeLayer escreve, LookAt lê
+      gazeWorld: null,                          // {x,y,z} p/ olhar um ponto do mundo (Fase 4); null = comportamento normal
       blinkRange: [2.4, 6.0],
       mouth: 0,                                 // alvo instantâneo da boca (lip-sync)
       speech: 0,                                // envelope 0..1 "está falando"
@@ -175,6 +176,11 @@ export class AnimationController {
     this.ctx.handTarget = side ? { side, x, y, z, weight } : null;
   }
   clearHandTarget() { this.ctx.handTarget = null; }
+
+  /** olha para um PONTO do mundo (Fase 4): a EyeLayer converte em yaw/pitch e o
+   *  corpo acompanha pela cadeia existente (sem "colar" a cabeça). null → normal. */
+  setGazeWorld(x, y, z) { this.ctx.gazeWorld = { x, y, z }; }
+  clearGazeWorld() { this.ctx.gazeWorld = null; }
 
   // -------- API pública (a UI / WS chamam isto) -------- //
   setStatus(status) { if (STATES[status]) this.ctx.status = status; }

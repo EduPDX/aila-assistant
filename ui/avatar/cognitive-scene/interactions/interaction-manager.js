@@ -31,6 +31,7 @@ export function createInteractionManager({ resolveWorld, getController }) {
     _d.multiplyScalar(cfg.reach / dist);              // direção do alvo, alcance do braço
     c.setHandTarget(side, shoulder.x + _d.x, shoulder.y + _d.y, shoulder.z + _d.z, 1);
     c.setHandPose(side, cfg.pose);
+    c.setGazeWorld?.(pos.x, pos.y, pos.z);            // Fase 4: olha p/ o que aponta
     active = { side, hold: cfg.hold };
     return true;
   }
@@ -43,7 +44,7 @@ export function createInteractionManager({ resolveWorld, getController }) {
 
   function stop() {
     const c = getController();
-    if (c && active) { c.clearHandTarget?.(); c.setHandPose?.(active.side, 'relaxed'); }
+    if (c && active) { c.clearHandTarget?.(); c.setHandPose?.(active.side, 'relaxed'); c.clearGazeWorld?.(); }
     active = null;
   }
 

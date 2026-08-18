@@ -1,9 +1,16 @@
 // CAMADA: Eye — para onde ela olha. Sacadas (micro-saltos), foco por estado e
 //  olhar aleatório discreto. Produz o alvo dos OLHOS (VRM lookAt) e a "vontade"
 //  de olhar (yaw/pitch) que a LookAtLayer distribui pelo corpo.
+//  Fase 4: se ctx.gazeWorld estiver setado, olha ESSE ponto do mundo (converte a
+//  direção p/ o frame local do avatar → yaw/pitch); senão, o comportamento normal.
+import * as THREE from 'three';
+
+const _clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
 export function createEyeLayer() {
   const g = { yaw: 0, pitch: 0, tYaw: 0, tPitch: 0, saccade: 0 };
   const r = () => Math.random();
+  const _head = new THREE.Vector3(), _dir = new THREE.Vector3(), _q = new THREE.Quaternion();
 
   // escreve o alvo direto em g (sem alocar array por sacada)
   function pickTarget(mode) {
@@ -20,6 +27,25 @@ export function createEyeLayer() {
   return {
     name: 'eye',
     update(rig, buf, ctx, dt) {
+      // Fase 4: olhar dirigido a um ponto do MUNDO (ex.: o painel que ela aponta)
+      if (ctx.gazeWorld) {
+        const hp = rig.boneWorld('head', _head);
+        const gw = ctx.gazeWorld;
+        if (hp) {
+          _dir.set(gw.x - hp.x, gw.y - hp.y, gw.z - hp.z).normalize();
+          rig.vrm.scene.getWorldQuaternion(_q).invert();   // → frame local do avatar
+          _dir.applyQuaternion(_q);
+          g.tYaw = _clamp(Math.atan2(_dir.x, _dir.z), -0.9, 0.9);
+          g.tPitch = _clamp(-Math.asin(_clamp(_dir.y, -1, 1)), -0.5, 0.5);
+        }
+        const k = Math.min(1, dt * 7);
+        g.yaw += (g.tYaw - g.yaw) * k;
+        g.pitch += (g.tPitch - g.pitch) * k;
+        buf.setGaze(gw.x, gw.y, gw.z);                 // olhos exatamente no alvo real
+        ctx.gaze.yaw = g.yaw; ctx.gaze.pitch = g.pitch;
+        return;
+      }
+
       g.saccade -= dt;
       if (g.saccade <= 0) {
         g.saccade = 0.8 + r() * 3.4;                 // nova sacada
