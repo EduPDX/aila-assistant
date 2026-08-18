@@ -17,7 +17,13 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from aila.avatar.behavior_spec import BehaviorSpec, GestureCue, Motion
+from aila.avatar.behavior_spec import (
+    BehaviorSpec,
+    CognitiveUI,
+    GestureCue,
+    Interaction,
+    Motion,
+)
 from aila.avatar.emotion_engine import EmotionEngine
 
 # prefixo da ferramenta -> intenção (ordem = prioridade)
@@ -44,6 +50,27 @@ _STYLE: dict[str, tuple[str, str, float, float, float]] = {
     "tool_execution": ("neutral",  "wander", 0.90, 1.00, 1.00),
     "thinking":       ("thinking", "wander", 0.85, 0.90, 0.90),
     "error":          ("closed",   "down",   0.70, 0.90, 0.90),
+}
+
+# intenção -> CognitiveUI (tipo da cena + intensidade visual)
+_COGNITIVE_UI: dict[str, tuple[str, float]] = {
+    "thinking":       ("thinking",  0.7),
+    "search":         ("search",    0.8),
+    "analysis":       ("analysis",  0.85),
+    "coding":         ("coding",    0.75),
+    "reading":        ("reading",   0.7),
+    "tool_execution": ("tool_execution", 0.6),
+    "error":          ("error",     0.5),
+}
+
+# intenção -> Interaction (tipo de apontamento / alvo semântico)
+_INTERACTION: dict[str, tuple[str, str]] = {
+    "search":         ("point", "memory"),
+    "analysis":       ("point", "analysis"),
+    "coding":         ("point", "analysis"),
+    "reading":        ("point", "analysis"),
+    "thinking":       ("inspect", "memory"),
+    "tool_execution": ("point", "analysis"),
 }
 
 # gesto por trecho — F5: vários gestos numa TIMELINE, cada um no tempo em que
@@ -78,6 +105,17 @@ class BehaviorPlanner:
         posture, gaze, amp, speed, breath = _STYLE.get(intent, _STYLE["conversation"])
         intensity = 0.85 if emotion in ("happy", "confident", "surprised") else 0.6
         est = round(max(1.0, len(text) / 15.0), 1)   # ~15 chars/s pt-BR
+
+        # CognitiveUI: o backend DIRIGE a cena holográfica (Fase 6).
+        # 'conversation' e 'greeting' não acendem a tela — a Aila encara o usuário.
+        cog = _COGNITIVE_UI.get(intent)
+        cognitive_ui = CognitiveUI(enabled=cog is not None, type=cog[0], intensity=cog[1]) if cog else None
+
+        # Interaction: quando a Aila está mostrando algo, ela APONTA para o alvo
+        # relevante. Só em intents que ativam a cena (os mesmos do _COGNITIVE_UI).
+        intv = _INTERACTION.get(intent)
+        interaction = Interaction(type=intv[0], target=intv[1]) if intv else None
+
         return BehaviorSpec(
             state="SPEAKING" if speaking else "IDLE",
             emotion=emotion,
@@ -89,6 +127,8 @@ class BehaviorPlanner:
             gestures=self._gestures(text, est),
             est_speech_seconds=est,
             text=text[:200],
+            cognitive_ui=cognitive_ui,
+            interaction=interaction,
         )
 
     # ------------------------------------------------------------------ #

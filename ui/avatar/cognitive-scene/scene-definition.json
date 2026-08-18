@@ -1,0 +1,43 @@
+{
+  "$schema": "scene-definition.schema.json",
+  "_comment": "Definição declarativa da Cognitive Scene. Valores são defaults; override por tema/customização.",
+
+  "assets": {
+    "dir": "/static/models/cognitive/",
+    "files": ["monitor.glb", "status.glb", "message.glb", "floor.glb"]
+  },
+
+  "monitor": {
+    "width": 2.9,
+    "height": 1.66,
+    "navItems": ["GRAPH", "DATA", "SEARCH", "CONTEXT"],
+    "zones": {
+      "memory":   { "label": "MEMORY",   "type": "nodeCluster", "w": 0.28, "h": 0.38, "x": 0.17, "y": 0.11 },
+      "analysis": { "label": "ANALYSIS", "type": "lineGraph",   "w": 0.40, "h": 0.38, "x": 0.55, "y": 0.11 },
+      "stream":   { "label": "DATA STREAM", "type": "dataStream", "w": 0.30, "h": 0.30, "x": 0.17, "y": -0.30 }
+    }
+  },
+
+  "statusPanel": {
+    "width": 1.0,
+    "height": 1.2,
+    "rows": ["GPU", "CPU", "VRAM", "RAM", "MODEL", "TOKENS/S", "UPTIME", "REDE", "AUTONOMIA", "EMOÇÃO"]
+  },
+
+  "messagePanel": {},
+
+  "composer": {
+    "monitorOffset": { "x": -1.18, "y": -0.04, "z": 0.05 },
+    "monitorRotation": { "x": 0, "y": 0.26, "z": 0 },
+    "statusOffset":   { "x": -2.55, "y": -0.04, "z": 0.05 },
+    "messageOffset":  { "x": 0.05, "y": 0.32, "z": 0.55 },
+    "avatarYaw": -0.22,
+    "cameraFitPadding": 1.12,
+    "cameraYOffset": 0.05,
+    "cameraXOffset": 0.04
+  },
+
+  "fog": { "color": "#0a0e14", "near": 7, "far": 20 },
+  "grid": { "size": 50, "divisions": 100, "opacity": 0.11 },
+  "ring": { "innerRadius": 0.42, "outerRadius": 0.46, "segments": 48, "rotationSpeed": 0.15 }
+}

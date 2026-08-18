@@ -131,18 +131,25 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
     conversation:   { nav: 'graph',   verb: 'READY' },
   };
   let verb = 'PROCESSING';
+  let _intensity = 0.6;
+  let _stateVisual = null;
   function setMode(intent) {
     const m = MODES[intent] || MODES.conversation;
     setActiveNav(m.nav);
     verb = m.verb;
   }
+  function setIntensity(v) { _intensity = Math.max(0, Math.min(1, v ?? 0.6)); }
+  function applyStateVisuals(sv) { _stateVisual = sv; }
 
   // ---- animação ----
   let t = 0, tRead = 0, tDots = 0, dots = 0;
   function update(dt) {
     t += dt;
-    scanTex.offset.y = (scanTex.offset.y - dt * 0.3) % 1;
-    scan.material.opacity = 0.36 + Math.sin(t * 2.1) * 0.05;
+    const sv = _stateVisual;
+    const scanSpd = sv ? sv.scanSpeed : 0.3;
+    const glow = sv ? sv.glow : 0.6;
+    scanTex.offset.y = (scanTex.offset.y - dt * scanSpd) % 1;
+    scan.material.opacity = (0.36 + Math.sin(t * 2.1) * 0.05) * (_intensity / 0.6) * glow;
     cluster.update(t);
     stream.update(dt);
     wave.set((u) => 0.5 + Math.sin(u * 12 + t * 3) * 0.28 * Math.sin(u * Math.PI) + Math.sin(u * 30 + t * 5) * 0.06);
@@ -152,9 +159,9 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
       const nodes = 880 + ((Math.random() * 8) | 0), tok = 1240 + ((Math.random() * 60) | 0), lat = 320 + ((Math.random() * 50) | 0);
       readout.setText(`NODES ${nodes}    TOKENS ${tok}    LAT ${lat}ms`);
     }
-    tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText(verb + '.'.repeat(dots)); }
+    tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText((sv ? sv.verb : verb) + '.'.repeat(dots)); }
   }
 
   function dispose() { disposeObject(group); scanTex.dispose(); }
-  return { group, anchors, update, dispose, setConfidence, setMode };
+  return { group, anchors, update, dispose, setConfidence, setMode, setIntensity, applyStateVisuals };
 }

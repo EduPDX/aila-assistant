@@ -15,6 +15,8 @@ import { createStatusPanel } from './procedural/status-panel.js';
 import { createMessagePanel } from './procedural/message-panel.js';
 import { createInteractionManager } from './interactions/interaction-manager.js';
 import { StageComposer } from './stage-composer.js';
+import { STATE_VISUALS, DEFAULT_STATE_VISUAL } from './state-visuals.js';
+import { preloadAssets, getAsset, cloneAsset } from './scene-assets.js';
 
 // intent → âncora que a Aila aponta (Fase 3)
 const POINT_TARGET = { analysis: 'panel_analysis', coding: 'panel_analysis', reading: 'panel_analysis', search: 'panel_memory', thinking: 'panel_memory' };
@@ -39,6 +41,7 @@ export class SceneManager {
       getController: () => this.controller,
     });
     this._built = false;
+    this._fadeAlpha = 1;   // Fase 9: fade-in suave ao reativar
     if (this.enabled) this.scene.add(this.root);
   }
 
@@ -60,6 +63,8 @@ export class SceneManager {
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.002;
     this.root.add(ring);
     this._ring = ring;
+    this._grid = gh;
+    this._ringSpeed = 0.15;
 
     // monitor holográfico principal (cognitivo)
     this.monitor = createMonitor();   // usa o tamanho padrão (grande) do módulo
@@ -72,6 +77,31 @@ export class SceneManager {
     // balão holográfico (Jarvis): resumo curto que a Aila fala
     this.message = createMessagePanel();
     this.root.add(this.message.group);
+
+    // Fase 8: tenta carregar assets GLB (async, não bloqueia).
+    // Se existirem, substitui os elementos procedurais por meshes.
+    this._loadAssets();
+  }
+
+  /** Fase 8: carrega GLBs opcionais e substitui procedurais. */
+  async _loadAssets() {
+    try {
+      await preloadAssets();
+      const floorRoot = getAsset('floor');
+      if (floorRoot && this._grid) {
+        const clone = cloneAsset(floorRoot);
+        if (clone) {
+          this.root.remove(this._grid);
+          disposeObject(this._grid);
+          this._grid = clone;
+          this.root.add(clone);
+        }
+      }
+      // monitor/status/message GLBs: futura extensão (por ora ficam procedurais
+      // porque têm lógica interna — setMode, setMetrics, etc).
+    } catch (e) {
+      console.warn('[scene-assets] fallback procedural:', e.message);
+    }
   }
 
   /** posiciona as telas relativo ao avatar + compõe a câmera diagonal. */
@@ -86,15 +116,59 @@ export class SceneManager {
   /** mostra o RESUMO curto da resposta da Aila no balão holográfico (Jarvis). */
   showMessage(text) { this.message?.show(text); }
 
-  /** Fase 2+3: a interface representa o intent (acende o nav rail + verbo) e a
-   *  Aila APONTA para a âncora relevante (IK existente), com cooldown. */
-  setState(intent) {
-    this.intent = intent || 'conversation';
-    this.monitor?.setMode(this.intent);
-    const target = POINT_TARGET[this.intent];
-    if (target && this._pointCooldown <= 0) {
-      if (this.interactions.interact({ type: 'point', target })) this._pointCooldown = 14;
+  /** Fase 2+3+6: o backend DIRIGE a cena via BehaviorSpec.
+   *  `cui` pode ser:
+   *  - string (intent legado: 'search', 'analysis'…)
+   *  - objeto {enabled, type, intensity} (CognitiveUI do BehaviorSpec)
+   *  - null/undefined → fallback p/ this.intent atual (mantém estado). */
+  setState(cui, interaction) {
+    let type, intensity, enabled;
+
+    if (cui && typeof cui === 'object') {
+      enabled = cui.enabled !== false;
+      type = cui.type || 'conversation';
+      intensity = cui.intensity ?? 0.6;
+    } else {
+      enabled = true;
+      type = cui || 'conversation';
+      intensity = 0.6;
     }
+
+    if (!enabled) {
+      this.intent = 'conversation';
+      this.monitor?.setMode('conversation');
+      return;
+    }
+
+    this.intent = type;
+    this.monitor?.setMode(type);
+    this.monitor?.setIntensity?.(intensity);
+
+    // Fase 2: aplicar visuais por estado
+    const sv = STATE_VISUALS[type] || DEFAULT_STATE_VISUAL;
+    this.monitor?.applyStateVisuals?.(sv);
+
+    // Interaction inline do BehaviorSpec (Fase 6) tem prioridade
+    // sobre o POINT_TARGET legado.
+    if (interaction && this._pointCooldown <= 0) {
+      const anchor = this._resolveAnchor(interaction.target);
+      if (anchor && this.interactions.interact({ type: interaction.type, target: anchor })) {
+        this._pointCooldown = 14;
+      }
+    } else {
+      // fallback: POINT_TARGET legado (backward compat)
+      const target = POINT_TARGET[this.intent];
+      if (target && this._pointCooldown <= 0) {
+        if (this.interactions.interact({ type: 'point', target })) this._pointCooldown = 14;
+      }
+    }
+  }
+
+  /** resolve target semântico ('analysis', 'memory'…) p/ âncora 3D. */
+  _resolveAnchor(target) {
+    if (!target) return null;
+    const MAP = { analysis: 'panel_analysis', memory: 'panel_memory', data: 'panel_analysis', search: 'panel_memory' };
+    return MAP[target] || target;
   }
 
   /** injeta o AnimationController do avatar (p/ o InteractionManager usar o IK). */
@@ -111,16 +185,40 @@ export class SceneManager {
     if (!this.root) return;
     // 🔴 vermelho: esconde a cena inteira (prioriza o avatar); 🟡 mantém, sem extras.
     this.root.visible = this.enabled && state !== 'red';
+    // sob pressão Vermelha, disposing texturas/buffers auxiliares libera VRAM.
+    if (state === 'red' && this.monitor) {
+      this.monitor.setMode?.('conversation');   // reseta animações
+    }
   }
 
   update(dt) {
     if (!this.enabled || !this._built || this.paused || this.root.visible === false) return;
+
+    // Fase 9: fade-in suave ao reativar
+    if (this._fadeAlpha < 1) {
+      this._fadeAlpha = Math.min(1, this._fadeAlpha + dt * 2.5);
+      this.root.traverse((o) => {
+        if (o.material && 'opacity' in o.material) {
+          o.material._savedOpacity = o.material._savedOpacity ?? o.material.opacity;
+          o.material.opacity = o.material._savedOpacity * this._fadeAlpha;
+        }
+      });
+      if (this._fadeAlpha >= 1) {
+        this.root.traverse((o) => {
+          if (o.material && o.material._savedOpacity !== undefined) {
+            o.material.opacity = o.material._savedOpacity;
+            delete o.material._savedOpacity;
+          }
+        });
+      }
+    }
+
     this.monitor?.update(dt);
     this.status?.update(dt);
     this.message?.update(dt);
     this.interactions.update(dt);
     if (this._pointCooldown > 0) this._pointCooldown -= dt;
-    if (this._ring) this._ring.rotation.z += dt * 0.15;   // giro lento do anel
+    if (this._ring) this._ring.rotation.z += dt * this._ringSpeed;   // giro lento do anel
   }
 
   /** posição de MUNDO de uma âncora nomeada (p/ InteractionTarget/IK — Fase 3). */
@@ -133,8 +231,15 @@ export class SceneManager {
 
   setEnabled(on) {
     this.enabled = !!on;
-    if (on) { if (!this.scene.children.includes(this.root)) this.scene.add(this.root); this.build(); this.root.visible = true; }
-    else if (this.root) { this.root.visible = false; this.composer.reset(); }
+    if (on) {
+      if (!this.scene.children.includes(this.root)) this.scene.add(this.root);
+      this.build();
+      this.root.visible = true;
+      this._fadeAlpha = 0;   // Fase 9: inicia fade-in
+    } else if (this.root) {
+      this.root.visible = false;
+      this.composer.reset();
+    }
   }
 
   destroy() {

@@ -30,6 +30,24 @@ class Motion(BaseModel):
     breath: float = 1.0             # ritmo respiratório
 
 
+class CognitiveUI(BaseModel):
+    """Estado da Cognitive Scene (o "ambiente" holográfico). Opcional: quando
+    presente, o backend DIRIGE a interface (modo/intensidade) em vez de o
+    frontend inferir pelo intent. Render-agnóstico."""
+
+    enabled: bool = True            # a cena reage (False = fica calma/idle)
+    type: str = "conversation"      # search|analysis|thinking|coding|reading|...
+    intensity: float = 0.6          # ênfase visual (0..1)
+
+
+class Interaction(BaseModel):
+    """Alvo de interação: a Aila aponta/olha para um elemento da cena. `target`
+    é SEMÂNTICO (analysis|memory|data|search…); o frontend resolve p/ a âncora 3D."""
+
+    type: str = "point"             # point|inspect|select|touch
+    target: str = ""                # ex.: "analysis", "memory"
+
+
 class BehaviorSpec(BaseModel):
     """Comportamento planejado para UMA resposta da IA."""
 
@@ -43,6 +61,8 @@ class BehaviorSpec(BaseModel):
     gestures: list[GestureCue] = Field(default_factory=list)
     est_speech_seconds: float = 0.0             # duração estimada da fala
     text: str = ""                              # trecho (debug/legenda)
+    cognitive_ui: CognitiveUI | None = None     # Fase 6: estado da Cognitive Scene (opcional)
+    interaction: Interaction | None = None       # Fase 6: alvo de interação (opcional)
 
     def to_event_payload(self) -> dict:
         return self.model_dump(mode="json")

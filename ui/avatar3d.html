@@ -78,6 +78,7 @@ import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-v
 import { AnimationController } from './avatar/animation-controller.js';
 import { AvatarDebug } from './avatar/debug.js';
 import { SceneManager } from './avatar/cognitive-scene/scene-manager.js';   // Cognitive Scene (Fase 1)
+import { loadSceneDef, applySceneDef } from './avatar/cognitive-scene/scene-loader.js';  // Fase 7: JSON declarativo
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -119,6 +120,11 @@ controls.update();
 // Flag localStorage 'aila.scene'='off' desliga tudo (avatar volta ao normal).
 const sceneManager = new SceneManager(scene, camera, controls);
 window.ailaScene = sceneManager;   // console: ailaScene.setEnabled(false)
+
+// Fase 7: carrega definição declarativa da cena (JSON). Assíncrono: se o JSON
+// não existir ou falhar, os defaults hardcoded são mantidos.
+let _sceneDef = null;
+loadSceneDef('/static/avatar/cognitive-scene/scene-definition.json').then((d) => { _sceneDef = d; applySceneDef(sceneManager, d); });
 
 // enquadra o VRM inteiro (cabeça aos pés), adaptando a qualquer altura de modelo
 function frameVRM() {
@@ -343,7 +349,7 @@ function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
-    if (m.type === 'avatar.behavior') { controller?.applyBehavior(m); $('emotion').textContent = m.emotion || 'neutral'; sceneManager.setState(m.intent); }
+    if (m.type === 'avatar.behavior') { controller?.applyBehavior(m); $('emotion').textContent = m.emotion || 'neutral'; sceneManager.setState(m.cognitive_ui || m.intent, m.interaction); }
     else if (m.type === 'avatar.state') applyEmotion(m.emotion, m.gesture);
     else if (m.type === 'avatar.gesture') controller?.triggerGesture(m.value);
     else if (m.type === 'aila.state') applyStatus(m.status);
@@ -361,7 +367,7 @@ addEventListener('message', (e) => {
   switch (d.type) {
     case 'aila:reloadVRM': loadVRM('/static/models/avatar.vrm?t=' + Date.now()); break;
     case 'aila:emotion':   applyEmotion(d.value, d.gesture); if (d.state) $('state').textContent = d.state; break;
-    case 'aila:behavior':  controller?.applyBehavior(d.spec); if (d.spec) { $('emotion').textContent = d.spec.emotion || 'neutral'; sceneManager.setState(d.spec.intent); } break;
+    case 'aila:behavior':  controller?.applyBehavior(d.spec); if (d.spec) { $('emotion').textContent = d.spec.emotion || 'neutral'; sceneManager.setState(d.spec.cognitive_ui || d.spec.intent, d.spec.interaction); } break;
     case 'aila:status':    applyStatus(d.value); break;
     case 'aila:show':      paused = false; clock.getDelta(); sceneManager.setPaused(false); break;   // volta ao palco → retoma
     case 'aila:hide':      paused = true; sceneManager.setPaused(true); break;                       // saiu do palco → pausa render
