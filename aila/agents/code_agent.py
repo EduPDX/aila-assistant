@@ -86,6 +86,22 @@ class CodeAgent(BaseAgent):
                 agent=self.name,
             ),
             Tool(
+                name="code.review",
+                description=(
+                    "REVISA um ARQUIVO a fundo (do repo da Aila OU de uma pasta de "
+                    "projeto anexada) com um checklist de revisor especializado. "
+                    "Detecta o perfil pelo arquivo (python/fastapi) e caça falhas "
+                    "silenciosas. Use para 'revisar/analisar o código de X'. "
+                    "profile opcional: python, fastapi, silent-failures, security."
+                ),
+                params=[
+                    ToolParam("path", "string", "arquivo, ex.: aila/core/engine.py"),
+                    ToolParam("profile", "string", "perfil de revisão (opcional)", required=False),
+                ],
+                handler=self._review,
+                agent=self.name,
+            ),
+            Tool(
                 name="code.fix",
                 description="Corrige código a partir de uma mensagem de erro.",
                 params=[
@@ -230,6 +246,42 @@ class CodeAgent(BaseAgent):
             args["code"],
         )
         return ToolResult.success(out)
+
+    async def _review(self, args: dict) -> ToolResult:
+        await self.authorize("code.review", args)      # revisão read-only → SAFE
+        from aila.agents import review_profiles
+        from aila.security.injection import wrap_external
+
+        rel = str(args.get("path", "")).strip()
+        if not rel:
+            return ToolResult.error("Informe o caminho do arquivo a revisar.")
+        # tenta o repo da Aila; se não achar, tenta pasta anexada (sandbox read)
+        p = _repo_resolve(rel)
+        if p is None or not p.is_file():
+            try:
+                p = self.deps.sandbox.resolve(rel, read=True)
+            except Exception:  # noqa: BLE001 - fora do sandbox
+                p = None
+        if p is None or not p.is_file():
+            return ToolResult.error(f"Arquivo não encontrado: {rel}")
+
+        code = p.read_text(encoding="utf-8", errors="replace")
+        if not code.strip():
+            return ToolResult.error(f"Arquivo vazio: {rel}")
+        clipped = code[:16000]                          # cabe no contexto dos 8 GB
+        profile = (args.get("profile") or "").strip().lower()
+        if profile not in review_profiles.available():
+            profile = review_profiles.detect(rel, code)
+
+        system = review_profiles.system_prompt(profile)
+        # o código é DADO externo — embrulha p/ o modelo não obedecer instruções nele
+        user = f"Arquivo: {rel} (perfil: {profile})\n\n" + wrap_external(
+            clipped, source="arquivo em revisão")
+        out = await self._ask_code_model(system, user)
+        return ToolResult.success(
+            out, path=str(p), profile=profile,
+            truncated=len(code) > len(clipped),
+        )
 
     async def _fix(self, args: dict) -> ToolResult:
         await self.authorize("code.fix", args)

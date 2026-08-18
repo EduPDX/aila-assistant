@@ -2117,3 +2117,41 @@ def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
     monkeypatch.setattr(vram.VramPlanner, "measure", _roomy)
     asyncio.run(va._vram_preflight())
     assert got == []
+
+
+def test_code_review_wraps_code_and_detects_profile(tmp_path):
+    """code.review lê um arquivo do repo, detecta o perfil e embrulha o código
+    como DADO externo (anti prompt-injection) antes de mandar ao modelo."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.code_agent import CodeAgent
+    from aila.core.config import get_settings
+
+    class FakeLLM:
+        async def complete(self, messages, *, model=None, **kw):
+            self.msgs = messages
+            return "VEREDITO: ok\n- [BAIXA] linha ~1 — exemplo"
+
+    s = get_settings()
+    llm = FakeLLM()
+    deps = AgentDeps(
+        settings=s,
+        permissions=PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl")),
+        sandbox=PathSandbox(tmp_path), llm=llm,
+    )
+    agent = CodeAgent(deps)
+    assert "code.review" in [t.name for t in agent.tools()]
+
+    async def go():
+        # main.py é FastAPI → perfil 'fastapi'
+        r = await agent._review({"path": "aila/main.py"})
+        assert r.ok and r.data["profile"] == "fastapi"
+        user_msg = llm.msgs[1]["content"]
+        assert "[CONTEÚDO EXTERNO de arquivo em revisão" in user_msg   # embrulhado como dado
+        # arquivo .py sem FastAPI → perfil 'python'
+        r2 = await agent._review({"path": "aila/core/vram.py"})
+        assert r2.ok and r2.data["profile"] == "python"
+        # inexistente → erro claro
+        r3 = await agent._review({"path": "nao/existe.py"})
+        assert not r3.ok
+
+    asyncio.run(go())
