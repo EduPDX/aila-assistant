@@ -52,6 +52,25 @@ def test_sandbox_read_root_reads_but_not_writes(tmp_path: Path):
     assert ext in sb.read_bases()
 
 
+def test_normalize_tool_args_object():
+    """tool_call.arguments STRING → OBJETO (senão o Ollama devolve 400 ao reenviar
+    o histórico; acontece quando a nuvem produz e o fallback local recebe)."""
+    from aila.core.engine import _normalize_tool_args
+
+    tcs = [{"function": {"name": "t", "arguments": '{"a": 1}'}}]
+    _normalize_tool_args(tcs)
+    assert tcs[0]["function"]["arguments"] == {"a": 1}          # string → dict
+
+    tcs2 = [
+        {"function": {"name": "t", "arguments": {"x": 2}}},     # já dict: intacto
+        {"function": {"name": "u", "arguments": "nao-json"}},   # inválido → {}
+    ]
+    _normalize_tool_args(tcs2)
+    assert tcs2[0]["function"]["arguments"] == {"x": 2}
+    assert tcs2[1]["function"]["arguments"] == {}
+    assert _normalize_tool_args(None) == []
+
+
 def test_readonly_blocks_writes(tmp_path: Path):
     s = get_settings()
     s.security.read_only = True

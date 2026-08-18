@@ -104,7 +104,13 @@ class OllamaBackend(LLMBackend):
 
     async def _stream(self, body: dict[str, Any]) -> AsyncIterator[ChatChunk]:
         async with self._client.stream("POST", "/api/chat", json=body) as resp:
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                # captura o CORPO do erro do Ollama (diz o motivo real do 400 —
+                # o raise_for_status sozinho descartava isso).
+                detail = (await resp.aread()).decode(errors="ignore").strip()[:600]
+                raise httpx.HTTPStatusError(
+                    f"Ollama /api/chat {resp.status_code}: {detail}",
+                    request=resp.request, response=resp)
             async for line in resp.aiter_lines():
                 if not line.strip():
                     continue

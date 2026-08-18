@@ -257,7 +257,12 @@ async function toggleWork(slug) {
 }
 
 async function addProjectFlow() {
-  const path = window.prompt('Caminho da pasta do projeto\n(ex.: E:\\Projetos\\meu-app):');
+  // seletor NATIVO de pasta (igual ao anexar-pasta do chat): 1) Electron,
+  // 2) backend (tkinter, do fonte), 3) prompt como último recurso.
+  let path = null;
+  try { if (window.aila && window.aila.pickFolder) path = await window.aila.pickFolder(); } catch (e) {}
+  if (!path) { try { const r = await api.pickFolder(); path = r && r.path; } catch (e) {} }
+  if (!path) path = window.prompt('Caminho da pasta do projeto\n(ex.: E:\\Projetos\\meu-app):');
   if (!path || !path.trim()) return;
   const add = $('mind-addproj');
   if (add) add.innerHTML = '<div class="mind-card-building">construindo grafo…</div>';

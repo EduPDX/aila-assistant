@@ -53,6 +53,8 @@ class Tool:
         required: list[str] = []
         for p in self.params:
             schema: dict[str, Any] = {"type": p.type, "description": p.description}
+            if p.type == "array":
+                schema["items"] = {"type": "string"}   # JSON-schema exige items em arrays
             if p.enum:
                 schema["enum"] = p.enum
             properties[p.name] = schema

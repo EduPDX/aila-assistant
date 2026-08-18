@@ -53,6 +53,20 @@ Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 MAX_TOOL_ITERS = 5
 
 
+def _normalize_tool_args(tool_calls: list[dict] | None) -> list[dict]:
+    """Garante que ``arguments`` de cada tool_call seja OBJETO, não string JSON.
+    Provedores diferentes emitem em formatos diferentes; guardar uma string no
+    histórico e reenviar ao Ollama devolve 400 Bad Request."""
+    for tc in tool_calls or []:
+        fn = tc.get("function")
+        if isinstance(fn, dict) and isinstance(fn.get("arguments"), str):
+            try:
+                fn["arguments"] = json.loads(fn["arguments"])
+            except (ValueError, TypeError):
+                fn["arguments"] = {}
+    return tool_calls or []
+
+
 class AilaEngine:
     def __init__(
         self,
@@ -439,9 +453,10 @@ class AilaEngine:
                 final_text = text.strip()
                 break
 
-            # turno do assistente que solicitou ferramentas (mantém tool_calls)
+            # turno do assistente que solicitou ferramentas (mantém tool_calls).
+            # normaliza arguments p/ OBJETO (senão o Ollama 400 ao reenviar).
             self.context._messages.append(
-                Message(role="assistant", content=text, tool_calls=tool_calls)
+                Message(role="assistant", content=text, tool_calls=_normalize_tool_args(tool_calls))
             )
             for call in tool_calls:
                 fn = call.get("function", {})
@@ -552,7 +567,7 @@ class AilaEngine:
             if not tool_calls:
                 final = text.strip()
                 break
-            msgs.append({"role": "assistant", "content": text, "tool_calls": tool_calls})
+            msgs.append({"role": "assistant", "content": text, "tool_calls": _normalize_tool_args(tool_calls)})
             for call in tool_calls:
                 fn = call.get("function", {})
                 name = fn.get("name", "")
