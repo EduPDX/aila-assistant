@@ -76,8 +76,9 @@ export class SceneManager {
   /** mostra o RESUMO curto da resposta da Aila no balão holográfico (Jarvis). */
   showMessage(text) { this.message?.show(text); }
 
-  /** Fase 2 (stub): troca o conteúdo por estado. Guardado desde já. */
-  setState(intent) { this.intent = intent || 'conversation'; }
+  /** Fase 2: a interface representa o intent (search/analysis/coding/…) — acende
+   *  o item do nav rail e troca o verbo de processamento no monitor. */
+  setState(intent) { this.intent = intent || 'conversation'; this.monitor?.setMode(this.intent); }
 
   setPaused(p) { this.paused = !!p; }
 

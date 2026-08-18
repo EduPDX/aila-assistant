@@ -44,20 +44,29 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(-mx, H * 0.35, 0.006), new THREE.Vector3(mx, H * 0.35, 0.006)]), lineMat(HOLO.teal, 0.4)));
 
-  // ---- nav rail (esquerda) ----
+  // ---- nav rail (esquerda) — itens re-estilizáveis (o modo/intent acende um) ----
   const NAV = ['GRAPH', 'DATA', 'SEARCH', 'CONTEXT'];
   const navX = -mx + W * 0.06, navW = W * 0.10, navH = H * 0.105;
-  NAV.forEach((label, i) => {
+  const navItems = NAV.map((label, i) => {
     const y = H * 0.15 - i * (navH + H * 0.045);
-    const active = i === 0;
     const p = new THREE.Group();
-    p.add(new THREE.Mesh(new THREE.PlaneGeometry(navW, navH), fillMat(active ? HOLO.teal : HOLO.blue, active ? 0.14 : 0.05)));
-    p.add(frameLines(navW, navH, lineMat(active ? HOLO.teal : HOLO.blue, active ? 0.8 : 0.4)));
-    if (active) p.add(new THREE.Mesh(new THREE.PlaneGeometry(0.008, navH), glowMat(HOLO.teal, 0.9)).translateX(-navW / 2));
-    const t = textPlane(label, { width: navW * 0.86, px: 256, size: 26, align: 'center', color: active ? HOLO.text : HOLO.textDim });
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(navW, navH), fillMat(HOLO.blue, 0.05));
+    const frameM = lineMat(HOLO.blue, 0.4);
+    p.add(fill, frameLines(navW, navH, frameM));
+    const accent = new THREE.Mesh(new THREE.PlaneGeometry(0.008, navH), glowMat(HOLO.teal, 0.9));
+    accent.position.x = -navW / 2; accent.visible = false; p.add(accent);
+    const t = textPlane(label, { width: navW * 0.86, px: 256, size: 26, align: 'center', color: HOLO.textDim });
     t.mesh.position.z = 0.003; p.add(t.mesh);
     at(p, navX, y, 0.006); reg('nav_' + label.toLowerCase(), p);
+    return { name: label.toLowerCase(), fill, frameM, accent };
   });
+  const setActiveNav = (name) => navItems.forEach((it) => {
+    const on = it.name === name;
+    it.fill.material.color.setHex(on ? HOLO.teal : HOLO.blue); it.fill.material.opacity = on ? 0.14 : 0.05;
+    it.frameM.color.setHex(on ? HOLO.teal : HOLO.blue); it.frameM.opacity = on ? 0.85 : 0.4;
+    it.accent.visible = on;
+  });
+  setActiveNav('graph');
 
   // ---- painel util (moldura + rótulo + filho); guarda o retângulo p/ verificação ----
   const contentX = navX + navW * 0.5 + W * 0.03;
@@ -107,6 +116,27 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
   at(textPlane('CONFIDENCE 87%', { width: W * 0.26, px: 448, size: 26, color: HOLO.text }).mesh, barX - W * 0.06, barY + 0.05, 0.007);
   reg('confidence', fill);
 
+  // ---- MODO por intent (Fase 2): a interface representa o que a Aila faz ----
+  const MODES = {
+    thinking:       { nav: 'graph',   verb: 'THINKING' },
+    analysis:       { nav: 'data',    verb: 'ANALYZING' },
+    search:         { nav: 'search',  verb: 'SEARCHING' },
+    coding:         { nav: 'data',    verb: 'COMPILING' },
+    reading:        { nav: 'context', verb: 'READING' },
+    tool_execution: { nav: 'data',    verb: 'EXECUTING' },
+    error:          { nav: 'context', verb: 'ERROR' },
+    explanation:    { nav: 'context', verb: 'EXPLAINING' },
+    greeting:       { nav: 'graph',   verb: 'READY' },
+    farewell:       { nav: 'graph',   verb: 'READY' },
+    conversation:   { nav: 'graph',   verb: 'READY' },
+  };
+  let verb = 'PROCESSING';
+  function setMode(intent) {
+    const m = MODES[intent] || MODES.conversation;
+    setActiveNav(m.nav);
+    verb = m.verb;
+  }
+
   // ---- animação ----
   let t = 0, tRead = 0, tDots = 0, dots = 0;
   function update(dt) {
@@ -122,9 +152,9 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
       const nodes = 880 + ((Math.random() * 8) | 0), tok = 1240 + ((Math.random() * 60) | 0), lat = 320 + ((Math.random() * 50) | 0);
       readout.setText(`NODES ${nodes}    TOKENS ${tok}    LAT ${lat}ms`);
     }
-    tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText('PROCESSING' + '.'.repeat(dots)); }
+    tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText(verb + '.'.repeat(dots)); }
   }
 
   function dispose() { disposeObject(group); scanTex.dispose(); }
-  return { group, anchors, update, dispose, setConfidence };
+  return { group, anchors, update, dispose, setConfidence, setMode };
 }
