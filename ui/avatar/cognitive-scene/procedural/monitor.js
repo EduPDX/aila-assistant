@@ -20,7 +20,7 @@ function scanlineTexture() {
   return t;
 }
 
-export function createMonitor({ width = 2.3, height = 1.34 } = {}) {
+export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
   const group = new THREE.Group();
   const anchors = new Map();
   const reg = (id, o) => { anchors.set(id, o); o.userData.anchorId = id; return o; };
@@ -36,17 +36,19 @@ export function createMonitor({ width = 2.3, height = 1.34 } = {}) {
   group.add(frameLines(W, H, lineMat(HOLO.teal, 0.75)));
   group.add(corners(W, H, 0.11, lineMat(HOLO.teal, 0.95)));
 
-  // ---- cabeçalho: só o título + divisória (sem 'ONLINE' → estava sobrepondo) ----
-  const title = textPlane('AILA // COGNITIVE SCENE', { width: W * 0.5, px: 768, size: 42, color: HOLO.text });
-  reg('title', at(title.mesh, -mx + W * 0.27, H * 0.42, 0.007));
+  // ---- cabeçalho: título (esq) + leituras numa linha (dir) + divisória ----
+  const title = textPlane('AILA // COGNITIVE SCENE', { width: W * 0.42, px: 768, size: 40, color: HOLO.text });
+  reg('title', at(title.mesh, -mx + W * 0.23, H * 0.42, 0.007));
+  const readout = textPlane('', { width: W * 0.4, px: 1024, size: 28, align: 'right', color: HOLO.text });
+  at(readout.mesh, mx - W * 0.23, H * 0.42, 0.007);   // right-align termina em x+larg/2 → recua p/ ficar dentro
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(-mx, H * 0.35, 0.006), new THREE.Vector3(mx, H * 0.35, 0.006)]), lineMat(HOLO.teal, 0.4)));
 
   // ---- nav rail (esquerda) ----
   const NAV = ['GRAPH', 'DATA', 'SEARCH', 'CONTEXT'];
-  const navX = -mx + W * 0.07, navW = W * 0.11, navH = H * 0.10;
+  const navX = -mx + W * 0.06, navW = W * 0.10, navH = H * 0.105;
   NAV.forEach((label, i) => {
-    const y = H * 0.18 - i * (navH + H * 0.035);
+    const y = H * 0.15 - i * (navH + H * 0.045);
     const active = i === 0;
     const p = new THREE.Group();
     p.add(new THREE.Mesh(new THREE.PlaneGeometry(navW, navH), fillMat(active ? HOLO.teal : HOLO.blue, active ? 0.14 : 0.05)));
@@ -57,61 +59,52 @@ export function createMonitor({ width = 2.3, height = 1.34 } = {}) {
     at(p, navX, y, 0.006); reg('nav_' + label.toLowerCase(), p);
   });
 
-  // ---- leituras numéricas (topo-direita) ----
-  const readouts = [
-    { label: 'NODES', base: 884, span: 6, unit: '' },
-    { label: 'TOKENS', base: 1240, span: 60, unit: '' },
-    { label: 'LATENCY', base: 340, span: 40, unit: 'ms' },
-  ].map((r, i) => {
-    const tp = textPlane(`${r.label} ${r.base}${r.unit}`, { width: W * 0.22, px: 448, size: 30, align: 'right', color: HOLO.text });
-    at(tp.mesh, mx - W * 0.12, H * 0.24 - i * H * 0.08, 0.007);
-    return { ...r, tp };
-  });
-
-  // ---- painel util (moldura + rótulo topo-esq + filho) ----
+  // ---- painel util (moldura + rótulo + filho); guarda o retângulo p/ verificação ----
   const contentX = navX + navW * 0.5 + W * 0.03;
   const panel = (label, x, y, w, h, id, child) => {
     const p = new THREE.Group();
     p.add(new THREE.Mesh(new THREE.PlaneGeometry(w, h), fillMat(HOLO.blue, 0.05)));
     p.add(frameLines(w, h, lineMat(HOLO.blue, 0.5)));
     p.add(corners(w, h, 0.05, lineMat(HOLO.teal, 0.6)));
-    const t = textPlane(label, { width: w * 0.62, px: 320, size: 28, color: HOLO.text });
-    t.mesh.position.set(-w * 0.5 + w * 0.32, h * 0.5 - 0.055, 0.003); p.add(t.mesh);
+    const t = textPlane(label, { width: w * 0.6, px: 320, size: 28, color: HOLO.text });
+    t.mesh.position.set(-w * 0.5 + w * 0.30, h * 0.5 - 0.06, 0.003); p.add(t.mesh);
     if (child) { child.position.z = 0.004; p.add(child); }
     p.position.set(x, y, 0.006); group.add(p);
+    p.userData.rect = { x, y, w, h };
     return reg(id, p);
   };
 
-  // ZONA SUPERIOR: MEMORY (mini-grafo) + ANALYSIS (waveform) — sem sobreposição
-  const cluster = nodeCluster(18, H * 0.11, new THREE.PointsMaterial({ color: HOLO.teal, size: 0.02, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }), lineMat(HOLO.blue, 0.3));
-  cluster.group.position.y = -0.03;
-  panel('MEMORY', contentX + W * 0.12, H * 0.10, W * 0.24, H * 0.40, 'panel_memory', cluster.group);
+  // ZONA SUPERIOR: MEMORY (mini-grafo) + ANALYSIS (waveform)
+  const cluster = nodeCluster(20, H * 0.12, new THREE.PointsMaterial({ color: HOLO.teal, size: 0.02, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }), lineMat(HOLO.blue, 0.3));
+  cluster.group.position.y = -0.04;
+  panel('MEMORY', contentX + W * 0.17, H * 0.11, W * 0.28, H * 0.38, 'panel_memory', cluster.group);
 
-  const wave = lineGraph(W * 0.28, H * 0.18, 56, lineMat(HOLO.teal, 0.9));
-  wave.line.position.y = -0.03;
-  const analysis = panel('ANALYSIS', contentX + W * 0.43, H * 0.10, W * 0.34, H * 0.40, 'panel_analysis', wave.line);
+  const wave = lineGraph(W * 0.32, H * 0.18, 60, lineMat(HOLO.teal, 0.9));
+  wave.line.position.y = -0.04;
+  const analysis = panel('ANALYSIS', contentX + W * 0.55, H * 0.11, W * 0.40, H * 0.38, 'panel_analysis', wave.line);
   analysis.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-W * 0.14, -0.03, 0.003), new THREE.Vector3(W * 0.14, -0.03, 0.003)]), lineMat(HOLO.blue, 0.25)));
+    new THREE.Vector3(-W * 0.17, -0.04, 0.003), new THREE.Vector3(W * 0.17, -0.04, 0.003)]), lineMat(HOLO.blue, 0.25)));
 
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([   // seta MEMORY → ANALYSIS
-    new THREE.Vector3(contentX + W * 0.25, H * 0.10, 0.007), new THREE.Vector3(contentX + W * 0.29, H * 0.10, 0.007)]), lineMat(HOLO.teal, 0.8)));
+    new THREE.Vector3(contentX + W * 0.32, H * 0.11, 0.007), new THREE.Vector3(contentX + W * 0.35, H * 0.11, 0.007)]), lineMat(HOLO.teal, 0.8)));
 
   // ZONA INFERIOR: DATA STREAM (esq) · PROCESSING + barras + CONFIDENCE (dir)
-  const stream = dataStream(4, W * 0.24, { size: 24, rowH: H * 0.05 });
-  stream.group.position.set(0, H * 0.04, 0.004);
-  panel('DATA STREAM', contentX + W * 0.13, -H * 0.36, W * 0.28, H * 0.30, 'panel_stream', stream.group);
+  const stream = dataStream(4, W * 0.26, { size: 24, rowH: H * 0.05 });
+  stream.group.position.set(0, H * 0.03, 0.004);
+  panel('DATA STREAM', contentX + W * 0.17, -H * 0.30, W * 0.30, H * 0.30, 'panel_stream', stream.group);
 
-  const status = textPlane('PROCESSING', { width: W * 0.20, px: 384, size: 28, align: 'left', color: HOLO.amberText });
-  at(status.mesh, contentX + W * 0.40, -H * 0.21, 0.007);
-  const bars = barMeter(10, W * 0.20, 0.09, glowMat(HOLO.teal, 0.7));
-  at(bars.group, contentX + W * 0.55, -H * 0.34, 0.006);
+  // faixas verticais separadas: PROCESSING (topo) · barras (meio) · CONFIDENCE (base)
+  const status = textPlane('PROCESSING', { width: W * 0.22, px: 384, size: 28, align: 'left', color: HOLO.amberText });
+  at(status.mesh, contentX + W * 0.46, -H * 0.20, 0.007);
+  const bars = barMeter(12, W * 0.28, 0.085, glowMat(HOLO.teal, 0.7));
+  at(bars.group, contentX + W * 0.54, -H * 0.34, 0.006);
 
-  const barW = W * 0.32, barY = -H * 0.47, barX = contentX + W * 0.55;
+  const barW = W * 0.32, barY = -H * 0.44, barX = contentX + W * 0.54;
   at(new THREE.Mesh(new THREE.PlaneGeometry(barW, 0.03), fillMat(HOLO.blue, 0.12)), barX, barY, 0.006);
   const fill = new THREE.Mesh(new THREE.PlaneGeometry(barW, 0.03), glowMat(HOLO.teal, 0.85));
   const setConfidence = (v) => { const c = Math.max(0, Math.min(1, v)); fill.scale.x = c || 1e-3; fill.position.set(barX - barW / 2 + (barW * c) / 2, barY, 0.007); };
   group.add(fill); setConfidence(0.87);
-  at(textPlane('CONFIDENCE 87%', { width: W * 0.24, px: 448, size: 26, color: HOLO.text }).mesh, barX - W * 0.06, barY + 0.05, 0.007);
+  at(textPlane('CONFIDENCE 87%', { width: W * 0.26, px: 448, size: 26, color: HOLO.text }).mesh, barX - W * 0.06, barY + 0.05, 0.007);
   reg('confidence', fill);
 
   // ---- animação ----
@@ -123,8 +116,12 @@ export function createMonitor({ width = 2.3, height = 1.34 } = {}) {
     cluster.update(t);
     stream.update(dt);
     wave.set((u) => 0.5 + Math.sin(u * 12 + t * 3) * 0.28 * Math.sin(u * Math.PI) + Math.sin(u * 30 + t * 5) * 0.06);
-    const bh = []; for (let i = 0; i < 10; i++) bh.push(0.22 + Math.abs(Math.sin(t * 2 + i * 0.6)) * 0.72); bars.set(bh);
-    tRead += dt; if (tRead > 0.25) { tRead = 0; for (const r of readouts) r.tp.setText(`${r.label} ${Math.round(r.base + (Math.random() - 0.5) * r.span)}${r.unit}`); }
+    const bh = []; for (let i = 0; i < 12; i++) bh.push(0.22 + Math.abs(Math.sin(t * 2 + i * 0.6)) * 0.72); bars.set(bh);
+    tRead += dt; if (tRead > 0.4) {
+      tRead = 0;
+      const nodes = 880 + ((Math.random() * 8) | 0), tok = 1240 + ((Math.random() * 60) | 0), lat = 320 + ((Math.random() * 50) | 0);
+      readout.setText(`NODES ${nodes}    TOKENS ${tok}    LAT ${lat}ms`);
+    }
     tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText('PROCESSING' + '.'.repeat(dots)); }
   }
 

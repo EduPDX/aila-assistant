@@ -39,7 +39,7 @@ export class StageComposer {
     // STATUS: menor e COLADA à esquerda do monitor, no MESMO plano/ângulo → parece
     // um painel contíguo (uma dashboard só, dividida em duas).
     if (statusGroup) {
-      statusGroup.position.set(c.x - h * 1.86, eyeY - h * 0.04, c.z + h * 0.10);
+      statusGroup.position.set(c.x - h * 2.05, eyeY - h * 0.04, c.z + h * 0.10);
       statusGroup.rotation.set(0, 0.26, 0);
       statusGroup.scale.setScalar(s);
     }

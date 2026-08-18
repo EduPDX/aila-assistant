@@ -50,7 +50,7 @@ export class SceneManager {
     this._ring = ring;
 
     // monitor holográfico principal (cognitivo)
-    this.monitor = createMonitor({ width: 1.7, height: 0.96 });
+    this.monitor = createMonitor();   // usa o tamanho padrão (grande) do módulo
     this.root.add(this.monitor.group);
 
     // segunda tela: STATUS do sistema (dados reais via setMetrics)
