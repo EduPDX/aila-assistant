@@ -38,17 +38,19 @@ export function createMonitor({ width = 1.7, height = 0.96 } = {}) {
   group.add(frameLines(width, height, lineMat(HOLO.teal, 0.7)));
   group.add(corners(width, height, 0.09, lineMat(HOLO.teal, 0.95)));
 
-  // ---- título (topo-esquerda) ----
+  // ---- título (topo-esquerda) + divisória ----
   const title = textPlane('AILA // COGNITIVE SCENE', { width: width * 0.62, px: 768, size: 42, color: HOLO.text });
   reg('title', at(title.mesh, -width * 0.18, height * 0.41, 0.007));
+  group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-width * 0.46, height * 0.34, 0.006), new THREE.Vector3(width * 0.10, height * 0.34, 0.006)]), lineMat(HOLO.teal, 0.4)));
 
   // ---- leituras numéricas (topo-direita), atualizam em baixa frequência ----
   const readouts = [
-    { label: 'NODES', base: 884, span: 6, unit: '', y: height * 0.41 },
-    { label: 'TOKENS', base: 1240, span: 60, unit: '', y: height * 0.34 },
-    { label: 'LATENCY', base: 340, span: 40, unit: 'ms', y: height * 0.27 },
+    { label: 'NODES', base: 884, span: 6, unit: '', y: height * 0.42 },
+    { label: 'TOKENS', base: 1240, span: 60, unit: '', y: height * 0.35 },
+    { label: 'LATENCY', base: 340, span: 40, unit: 'ms', y: height * 0.28 },
   ].map((r) => {
-    const tp = textPlane(`${r.label} ${r.base}${r.unit}`, { width: width * 0.30, px: 384, size: 34, align: 'right', color: HOLO.blue });
+    const tp = textPlane(`${r.label} ${r.base}${r.unit}`, { width: width * 0.32, px: 448, size: 34, align: 'right', color: HOLO.text });
     at(tp.mesh, width * 0.30, r.y, 0.007);
     return { ...r, tp };
   });
@@ -84,7 +86,7 @@ export function createMonitor({ width = 1.7, height = 0.96 } = {}) {
   at(bars.group, -width * 0.28, -height * 0.36, 0.006);
 
   // ---- status PROCESSING (centro-baixo) ----
-  const status = textPlane('PROCESSING', { width: width * 0.26, px: 320, size: 32, align: 'left', color: HOLO.amber });
+  const status = textPlane('PROCESSING', { width: width * 0.26, px: 320, size: 32, align: 'left', color: HOLO.amberText });
   at(status.mesh, -width * 0.06, -height * 0.30, 0.007);
 
   // ---- barra de confiança (base-direita) ----

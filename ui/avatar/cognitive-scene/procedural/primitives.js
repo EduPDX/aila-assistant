@@ -9,9 +9,11 @@ import * as THREE from 'three';
 export const HOLO = {
   teal: 0x35d0ba,     // acento principal (mesmo do app)
   blue: 0x7ab8ff,     // linhas/dados
-  amber: 0xf0a35e,    // destaque/atenção
+  amber: 0xffb15e,    // destaque/atenção (mais claro p/ ler no escuro)
   dim: 0x1b3a66,      // vidro/preenchimento sutil
-  text: '#bfe9e2',    // texto na CanvasTexture
+  text: '#dff3ee',    // texto principal (claro, alto contraste)
+  textDim: '#9fd0c6',   // texto secundário (ainda legível, nunca "preto")
+  amberText: '#ffcf9a', // texto de atenção
 };
 
 /** material de LINHA holográfica (aditivo, brilho sem bloom). */
@@ -92,7 +94,9 @@ export function textPlane(text, { width = 1, px = 256, align = 'left', color = H
     tex.needsUpdate = true;
   }
   draw(text);
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  // TEXTO com blending NORMAL (não aditivo): fica CROCANTE e legível no fundo
+  // escuro — o aditivo lavava a cor (o "texto quase preto" que o usuário viu).
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width * ratio), mat);
   mesh.userData._tex = tex;
   return { mesh, texture: tex, canvas: cv, setText: draw };
