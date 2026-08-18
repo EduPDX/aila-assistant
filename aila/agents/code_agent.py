@@ -146,6 +146,28 @@ class CodeAgent(BaseAgent):
                 agent=self.name,
             ),
             Tool(
+                name="project.add",
+                description=(
+                    "Anexa uma PASTA de projeto e constrói o Code Graph dela (aparece na "
+                    "aba Projetos). Use quando o usuário pedir para 'salvar o projeto', "
+                    "'adicionar aos projetos' ou analisar uma pasta a fundo. Só mapeia "
+                    "Python (.py) por enquanto. Passe o caminho da pasta."
+                ),
+                params=[
+                    ToolParam("path", "string", "caminho da pasta do projeto"),
+                    ToolParam("name", "string", "nome do projeto (opcional)", required=False),
+                ],
+                handler=self._project_add,
+                agent=self.name,
+            ),
+            Tool(
+                name="project.list",
+                description="Lista os projetos já anexados (nome, nós, arestas).",
+                params=[],
+                handler=self._project_list,
+                agent=self.name,
+            ),
+            Tool(
                 name="code.definition",
                 description="Onde uma função/classe é definida (módulo, arquivo e linha).",
                 params=[ToolParam("name", "string", "nome simples, ex.: authorize")],
@@ -360,6 +382,37 @@ class CodeAgent(BaseAgent):
             if node:
                 lines.append(f"  • {_qual(node)}  ({r['n']} chamadas)")
         return ToolResult.success("\n".join(lines), **c)
+
+    # ------------------------- Projetos -------------------------------- #
+    async def _project_add(self, args: dict) -> ToolResult:
+        await self.authorize("project.add", args)
+        from aila.cognition.graph.projects import get_registry
+
+        p = Path(str(args.get("path", ""))).expanduser()
+        if not p.exists() or not p.is_dir():
+            return ToolResult.error(f"Não é uma pasta válida: {args.get('path')}")
+        try:
+            meta = get_registry().add(str(p), args.get("name"))
+        except Exception as exc:  # noqa: BLE001
+            return ToolResult.error(f"Falha ao anexar o projeto: {exc}")
+        keep = {k: meta.get(k) for k in ("slug", "name", "nodes", "edges", "files")}
+        if not meta.get("nodes"):
+            return ToolResult.success(
+                f"Projeto '{meta['name']}' anexado, mas o grafo saiu com 0 nós — o "
+                f"construtor hoje mapeia só Python (.py). {meta.get('files', 0)} arquivos varridos.",
+                **keep)
+        return ToolResult.success(
+            f"Projeto '{meta['name']}' anexado: {meta['nodes']} nós, {meta['edges']} arestas "
+            f"({meta.get('files', 0)} arquivos .py). Aparece na aba Projetos.", **keep)
+
+    async def _project_list(self, args: dict) -> ToolResult:
+        from aila.cognition.graph.projects import get_registry
+
+        ps = get_registry().list()
+        if not ps:
+            return ToolResult.success("Nenhum projeto anexado ainda.")
+        lines = [f"• {p['name']} — {p.get('nodes', 0)} nós, {p.get('edges', 0)} arestas" for p in ps]
+        return ToolResult.success("Projetos:\n" + "\n".join(lines), count=len(ps))
 
     async def _definition(self, args: dict) -> ToolResult:
         await self.authorize("code.graph.get", args)
