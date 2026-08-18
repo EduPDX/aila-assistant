@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import csv
 import importlib
-import io
 from pathlib import Path
 
 from aila.agents.base import AgentDeps, BaseAgent

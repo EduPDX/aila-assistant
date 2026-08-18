@@ -24,7 +24,7 @@ _STOP = {
     "uma", "uns", "umas", "dos", "das", "num", "numa", "sim", "não", "nao", "mais",
     "menos", "muito", "pouco", "também", "tambem", "já", "ainda", "the", "and", "for",
     "with", "you", "your", "this", "that", "have", "will", "can", "are", "was", "but",
-    "não", "sua", "seu", "meu", "minha", "nossa", "nosso", "deu", "vai", "quer",
+    "sua", "seu", "meu", "minha", "nossa", "nosso", "deu", "vai", "quer",
     "fazer", "faz", "ver", "ser", "ter", "tem", "está", "esta", "estou", "vamos",
     "bom", "boa", "certo", "certa", "agora", "aqui", "ali", "lá", "cada", "todo",
     "toda", "todos", "todas", "outro", "outra", "coisa", "coisas", "algo", "tipo",

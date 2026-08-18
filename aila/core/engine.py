@@ -819,7 +819,7 @@ def build_engine(
     # Skills (Fase 8): receitas nomeadas (skill.<nome>) registradas no MESMO
     # registry — cada passo passa pela segurança da tool que invoca.
     if settings.skills.enabled:
-        from aila.cognition.skills import load_skills, register_skills, SkillRunner
+        from aila.cognition.skills import SkillRunner, load_skills, register_skills
         from aila.core.event_bus import bus as _bus
 
         runner = SkillRunner(manager.registry, bus=_bus)
