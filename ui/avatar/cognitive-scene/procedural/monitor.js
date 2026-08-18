@@ -36,25 +36,23 @@ export function createMonitor({ width = 2.3, height = 1.34 } = {}) {
   group.add(frameLines(W, H, lineMat(HOLO.teal, 0.75)));
   group.add(corners(W, H, 0.11, lineMat(HOLO.teal, 0.95)));
 
-  // ---- cabeçalho: título + ponto de status + ONLINE + divisória ----
-  const title = textPlane('AILA // COGNITIVE SCENE', { width: W * 0.44, px: 768, size: 44, color: HOLO.text });
-  reg('title', at(title.mesh, -mx + W * 0.24, H * 0.42, 0.007));
-  const dot = at(new THREE.Mesh(new THREE.CircleGeometry(0.012, 16), glowMat(HOLO.teal, 1)), -mx + W * 0.02, H * 0.42, 0.007);
-  at(textPlane('ONLINE', { width: W * 0.10, px: 192, size: 30, color: HOLO.textDim }).mesh, -mx + W * 0.09, H * 0.42, 0.007);
+  // ---- cabeçalho: só o título + divisória (sem 'ONLINE' → estava sobrepondo) ----
+  const title = textPlane('AILA // COGNITIVE SCENE', { width: W * 0.5, px: 768, size: 42, color: HOLO.text });
+  reg('title', at(title.mesh, -mx + W * 0.27, H * 0.42, 0.007));
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-mx, H * 0.36, 0.006), new THREE.Vector3(mx, H * 0.36, 0.006)]), lineMat(HOLO.teal, 0.4)));
+    new THREE.Vector3(-mx, H * 0.35, 0.006), new THREE.Vector3(mx, H * 0.35, 0.006)]), lineMat(HOLO.teal, 0.4)));
 
   // ---- nav rail (esquerda) ----
   const NAV = ['GRAPH', 'DATA', 'SEARCH', 'CONTEXT'];
-  const navX = -mx + W * 0.075, navW = W * 0.12, navH = H * 0.11;
+  const navX = -mx + W * 0.07, navW = W * 0.11, navH = H * 0.10;
   NAV.forEach((label, i) => {
-    const y = H * 0.20 - i * (navH + H * 0.03);
+    const y = H * 0.18 - i * (navH + H * 0.035);
     const active = i === 0;
     const p = new THREE.Group();
     p.add(new THREE.Mesh(new THREE.PlaneGeometry(navW, navH), fillMat(active ? HOLO.teal : HOLO.blue, active ? 0.14 : 0.05)));
     p.add(frameLines(navW, navH, lineMat(active ? HOLO.teal : HOLO.blue, active ? 0.8 : 0.4)));
     if (active) p.add(new THREE.Mesh(new THREE.PlaneGeometry(0.008, navH), glowMat(HOLO.teal, 0.9)).translateX(-navW / 2));
-    const t = textPlane(label, { width: navW * 0.86, px: 256, size: 28, align: 'center', color: active ? HOLO.text : HOLO.textDim });
+    const t = textPlane(label, { width: navW * 0.86, px: 256, size: 26, align: 'center', color: active ? HOLO.text : HOLO.textDim });
     t.mesh.position.z = 0.003; p.add(t.mesh);
     at(p, navX, y, 0.006); reg('nav_' + label.toLowerCase(), p);
   });
@@ -65,59 +63,55 @@ export function createMonitor({ width = 2.3, height = 1.34 } = {}) {
     { label: 'TOKENS', base: 1240, span: 60, unit: '' },
     { label: 'LATENCY', base: 340, span: 40, unit: 'ms' },
   ].map((r, i) => {
-    const tp = textPlane(`${r.label} ${r.base}${r.unit}`, { width: W * 0.24, px: 448, size: 32, align: 'right', color: HOLO.text });
-    at(tp.mesh, mx - W * 0.13, H * 0.28 - i * H * 0.075, 0.007);
+    const tp = textPlane(`${r.label} ${r.base}${r.unit}`, { width: W * 0.22, px: 448, size: 30, align: 'right', color: HOLO.text });
+    at(tp.mesh, mx - W * 0.12, H * 0.24 - i * H * 0.08, 0.007);
     return { ...r, tp };
   });
 
   // ---- painel util (moldura + rótulo topo-esq + filho) ----
-  const contentX = navX + navW * 0.5 + W * 0.02;   // início da área após a nav
+  const contentX = navX + navW * 0.5 + W * 0.03;
   const panel = (label, x, y, w, h, id, child) => {
     const p = new THREE.Group();
     p.add(new THREE.Mesh(new THREE.PlaneGeometry(w, h), fillMat(HOLO.blue, 0.05)));
     p.add(frameLines(w, h, lineMat(HOLO.blue, 0.5)));
     p.add(corners(w, h, 0.05, lineMat(HOLO.teal, 0.6)));
-    const t = textPlane(label, { width: w * 0.6, px: 320, size: 30, color: HOLO.text });
-    t.mesh.position.set(-w * 0.5 + w * 0.30, h * 0.5 - 0.05, 0.003); p.add(t.mesh);
+    const t = textPlane(label, { width: w * 0.62, px: 320, size: 28, color: HOLO.text });
+    t.mesh.position.set(-w * 0.5 + w * 0.32, h * 0.5 - 0.055, 0.003); p.add(t.mesh);
     if (child) { child.position.z = 0.004; p.add(child); }
     p.position.set(x, y, 0.006); group.add(p);
     return reg(id, p);
   };
 
-  // CONTEXT: MEMORY (mini-grafo) → ANALYSIS (waveform)
-  at(textPlane('CONTEXT', { width: W * 0.14, px: 256, size: 26, color: HOLO.textDim }).mesh, contentX + W * 0.03, H * 0.30, 0.007);
-  const cluster = nodeCluster(18, H * 0.12, new THREE.PointsMaterial({ color: HOLO.teal, size: 0.02, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }), lineMat(HOLO.blue, 0.3));
-  cluster.group.position.y = -0.02;
-  panel('MEMORY', contentX + W * 0.12, H * 0.06, W * 0.26, H * 0.42, 'panel_memory', cluster.group);
+  // ZONA SUPERIOR: MEMORY (mini-grafo) + ANALYSIS (waveform) — sem sobreposição
+  const cluster = nodeCluster(18, H * 0.11, new THREE.PointsMaterial({ color: HOLO.teal, size: 0.02, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }), lineMat(HOLO.blue, 0.3));
+  cluster.group.position.y = -0.03;
+  panel('MEMORY', contentX + W * 0.12, H * 0.10, W * 0.24, H * 0.40, 'panel_memory', cluster.group);
 
-  const wave = lineGraph(W * 0.30, H * 0.20, 56, lineMat(HOLO.teal, 0.9));
-  wave.line.position.y = -0.02;
-  const analysis = panel('ANALYSIS', contentX + W * 0.42, H * 0.06, W * 0.34, H * 0.42, 'panel_analysis', wave.line);
-  analysis.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([   // linha de base do gráfico
-    new THREE.Vector3(-W * 0.15, -0.02, 0.003), new THREE.Vector3(W * 0.15, -0.02, 0.003)]), lineMat(HOLO.blue, 0.25)));
+  const wave = lineGraph(W * 0.28, H * 0.18, 56, lineMat(HOLO.teal, 0.9));
+  wave.line.position.y = -0.03;
+  const analysis = panel('ANALYSIS', contentX + W * 0.43, H * 0.10, W * 0.34, H * 0.40, 'panel_analysis', wave.line);
+  analysis.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-W * 0.14, -0.03, 0.003), new THREE.Vector3(W * 0.14, -0.03, 0.003)]), lineMat(HOLO.blue, 0.25)));
 
-  // seta de fluxo MEMORY → ANALYSIS
-  group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(contentX + W * 0.25, H * 0.06, 0.007), new THREE.Vector3(contentX + W * 0.25 + W * 0.04, H * 0.06, 0.007)]), lineMat(HOLO.teal, 0.8)));
+  group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([   // seta MEMORY → ANALYSIS
+    new THREE.Vector3(contentX + W * 0.25, H * 0.10, 0.007), new THREE.Vector3(contentX + W * 0.29, H * 0.10, 0.007)]), lineMat(HOLO.teal, 0.8)));
 
-  // DATA STREAM (rodapé-esquerda)
-  const stream = dataStream(4, W * 0.24, { size: 26, rowH: H * 0.055 });
-  stream.group.position.set(0, H * 0.05, 0.004);
-  panel('DATA STREAM', contentX + W * 0.13, -H * 0.30, W * 0.28, H * 0.34, 'panel_stream', stream.group);
+  // ZONA INFERIOR: DATA STREAM (esq) · PROCESSING + barras + CONFIDENCE (dir)
+  const stream = dataStream(4, W * 0.24, { size: 24, rowH: H * 0.05 });
+  stream.group.position.set(0, H * 0.04, 0.004);
+  panel('DATA STREAM', contentX + W * 0.13, -H * 0.36, W * 0.28, H * 0.30, 'panel_stream', stream.group);
 
-  // barras de atividade (rodapé-centro)
-  const bars = barMeter(10, W * 0.20, 0.10, glowMat(HOLO.teal, 0.7));
-  at(bars.group, contentX + W * 0.40, -H * 0.30, 0.006);
-  const status = textPlane('PROCESSING', { width: W * 0.22, px: 384, size: 30, align: 'left', color: HOLO.amberText });
-  at(status.mesh, contentX + W * 0.34, -H * 0.16, 0.007);
+  const status = textPlane('PROCESSING', { width: W * 0.20, px: 384, size: 28, align: 'left', color: HOLO.amberText });
+  at(status.mesh, contentX + W * 0.40, -H * 0.21, 0.007);
+  const bars = barMeter(10, W * 0.20, 0.09, glowMat(HOLO.teal, 0.7));
+  at(bars.group, contentX + W * 0.55, -H * 0.34, 0.006);
 
-  // barra de confiança (rodapé-direita)
-  const barW = W * 0.34, barY = -H * 0.42, barX = contentX + W * 0.40;
+  const barW = W * 0.32, barY = -H * 0.47, barX = contentX + W * 0.55;
   at(new THREE.Mesh(new THREE.PlaneGeometry(barW, 0.03), fillMat(HOLO.blue, 0.12)), barX, barY, 0.006);
   const fill = new THREE.Mesh(new THREE.PlaneGeometry(barW, 0.03), glowMat(HOLO.teal, 0.85));
   const setConfidence = (v) => { const c = Math.max(0, Math.min(1, v)); fill.scale.x = c || 1e-3; fill.position.set(barX - barW / 2 + (barW * c) / 2, barY, 0.007); };
   group.add(fill); setConfidence(0.87);
-  at(textPlane('CONFIDENCE 87%', { width: W * 0.26, px: 448, size: 28, color: HOLO.text }).mesh, barX - W * 0.08, barY + 0.055, 0.007);
+  at(textPlane('CONFIDENCE 87%', { width: W * 0.24, px: 448, size: 26, color: HOLO.text }).mesh, barX - W * 0.06, barY + 0.05, 0.007);
   reg('confidence', fill);
 
   // ---- animação ----
@@ -126,7 +120,6 @@ export function createMonitor({ width = 2.3, height = 1.34 } = {}) {
     t += dt;
     scanTex.offset.y = (scanTex.offset.y - dt * 0.3) % 1;
     scan.material.opacity = 0.36 + Math.sin(t * 2.1) * 0.05;
-    dot.material.opacity = 0.6 + Math.abs(Math.sin(t * 1.6)) * 0.4;
     cluster.update(t);
     stream.update(dt);
     wave.set((u) => 0.5 + Math.sin(u * 12 + t * 3) * 0.28 * Math.sin(u * Math.PI) + Math.sin(u * 30 + t * 5) * 0.06);

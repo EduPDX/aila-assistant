@@ -12,7 +12,7 @@ const fmtUptime = (sec) => {
   return h ? `${h}h${m}m` : `${m}m${String(s % 60).padStart(2, '0')}s`;
 };
 
-export function createStatusPanel({ width = 1.16, height = 1.26 } = {}) {
+export function createStatusPanel({ width = 1.0, height = 1.2 } = {}) {
   const group = new THREE.Group();
   const at = (o, x, y, z = 0.006) => { o.position.set(x, y, z); group.add(o); return o; };
   // margens internas (tudo fica dentro de ±mx)

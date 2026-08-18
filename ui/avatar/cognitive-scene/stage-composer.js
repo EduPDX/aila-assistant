@@ -36,11 +36,11 @@ export class StageComposer {
       monitorGroup.rotation.set(0, 0.26, 0);
       monitorGroup.scale.setScalar(s);
     }
-    // STATUS: encostada à ESQUERDA do monitor (bordas quase juntas), um pouco mais
-    // à frente e mais angulada → "lado a lado com pequena diferença de ângulo".
+    // STATUS: menor e COLADA à esquerda do monitor, no MESMO plano/ângulo → parece
+    // um painel contíguo (uma dashboard só, dividida em duas).
     if (statusGroup) {
-      statusGroup.position.set(c.x - h * 2.00, eyeY + h * 0.02, c.z + h * 0.24);
-      statusGroup.rotation.set(0, 0.46, 0);
+      statusGroup.position.set(c.x - h * 1.86, eyeY - h * 0.04, c.z + h * 0.10);
+      statusGroup.rotation.set(0, 0.26, 0);
       statusGroup.scale.setScalar(s);
     }
 
