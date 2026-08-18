@@ -29,18 +29,18 @@ export class StageComposer {
 
     if (ring) ring.position.set(c.x, feetY + 0.002, c.z);
 
-    // monitor PRINCIPAL: AO LADO da Aila (não na frente dela → ela não fica atrás
-    // da tela). Profundidade quase junto da Aila, deslocado p/ a esquerda.
+    // monitor PRINCIPAL (grande): AO LADO da Aila (não na frente dela). Profundidade
+    // quase junto da Aila, deslocado p/ a esquerda.
     if (monitorGroup) {
-      monitorGroup.position.set(c.x - h * 0.62, eyeY + h * 0.03, c.z + h * 0.10);
-      monitorGroup.rotation.set(0, 0.30, 0);
+      monitorGroup.position.set(c.x - h * 0.78, eyeY - h * 0.04, c.z + h * 0.10);
+      monitorGroup.rotation.set(0, 0.26, 0);
       monitorGroup.scale.setScalar(s);
     }
     // STATUS: encostada à ESQUERDA do monitor (bordas quase juntas), um pouco mais
-    // à frente e mais angulada → "lado a lado com uma pequena diferença de ângulo".
+    // à frente e mais angulada → "lado a lado com pequena diferença de ângulo".
     if (statusGroup) {
-      statusGroup.position.set(c.x - h * 1.52, eyeY + h * 0.07, c.z + h * 0.26);
-      statusGroup.rotation.set(0, 0.55, 0);
+      statusGroup.position.set(c.x - h * 2.00, eyeY + h * 0.02, c.z + h * 0.24);
+      statusGroup.rotation.set(0, 0.46, 0);
       statusGroup.scale.setScalar(s);
     }
 

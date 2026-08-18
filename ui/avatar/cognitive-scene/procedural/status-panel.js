@@ -12,34 +12,34 @@ const fmtUptime = (sec) => {
   return h ? `${h}h${m}m` : `${m}m${String(s % 60).padStart(2, '0')}s`;
 };
 
-export function createStatusPanel({ width = 0.9, height = 1.12 } = {}) {
+export function createStatusPanel({ width = 1.16, height = 1.26 } = {}) {
   const group = new THREE.Group();
   const at = (o, x, y, z = 0.006) => { o.position.set(x, y, z); group.add(o); return o; };
   // margens internas (tudo fica dentro de ±mx)
-  const mx = width * 0.42;
+  const mx = width * 0.43;
 
   at(new THREE.Mesh(new THREE.PlaneGeometry(width, height), fillMat(HOLO.dim, 0.16)), 0, 0, 0);
   group.add(frameLines(width, height, lineMat(HOLO.teal, 0.7)));
-  group.add(corners(width, height, 0.08, lineMat(HOLO.teal, 0.95)));
-  const title = textPlane('SYSTEM // STATUS', { width: width * 0.66, px: 512, size: 34, color: HOLO.text });
+  group.add(corners(width, height, 0.09, lineMat(HOLO.teal, 0.95)));
+  const title = textPlane('SYSTEM // STATUS', { width: width * 0.66, px: 640, size: 42, color: HOLO.text });
   at(title.mesh, -width * 0.14, height * 0.44, 0.007);
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-mx, height * 0.39, 0.006), new THREE.Vector3(mx, height * 0.39, 0.006)]), lineMat(HOLO.teal, 0.4)));
+    new THREE.Vector3(-mx, height * 0.38, 0.006), new THREE.Vector3(mx, height * 0.38, 0.006)]), lineMat(HOLO.teal, 0.4)));
 
   // linha de MEDIDOR: rótulo (esq) + barra (centro) + valor (dir), tudo dentro.
   const meter = (label, y, color = HOLO.teal) => {
-    at(textPlane(label, { width: width * 0.26, px: 256, size: 22, color: HOLO.textDim }).mesh, -mx + width * 0.13, y, 0.007);
-    const bar = hbar(width * 0.32, 0.022, color);
+    at(textPlane(label, { width: width * 0.24, px: 256, size: 32, color: HOLO.textDim }).mesh, -mx + width * 0.12, y, 0.007);
+    const bar = hbar(width * 0.30, 0.028, color);
     at(bar.group, -width * 0.02, y, 0.007);
-    const v = textPlane('—', { width: width * 0.26, px: 256, size: 22, align: 'right', color: HOLO.text });
-    at(v.mesh, mx - width * 0.13, y, 0.007);
+    const v = textPlane('—', { width: width * 0.28, px: 320, size: 32, align: 'right', color: HOLO.text });
+    at(v.mesh, mx - width * 0.14, y, 0.007);
     return { set: bar.set, setText: v.setText };
   };
   // linha de TEXTO: rótulo (esq) + valor (dir).
   const line = (label, y, valColor = HOLO.text) => {
-    at(textPlane(label, { width: width * 0.34, px: 320, size: 22, color: HOLO.textDim }).mesh, -mx + width * 0.17, y, 0.007);
-    const v = textPlane('—', { width: width * 0.40, px: 448, size: 22, align: 'right', color: valColor });
-    at(v.mesh, mx - width * 0.20, y, 0.007);
+    at(textPlane(label, { width: width * 0.34, px: 384, size: 32, color: HOLO.textDim }).mesh, -mx + width * 0.17, y, 0.007);
+    const v = textPlane('—', { width: width * 0.44, px: 512, size: 32, align: 'right', color: valColor });
+    at(v.mesh, mx - width * 0.22, y, 0.007);
     return v.setText;
   };
 

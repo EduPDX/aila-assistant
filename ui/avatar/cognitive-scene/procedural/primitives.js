@@ -130,6 +130,33 @@ export function barMeter(count, w, h, mat) {
   return { group: g, set };
 }
 
+/** DATA STREAM — várias linhas de "log" monoespaçado que ROLAM (as de cima mais
+ *  fracas). Barato: setText só na mudança + poucas linhas. */
+export function dataStream(nRows, w, { color = HOLO.textDim, size = 28, rowH = 0.058, hz = 1.6 } = {}) {
+  const g = new THREE.Group();
+  const rows = [];
+  const TAGS = ['MEM', 'CTX', 'TOK', 'VEC', 'GRAPH', 'EMB', 'LLM', 'IO', 'NODE', 'ATTN'];
+  for (let i = 0; i < nRows; i++) {
+    const tp = textPlane('', { width: w, px: 640, size, align: 'left', color });
+    tp.mesh.position.y = -i * rowH;
+    tp.mesh.material.opacity = 0.35 + 0.65 * (i / (nRows - 1));   // topo mais fraco (efeito de rolagem)
+    g.add(tp.mesh); rows.push(tp);
+  }
+  const texts = new Array(nRows).fill('');
+  const gen = () => {
+    const t = TAGS[(Math.random() * TAGS.length) | 0];
+    const hex = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+    return `${t.padEnd(5)} 0x${hex}  ${(Math.random() * 100).toFixed(1)}%`;
+  };
+  let acc = 0;
+  const update = (dt) => {
+    acc += dt; if (acc < 1 / hz) return; acc = 0;
+    texts.shift(); texts.push(gen());
+    for (let i = 0; i < nRows; i++) rows[i].setText(texts[i]);
+  };
+  return { group: g, update };
+}
+
 /** BARRA horizontal (fundo + preenchimento). set(0..1) escala o preenchimento. */
 export function hbar(w, h, fillColor = HOLO.teal, bgColor = HOLO.blue) {
   const g = new THREE.Group();
