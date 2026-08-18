@@ -59,8 +59,17 @@ export class ForceGraph {
     })).filter((l) => l.s && l.t);
     this.selected = null;
     this._fitted = false;
+    this._presettle();          // assenta em memória → já aparece estável e enquadrado
     this.fit();
-    this.kick(1);
+    this.kick(0.12);            // resíduo leve: acomoda em cena sem re-explodir
+  }
+
+  // pré-assenta o layout sem renderizar (o usuário não assiste ao colapso animado)
+  _presettle(iters = 90) {
+    const saved = this.alpha;
+    this.alpha = 1;
+    for (let i = 0; i < iters; i++) { this._tick(); this.alpha *= 0.955; }
+    this.alpha = saved;
   }
 
   colorOf(node) { return this.color.get(node.community) || '#8aa'; }

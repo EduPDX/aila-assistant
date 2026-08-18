@@ -66,9 +66,11 @@ export class ForceGraph3D {
     this.byId = new Map(this.nodes.map((n) => [n.id, n]));
     this.links = (data.edges || []).map((e) => ({ s: this.byId.get(e.source), t: this.byId.get(e.target) }))
       .filter((l) => l.s && l.t);
+    this._presettle();          // assenta EM MEMÓRIA → aparece quase estável (sem os 8s de colapso)
     this._buildMeshes();
+    if (!this._userMoved && this._camZTarget) this.camera.position.z = this._camZTarget;   // já enquadrado
     this.selected = null; this._nbr.clear();
-    this.alpha = 1;
+    this.alpha = 0.08;          // resíduo pequeno: só acomoda em cena, sem re-explodir
   }
 
   _clearMeshes() {
@@ -130,11 +132,17 @@ export class ForceGraph3D {
       mx /= N; my /= N; mz /= N;
       for (const n of this.nodes) { n.x -= mx; n.y -= my; n.z -= mz; }
     }
-    let ext = 1;
-    for (const n of this.nodes) ext = Math.max(ext, Math.abs(n.x) + n.r, Math.abs(n.y) + n.r, Math.abs(n.z) + n.r);
+    // extensão ROBUSTA: ignora ~2% de nós mais distantes (outliers que escapam
+    // e faziam o cubo/câmera "explodir" durante o assentamento → riscos).
+    const rad = this.nodes
+      .map((n) => Math.max(Math.abs(n.x) + n.r, Math.abs(n.y) + n.r, Math.abs(n.z) + n.r))
+      .sort((a, b) => a - b);
+    const ext = Math.max(1, rad[Math.floor(rad.length * 0.98)] || rad[rad.length - 1] || 1);
     const size = (ext + 6) * 2;
     this._cube.scale.setScalar(size);
-    if (!this._userMoved) this.camera.position.z = size * 0.92;
+    // NÃO salta a câmera todo frame — guarda o ALVO e o loop amortece até ele
+    // (o salto instantâneo, com nós em movimento, é o que gerava os "riscos").
+    if (!this._userMoved) this._camZTarget = size * 0.92;
   }
 
   // cubo "caprichado": faces de vidro bem sutis + arestas fracas + CANTOS em
@@ -178,6 +186,21 @@ export class ForceGraph3D {
     });
     this._nodeMesh.instanceMatrix.needsUpdate = true;
     this.kick(0.05);
+  }
+
+  // Pré-assenta o layout EM MEMÓRIA (sem renderizar) — o usuário vê o grafo já
+  // quase estável, em vez de assistir ~8s de colapso animado ("demora").
+  _presettle(iters = 90) {
+    const saved = this.alpha;
+    this.alpha = 1;
+    for (let i = 0; i < iters; i++) { this._tick(); this.alpha *= 0.955; }
+    // recentra no fim do pré-assentamento
+    const N = this.nodes.length || 1;
+    let mx = 0, my = 0, mz = 0;
+    for (const n of this.nodes) { mx += n.x; my += n.y; mz += n.z; }
+    mx /= N; my /= N; mz /= N;
+    for (const n of this.nodes) { n.x -= mx; n.y -= my; n.z -= mz; n.vx = n.vy = n.vz = 0; }
+    this.alpha = saved;
   }
 
   // -------------------------------------------------------- física 3D
@@ -308,7 +331,12 @@ export class ForceGraph3D {
       else if (spin) { this.alpha = 0.03; this._tick(); }
       this._frameFit();
       this._sync();
-      if (this.autoRot && !this._dragging) this.rot.y += 0.0016;
+      // câmera AMORTECIDA até o alvo (nada de saltos = fim dos "riscos")
+      if (!this._userMoved && this._camZTarget) {
+        this.camera.position.z += (this._camZTarget - this.camera.position.z) * 0.06;
+      }
+      // auto-rotação só depois de ASSENTAR — girar enquanto colapsa embaralha a cena
+      if (this.autoRot && !this._dragging && this.alpha < 0.06) this.rot.y += 0.0016;
       this.world.rotation.x = this.rot.x; this.world.rotation.y = this.rot.y;
       this.renderer.render(this.scene, this.camera);
       this._raf = requestAnimationFrame(step);
