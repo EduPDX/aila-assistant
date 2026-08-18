@@ -132,7 +132,8 @@ export class ForceGraph {
     const spread = mini ? 1 : Math.min(4, Math.max(1, Math.sqrt(N / 200)));
     const REP = 220, R = 78, SPRING = 0.06, LEN = (mini ? 14 : 24) * spread,
       GRAV = (mini ? 0.02 : 0.004) / spread,
-      COMM = 0.06, DAMP = 0.85, CREP = mini ? 0 : 32000;   // mini: blob compacto, sem explodir comunidades
+      COMM = 0.06, DAMP = 0.88, CREP = mini ? 0 : 32000,   // mini: blob compacto, sem explodir comunidades
+      MAXV = 9 * spread;   // teto anti-"voo" do hub (tremor/riscos)
     const a = this.alpha;
     // grade espacial p/ repulsão local (O(n))
     const cell = R, grid = new Map();
@@ -185,7 +186,10 @@ export class ForceGraph {
     }
     for (const n of nodes) {
       if (n.fixed) { n.vx = n.vy = 0; continue; }
-      n.x += n.vx = n.vx * DAMP; n.y += n.vy = n.vy * DAMP;
+      n.vx *= DAMP; n.vy *= DAMP;
+      const sp = Math.hypot(n.vx, n.vy);   // teto: hub não "voa" de um lado a outro
+      if (sp > MAXV) { const s = MAXV / sp; n.vx *= s; n.vy *= s; }
+      n.x += n.vx; n.y += n.vy;
     }
   }
 

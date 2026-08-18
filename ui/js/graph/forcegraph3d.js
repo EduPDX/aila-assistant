@@ -132,17 +132,22 @@ export class ForceGraph3D {
       mx /= N; my /= N; mz /= N;
       for (const n of this.nodes) { n.x -= mx; n.y -= my; n.z -= mz; }
     }
-    // extensão ROBUSTA: ignora ~2% de nós mais distantes (outliers que escapam
-    // e faziam o cubo/câmera "explodir" durante o assentamento → riscos).
-    const rad = this.nodes
-      .map((n) => Math.max(Math.abs(n.x) + n.r, Math.abs(n.y) + n.r, Math.abs(n.z) + n.r))
-      .sort((a, b) => a - b);
-    const ext = Math.max(1, rad[Math.floor(rad.length * 0.98)] || rad[rad.length - 1] || 1);
-    const size = (ext + 6) * 2;
-    this._cube.scale.setScalar(size);
-    // NÃO salta a câmera todo frame — guarda o ALVO e o loop amortece até ele
-    // (o salto instantâneo, com nós em movimento, é o que gerava os "riscos").
-    if (!this._userMoved) this._camZTarget = size * 0.92;
+    const rad = this.nodes.map((n) =>
+      Math.max(Math.abs(n.x) + n.r, Math.abs(n.y) + n.r, Math.abs(n.z) + n.r));
+    // o CUBO precisa conter TODOS os nós — senão os de fora "escapam" do cubo
+    // (era o bug do grafo de Código). Usa a extensão MÁXIMA.
+    let extFull = 1;
+    for (const v of rad) if (v > extFull) extFull = v;
+    this._cube.scale.setScalar((extFull + 6) * 2);
+    // a CÂMERA usa extensão robusta (ignora ~2% de outliers p/ não afastar
+    // demais), mas nunca mais perto que ~75% do cubo → o cubo sempre cabe na
+    // tela. Guarda o ALVO; o loop amortece até ele (sem saltos = sem "riscos").
+    if (!this._userMoved) {
+      const sorted = rad.slice().sort((a, b) => a - b);
+      const p98 = sorted[Math.floor(sorted.length * 0.98)] || extFull;
+      const extCam = Math.max(p98, extFull * 0.75);
+      this._camZTarget = (extCam + 6) * 2 * 0.92;
+    }
   }
 
   // cubo "caprichado": faces de vidro bem sutis + arestas fracas + CANTOS em
@@ -213,7 +218,7 @@ export class ForceGraph3D {
     // no centro (era o "se juntando pro meio + riscos"). spread=1 até ~200 nós.
     const spread = Math.min(4, Math.max(1, Math.sqrt(N / 200)));
     const REP = 260, R = 84, SPRING = 0.05, LEN = 26 * spread, GRAV = 0.006 / spread,
-      COMM = 0.05, DAMP = 0.85, CREP = 2.2e5;
+      COMM = 0.05, DAMP = 0.88, CREP = 2.2e5, MAXV = 9 * spread;   // MAXV: teto anti-"voo" do hub
     const a = this.alpha, cell = R;
     const grid = new Map();
     const key = (x, y, z) => x + ',' + y + ',' + z;
@@ -265,7 +270,12 @@ export class ForceGraph3D {
     }
     for (const n of nodes) {
       if (n.fixed) { n.vx = n.vy = n.vz = 0; continue; }
-      n.x += n.vx *= DAMP; n.y += n.vy *= DAMP; n.z += n.vz *= DAMP;
+      n.vx *= DAMP; n.vy *= DAMP; n.vz *= DAMP;
+      // teto de deslocamento/frame: um hub muito ligado acumulava força e "voava"
+      // de um lado pro outro, arrastando as linhas (os "riscos"/tremor).
+      const sp = Math.hypot(n.vx, n.vy, n.vz);
+      if (sp > MAXV) { const s = MAXV / sp; n.vx *= s; n.vy *= s; n.vz *= s; }
+      n.x += n.vx; n.y += n.vy; n.z += n.vz;
     }
   }
 
