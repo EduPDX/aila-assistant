@@ -77,9 +77,14 @@ export function textPlane(text, { width = 1, px = 256, align = 'left', color = H
   const ctx = cv.getContext('2d');
   ctx.clearRect(0, 0, cv.width, cv.height);
   ctx.fillStyle = color;
-  ctx.font = `${size}px ${font}`;
   ctx.textBaseline = 'middle';
   ctx.textAlign = align;
+  // auto-encolhe a fonte p/ o texto CABER na largura (fim do título cortado)
+  const maxW = cv.width - 16;
+  let fs = size;
+  ctx.font = `${fs}px ${font}`;
+  const w = ctx.measureText(text).width;
+  if (w > maxW) { fs = Math.max(9, Math.floor(size * maxW / w)); ctx.font = `${fs}px ${font}`; }
   const tx = align === 'center' ? cv.width / 2 : align === 'right' ? cv.width - 8 : 8;
   ctx.fillText(text, tx, cv.height / 2);
   const tex = new THREE.CanvasTexture(cv);

@@ -49,7 +49,7 @@ export function createMonitor({ width = 1.7, height = 0.96 } = {}) {
   group.add(corners(width, height, 0.09, lineMat(HOLO.teal, 0.95)));
 
   // título (canto superior esquerdo)
-  const title = textPlane('AILA // COGNITIVE SCENE', { width: width * 0.7, px: 512, size: 44, color: HOLO.text });
+  const title = textPlane('AILA // COGNITIVE SCENE', { width: width * 0.72, px: 768, size: 44, color: HOLO.text });
   title.mesh.position.set(-width * 0.13, height * 0.40, 0.006);
   group.add(title.mesh);
   reg('title', title.mesh);

@@ -43,7 +43,7 @@ export class StageComposer {
     // de propósito, p/ não precisar ainda da compensação de cabeça do gaze).
     if (!this._applied) this._savedYaw = vrm.scene.rotation.y;
     this._vrm = vrm;
-    vrm.scene.rotation.y = this._savedYaw - 0.17;
+    vrm.scene.rotation.y = this._savedYaw - 0.22;   // ~13° (Fase 1 sutil; virada forte c/ compensação de cabeça vem no gaze/Fase 4)
 
     // câmera: um pouco à direita e mais afastada → cabe Aila + monitor no quadro,
     // vendo o rosto (3/4) e a interação. Respeita o zoom/órbita depois.
