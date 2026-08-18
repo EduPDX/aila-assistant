@@ -18,7 +18,7 @@ export class StageComposer {
 
   /** posiciona as telas LADO A LADO + gira o avatar + enquadra a câmera a NÍVEL
    *  DOS OLHOS (nada de câmera de cima; nada de uma tela atrás da outra). */
-  compose(vrm, monitorGroup, ring, statusGroup) {
+  compose(vrm, monitorGroup, ring, statusGroup, messageGroup) {
     if (!vrm) return;
     const box0 = new THREE.Box3().setFromObject(vrm.scene);
     if (box0.isEmpty()) return;
@@ -44,6 +44,13 @@ export class StageComposer {
       statusGroup.scale.setScalar(s);
     }
 
+    // balão de resumo (Jarvis): acima da Aila, encarando a câmera (some sozinho).
+    if (messageGroup) {
+      messageGroup.position.set(c.x + h * 0.05, eyeY + h * 0.32, c.z + h * 0.55);
+      messageGroup.rotation.set(0, -0.06, 0);
+      messageGroup.scale.setScalar(s * 0.92);
+    }
+
     // vira o corpo p/ as telas (diagonal sutil; olhos seguem o usuário via lookAt).
     if (!this._applied) this._savedYaw = vrm.scene.rotation.y;
     this._vrm = vrm;
@@ -56,6 +63,11 @@ export class StageComposer {
     const box = new THREE.Box3().setFromObject(vrm.scene);
     if (monitorGroup) box.expandByObject(monitorGroup);
     if (statusGroup) box.expandByObject(statusGroup);
+    if (messageGroup) {   // reserva espaço p/ o balão no quadro (mesmo oculto agora)
+      const wasVis = messageGroup.visible; messageGroup.visible = true;
+      messageGroup.updateWorldMatrix(true, true); box.expandByObject(messageGroup);
+      messageGroup.visible = wasVis;
+    }
     const bc = box.getCenter(new THREE.Vector3());
     const bs = box.getSize(new THREE.Vector3());
     const fov = this.camera.fov * Math.PI / 180;

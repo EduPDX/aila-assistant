@@ -3,6 +3,7 @@ import { byId } from './dom.js';
 import { State } from './state.js';
 import { wsSend, wsReady } from './ws.js';
 import { speak } from './voice.js';
+import { avatarSay } from './avatar.js';
 import { renderMarkdown, enhanceCodeBlocks } from './markdown.js';
 import { api } from './core/api.js';
 import { pickFolderPath } from './core/folder.js';
@@ -75,7 +76,33 @@ export function onMessage(m) {
   scroll();
   aiBubble = null; streamRaw = '';
   reasoningEl = null; reasoningRaw = '';   // fim do turno (mantém o bloco no DOM, solta a ref)
-  if (State.get('voiceOut') && text) speak(text);
+  // A resposta COMPLETA (código/textão) fica aqui na aba Conversa. Para a aba
+  // Avatar, ela FALA e mostra no balão holográfico só um RESUMO curto — nada de
+  // ler código gigante (Jarvis).
+  if (text) {
+    const summary = spokenSummary(text);
+    avatarSay(summary);                              // balão holográfico
+    if (State.get('voiceOut')) speak(summary);       // fala o RESUMO, não o textão
+  }
+}
+
+/** resumo FALÁVEL: remove código/marcação e corta em ~2 frases. O completo fica
+ *  no chat; isto é o que a Aila fala e mostra no balão da aba Avatar. */
+function spokenSummary(text) {
+  let t = String(text || '')
+    .replace(/```[\s\S]*?```/g, ' ')     // blocos de código
+    .replace(/`[^`]*`/g, ' ')            // código inline
+    .replace(/https?:\/\/\S+/g, ' ')     // urls
+    .replace(/[#*_>`|]/g, ' ')           // marcação markdown
+    .replace(/\s+/g, ' ').trim();
+  if (!t) return 'Pronto — deixei os detalhes na conversa.';   // resposta só de código
+  const sentences = t.match(/[^.!?]+[.!?]+/g);
+  if (sentences && sentences.length) {
+    let out = '';
+    for (const s of sentences) { if (out && (out + s).length > 240) break; out += s; }
+    t = out.trim() || t;
+  }
+  return t.length > 260 ? t.slice(0, 257).trim() + '…' : t;
 }
 
 // ▶ Executar: manda o código pra Aila rodar (passa pelo fluxo de permissão do backend)

@@ -18,3 +18,5 @@ export const avatarShow = (on) => toAvatar({ type: on ? 'aila:show' : 'aila:hide
 export const avatarVramPressure = (state) => toAvatar({ type: 'aila:vram-pressure', state });
 // Cognitive Scene: métricas REAIS (GPU/CPU/VRAM/modelo/tokens) → tela de STATUS
 export const avatarMetrics = (payload) => toAvatar({ type: 'aila:metrics', payload });
+// Cognitive Scene: RESUMO curto que a Aila fala → balão holográfico (Jarvis)
+export const avatarSay = (text) => toAvatar({ type: 'aila:say', text });
