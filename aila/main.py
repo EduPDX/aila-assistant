@@ -66,6 +66,25 @@ async def lifespan(app: FastAPI):
     app.state.engine = engine
     app.state.network = network
 
+    # Planejador de VRAM (Fase 1: só medir/mostrar). Trata os 8 GB da GPU como
+    # orçamento explícito — o "memory plan" impresso no boot, à la kimi-k3-in-c.
+    from aila.core.vram import VramPlanner
+
+    app.state.vram = VramPlanner(settings.llm.base_url)
+
+    async def _vram_plan() -> None:
+        with contextlib.suppress(Exception):
+            p = await app.state.vram.measure()
+            if p.available:
+                log.info(
+                    f"plano de VRAM: {p.used_mb}/{p.total_mb} MB usados · "
+                    f"livre {p.free_mb} MB · estado {p.state}"
+                    + (f" · Ollama {p.models_mb} MB" if p.models_mb else "")
+                )
+            else:
+                log.info("plano de VRAM: nvidia-smi indisponível (medidor desligado)")
+    asyncio.create_task(_vram_plan())
+
     # Warm-up (NÃO bloqueia o boot): pré-carrega o modelo de chat E o de
     # embeddings no Ollama. Sem isso, a PRIMEIRA mensagem paga o cold-start dos
     # DOIS (a recuperação de memória carrega o embed antes da resposta) — daí a

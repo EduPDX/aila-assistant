@@ -117,6 +117,8 @@ function render(s) {
     setGauge('hud-gpu', m.gpu.util, `${Math.round(m.gpu.util)}%`);
     const vp = m.gpu.vram_total_mb ? (m.gpu.vram_used_mb / m.gpu.vram_total_mb) * 100 : 0;
     setBar('hud-vram', vp, `${(m.gpu.vram_used_mb / 1024).toFixed(1)}/${(m.gpu.vram_total_mb / 1024).toFixed(1)}G`);
+    // "dial" de VRAM: colore a barra por estado (verde/amarelo/vermelho).
+    document.getElementById('hud-vram')?.closest('.hud-bar')?.setAttribute('data-state', m.gpu.state || 'green');
   } else {
     setGauge('hud-gpu', 0, 'n/d');
     setBar('hud-vram', 0, 'n/d');

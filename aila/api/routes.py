@@ -32,6 +32,19 @@ async def status(request: Request) -> dict:
     }
 
 
+@router.get("/vram")
+async def vram(request: Request) -> dict:
+    """Orçamento de VRAM da GPU (Fase 1: só medir/mostrar). Lê nvidia-smi +
+    Ollama /api/ps. Sem GPU/nvidia-smi → available=false (a UI esconde o medidor)."""
+    planner = getattr(request.app.state, "vram", None)
+    if planner is None:
+        from aila.core.vram import VramPlanner
+        planner = VramPlanner(request.app.state.engine.settings.llm.base_url)
+        request.app.state.vram = planner
+    plan = await planner.measure()
+    return plan.to_dict()
+
+
 @router.get("/events")
 async def events(request: Request, n: int = 40) -> dict:
     """Atividade recente do agente (via Event Bus) — observabilidade/debug."""

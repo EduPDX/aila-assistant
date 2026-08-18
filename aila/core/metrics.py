@@ -34,7 +34,7 @@ def _read_gpu() -> dict | None:
         out = subprocess.run(
             [
                 "nvidia-smi",
-                "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                "--query-gpu=name,utilization.gpu,memory.used,memory.total,memory.free,temperature.gpu",
                 "--format=csv,noheader,nounits",
             ],
             capture_output=True,
@@ -44,12 +44,17 @@ def _read_gpu() -> dict | None:
         if out.returncode != 0 or not out.stdout.strip():
             _gpu_cache, _gpu_cache_ts = None, now
             return None
-        name, util, used, total, temp = [p.strip() for p in out.stdout.strip().splitlines()[0].split(",")]
+        name, util, used, total, free, temp = [p.strip() for p in out.stdout.strip().splitlines()[0].split(",")]
+        # 'state' = o "dial" de VRAM (verde/amarelo/vermelho) a partir do headroom;
+        # a UI colore a barra por ele. É a Fase 1 do planejador (só medir/mostrar).
+        from aila.core.vram import classify
         _gpu_cache = {
             "name": name,
             "util": float(util),
             "vram_used_mb": float(used),
             "vram_total_mb": float(total),
+            "vram_free_mb": float(free),
+            "state": classify(int(float(free))),
             "temp": float(temp),
         }
     except (OSError, ValueError, subprocess.TimeoutExpired):

@@ -2003,3 +2003,73 @@ def test_registry_tool_timeout():
         assert not r.ok and "tempo limite" in r.content
 
     asyncio.run(go())
+
+
+def test_vram_classify_thresholds():
+    """O 'dial' em degraus: verde/amarelo/vermelho pelo headroom."""
+    from aila.core.vram import RED_MB, YELLOW_MB, classify
+
+    assert classify(YELLOW_MB + 1) == "green"
+    assert classify(YELLOW_MB) == "yellow"      # exatamente no limite = já apertando
+    assert classify(RED_MB + 1) == "yellow"
+    assert classify(RED_MB) == "red"
+    assert classify(0) == "red"
+
+
+def test_vram_parses_nvidia_smi(monkeypatch):
+    """_probe_gpu_blocking lê o CSV do nvidia-smi (total,used,free)."""
+    import subprocess
+
+    from aila.core import vram
+
+    class _Out:
+        returncode = 0
+        stdout = "8188, 6900, 1288\n"
+
+    monkeypatch.setattr(vram.shutil, "which", lambda _: "nvidia-smi")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Out())
+    gpu = vram._probe_gpu_blocking()
+    assert gpu is not None
+    assert (gpu.total_mb, gpu.used_mb, gpu.free_mb) == (8188, 6900, 1288)
+
+
+def test_vram_no_nvidia_smi_is_noop(monkeypatch):
+    """Sem nvidia-smi, o planner não quebra: available=False, estado 'unknown'."""
+    from aila.core import vram
+
+    monkeypatch.setattr(vram.shutil, "which", lambda _: None)
+
+    async def _no_models(base_url, timeout=3.0):
+        return 0, []
+
+    monkeypatch.setattr(vram, "_probe_models", _no_models)
+
+    async def go():
+        plan = await vram.VramPlanner("http://127.0.0.1:11434").measure()
+        assert plan.available is False
+        assert plan.state == "unknown"
+
+    asyncio.run(go())
+
+
+def test_vram_measure_composes_plan(monkeypatch):
+    """measure() combina GPU (nvidia-smi) + modelos (Ollama /api/ps) num plano."""
+    from aila.core import vram
+
+    monkeypatch.setattr(
+        vram, "_probe_gpu_blocking",
+        lambda: vram.GpuInfo(total_mb=8188, used_mb=7000, free_mb=1188),
+    )
+
+    async def _models(base_url, timeout=3.0):
+        return 5200, [{"name": "qwen2.5:7b", "vram_mb": 5200}]
+
+    monkeypatch.setattr(vram, "_probe_models", _models)
+
+    async def go():
+        plan = await vram.VramPlanner().measure()
+        assert plan.available is True
+        assert plan.headroom_mb == 1188 and plan.state == "green"
+        assert plan.models_mb == 5200 and plan.models[0]["name"] == "qwen2.5:7b"
+
+    asyncio.run(go())

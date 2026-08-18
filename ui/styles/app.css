@@ -908,6 +908,14 @@ body::before {
   background: repeating-linear-gradient(90deg, var(--accent) 0 4px, transparent 4px 6px);
   filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 60%, transparent));
   transition: width var(--dur-2) var(--ease); }
+/* "dial" de VRAM (Fase 1 do planejador): amarelo = apertando, vermelho = no limite.
+   Verde usa o --accent padrão. Colore a barra e a leitura numérica ao lado. */
+.hud-bar[data-state="yellow"] .hud-bar-tr i { background: repeating-linear-gradient(90deg, #e6b400 0 4px, transparent 4px 6px);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, #e6b400 70%, transparent)); }
+.hud-bar[data-state="red"] .hud-bar-tr i { background: repeating-linear-gradient(90deg, #ff4d4d 0 4px, transparent 4px 6px);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, #ff4d4d 75%, transparent)); }
+.hud-bar[data-state="yellow"] .hud-bar-top span:last-child { color: #e6b400; }
+.hud-bar[data-state="red"] .hud-bar-top span:last-child { color: #ff6666; }
 
 /* leituras de texto (modelo/rede/autonomia/tokens/uptime/emoção) */
 .hud-ro { display: flex; flex-direction: column; gap: 1px; }
