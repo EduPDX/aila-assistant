@@ -272,6 +272,7 @@ function loadVRM(url) {
     clock.getDelta();                                          // zera o dt (evita saia "explodir")
     frameVRM();
     sceneManager.build();                                      // Cognitive Scene: chão + monitor (1x)
+    sceneManager.setController(controller);                    // Fase 3: IK aponta p/ a cena
     sceneManager.compose(vrm);                                 // posiciona monitor + diagonal + enquadra o palco
     $('loading').style.display = 'none';
   }, undefined, (e) => {
@@ -369,6 +370,7 @@ addEventListener('message', (e) => {
     case 'aila:vram-pressure': applyVramPressure(d.state); break;
     case 'aila:metrics':   sceneManager.setMetrics(d.payload); break;   // dados reais → tela de STATUS
     case 'aila:say':       sceneManager.showMessage(d.text); break;     // resumo → balão holográfico
+    case 'aila:interaction': sceneManager.interact(d.spec); break;      // {type,target} → aponta (IK)
   }
 });
 

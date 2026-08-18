@@ -13,7 +13,11 @@ import { HOLO, lineMat, disposeObject } from './procedural/primitives.js';
 import { createMonitor } from './procedural/monitor.js';
 import { createStatusPanel } from './procedural/status-panel.js';
 import { createMessagePanel } from './procedural/message-panel.js';
+import { createInteractionManager } from './interactions/interaction-manager.js';
 import { StageComposer } from './stage-composer.js';
+
+// intent → âncora que a Aila aponta (Fase 3)
+const POINT_TARGET = { analysis: 'panel_analysis', coding: 'panel_analysis', reading: 'panel_analysis', search: 'panel_memory', thinking: 'panel_memory' };
 
 export function sceneEnabled() { return localStorage.getItem('aila.scene') !== 'off'; }
 
@@ -27,7 +31,13 @@ export class SceneManager {
     this.vramState = 'green';
     this.intent = 'conversation';
     this.monitor = null;
+    this.controller = null;      // AnimationController do avatar (p/ IK/pose) — avatar3d o injeta
+    this._pointCooldown = 0;
     this.composer = new StageComposer(camera, controls);
+    this.interactions = createInteractionManager({
+      resolveWorld: (id, out) => this.resolveWorld(id, out),
+      getController: () => this.controller,
+    });
     this._built = false;
     if (this.enabled) this.scene.add(this.root);
   }
@@ -76,9 +86,22 @@ export class SceneManager {
   /** mostra o RESUMO curto da resposta da Aila no balão holográfico (Jarvis). */
   showMessage(text) { this.message?.show(text); }
 
-  /** Fase 2: a interface representa o intent (search/analysis/coding/…) — acende
-   *  o item do nav rail e troca o verbo de processamento no monitor. */
-  setState(intent) { this.intent = intent || 'conversation'; this.monitor?.setMode(this.intent); }
+  /** Fase 2+3: a interface representa o intent (acende o nav rail + verbo) e a
+   *  Aila APONTA para a âncora relevante (IK existente), com cooldown. */
+  setState(intent) {
+    this.intent = intent || 'conversation';
+    this.monitor?.setMode(this.intent);
+    const target = POINT_TARGET[this.intent];
+    if (target && this._pointCooldown <= 0) {
+      if (this.interactions.interact({ type: 'point', target })) this._pointCooldown = 14;
+    }
+  }
+
+  /** injeta o AnimationController do avatar (p/ o InteractionManager usar o IK). */
+  setController(c) { this.controller = c; }
+
+  /** dispara uma interação manual: {type:'point'|'inspect'|..., target:'panel_analysis'} */
+  interact(spec) { return this.interactions.interact(spec); }
 
   setPaused(p) { this.paused = !!p; }
 
@@ -95,6 +118,8 @@ export class SceneManager {
     this.monitor?.update(dt);
     this.status?.update(dt);
     this.message?.update(dt);
+    this.interactions.update(dt);
+    if (this._pointCooldown > 0) this._pointCooldown -= dt;
     if (this._ring) this._ring.rotation.z += dt * 0.15;   // giro lento do anel
   }
 
