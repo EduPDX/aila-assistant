@@ -386,6 +386,7 @@ class AilaEngine:
         if backend is not self.llm:
             await emit("model.selected", {"provider": backend.name})
         final_text = ""
+        failed: set = set()   # provedores que JÁ falharam neste turno (não voltar → sem ping-pong)
         # orçamento anti-loop do turno (total + repetição da mesma ferramenta).
         budget = CallBudget(
             max_total=self.settings.security.max_tool_calls,
@@ -412,12 +413,16 @@ class AilaEngine:
                     if chunk.tool_calls:
                         tool_calls = chunk.tool_calls
             except Exception as exc:  # noqa: BLE001 - provedor falhou → fallback
-                nxt = next((b for b in chain if b is not backend), None)
+                failed.add(backend)   # não volta pra ele (evita ping-pong Gemini↔ollama)
+                nxt = next((b for b in chain if b not in failed), None)
                 if nxt is not None and not collected:
                     log.warning(f"provedor '{backend.name}' falhou ({exc!r}); fallback → '{nxt.name}'")
                     backend = nxt
                     await emit("model.selected", {"provider": backend.name, "fallback": True})
                     continue
+                # todos os provedores da cadeia falharam → propaga o erro REAL
+                # (a UI mostra a causa, em vez de "Limite de iterações" enganoso).
+                log.warning(f"todos os provedores falharam neste turno ({exc!r})")
                 raise
 
             text = "".join(collected)
