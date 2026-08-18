@@ -29,18 +29,19 @@ export class StageComposer {
 
     if (ring) ring.position.set(c.x, feetY + 0.002, c.z);
 
-    // telas LADO A LADO à frente-esquerda da Aila, ambas viradas p/ a câmera e no
-    // MESMO plano de profundidade (senão uma fica "atrás" da outra). Monitor no
-    // centro-esquerda, STATUS à esquerda dele. Aila à direita.
+    // monitor PRINCIPAL: AO LADO da Aila (não na frente dela → ela não fica atrás
+    // da tela). Profundidade quase junto da Aila, deslocado p/ a esquerda.
     if (monitorGroup) {
-      monitorGroup.position.set(c.x - h * 0.48, eyeY + h * 0.05, c.z + h * 0.55);
-      monitorGroup.rotation.set(0, 0.34, 0);
+      monitorGroup.position.set(c.x - h * 0.62, eyeY + h * 0.03, c.z + h * 0.10);
+      monitorGroup.rotation.set(0, 0.30, 0);
       monitorGroup.scale.setScalar(s);
     }
+    // STATUS: encostada à ESQUERDA do monitor (bordas quase juntas), um pouco mais
+    // à frente e mais angulada → "lado a lado com uma pequena diferença de ângulo".
     if (statusGroup) {
-      statusGroup.position.set(c.x - h * 1.42, eyeY + h * 0.11, c.z + h * 0.50);
-      statusGroup.rotation.set(0, 0.52, 0);
-      statusGroup.scale.setScalar(s * 0.92);
+      statusGroup.position.set(c.x - h * 1.52, eyeY + h * 0.07, c.z + h * 0.26);
+      statusGroup.rotation.set(0, 0.55, 0);
+      statusGroup.scale.setScalar(s);
     }
 
     // vira o corpo p/ as telas (diagonal sutil; olhos seguem o usuário via lookAt).
@@ -62,8 +63,8 @@ export class StageComposer {
     const fitH = (bs.y * 0.5) / Math.tan(fov / 2);
     const fitW = (bs.x * 0.5) / Math.tan(fov / 2) / aspect;
     const dist = Math.max(fitH, fitW) * 1.12;
-    this.controls.target.set(bc.x, bc.y + bs.y * 0.04, bc.z);           // mira ~centro (leve alto)
-    this.camera.position.set(bc.x + bs.x * 0.05, bc.y + bs.y * 0.10, bc.z + dist);  // quase nível
+    this.controls.target.set(bc.x, bc.y, bc.z);                        // mira o centro
+    this.camera.position.set(bc.x + bs.x * 0.04, bc.y + bs.y * 0.05, bc.z + dist);  // quase nível (leve 3/4)
     this.controls.minDistance = dist * 0.3;
     this.controls.maxDistance = dist * 3.5;
     this.controls.update();
