@@ -140,6 +140,10 @@ class AilaEngine:
         caps = self.agents.describe_capabilities()
         return (
             f"{base}\n\n{caps}\n\n"
+            "=== IDIOMA (OBRIGATÓRIO) ===\n"
+            "Responda SEMPRE em português do Brasil (pt-BR), mesmo que os arquivos, "
+            "o código, os comentários ou os resultados de ferramentas estejam em "
+            "inglês ou outro idioma. NUNCA troque de idioma no meio da resposta.\n\n"
             "=== COMO AGIR (MUITO IMPORTANTE) ===\n"
             "Você tem ferramentas REAIS (listadas acima) e roda no computador do "
             "usuário. Você NÃO é um assistente 'somente texto': você PESQUISA na "

@@ -5,6 +5,7 @@
 //  Fonte: GET /api/graph. Renderizador próprio (canvas, sem deps).
 // ============================================================
 import { api } from './core/api.js';
+import { pickFolderPath } from './core/folder.js';
 import { ForceGraph } from './graph/forcegraph.js';
 import { ForceGraph3D } from './graph/forcegraph3d.js';
 import { graphThumbnail } from './graph/thumbnail.js';
@@ -42,13 +43,20 @@ export function showProject(slug) {
 
 /** anexa um projeto pelo seletor NATIVO (sem depender da view do 🧠 estar aberta). */
 export async function addProject() {
-  let path = null;
-  try { if (window.aila && window.aila.pickFolder) path = await window.aila.pickFolder(); } catch (e) { /* sem Electron */ }
-  if (!path) { try { const r = await api.pickFolder(); path = r && r.path; } catch (e) { /* sem picker */ } }
-  if (!path) path = window.prompt('Caminho da pasta do projeto:');
-  if (!path || !path.trim()) return false;
-  try { await api.addProject(path.trim(), null); return true; }
-  catch (e) { window.alert('Não consegui anexar essa pasta (existe e tem código Python?).'); return false; }
+  const path = await pickFolderPath();   // cancelar = aborta (sem prompt)
+  if (!path) return false;
+  try {
+    const meta = await api.addProject(path, null);
+    if (meta && !meta.nodes) window.alert(warnEmptyGraph(meta));
+    return true;
+  } catch (e) { window.alert('Não consegui anexar essa pasta.'); return false; }
+}
+
+// aviso quando o grafo sai vazio: hoje o construtor só entende Python (ast).
+function warnEmptyGraph(meta) {
+  return `Projeto "${meta.name}" anexado, mas o grafo saiu com 0 nós — o `
+    + `construtor de código hoje mapeia só arquivos .py (Python). Front-ends `
+    + `JS/TS ainda não são mapeados (${meta.files || 0} arquivos varridos).`;
 }
 
 // roteia a view conforme o `kind`: 'project' sem projeto aberto → grade;
@@ -276,18 +284,14 @@ async function toggleWork(slug) {
 }
 
 async function addProjectFlow() {
-  // seletor NATIVO de pasta (igual ao anexar-pasta do chat): 1) Electron,
-  // 2) backend (tkinter, do fonte), 3) prompt como último recurso.
-  let path = null;
-  try { if (window.aila && window.aila.pickFolder) path = await window.aila.pickFolder(); } catch (e) {}
-  if (!path) { try { const r = await api.pickFolder(); path = r && r.path; } catch (e) {} }
-  if (!path) path = window.prompt('Caminho da pasta do projeto\n(ex.: E:\\Projetos\\meu-app):');
-  if (!path || !path.trim()) return;
+  const path = await pickFolderPath();   // nativo; cancelar = aborta (sem prompt)
+  if (!path) return;
   const add = $('mind-addproj');
   if (add) add.innerHTML = '<div class="mind-card-building">construindo grafo…</div>';
   try {
-    await api.addProject(path.trim(), null);
+    const meta = await api.addProject(path, null);
     await showGrid();
+    if (meta && !meta.nodes) window.alert(warnEmptyGraph(meta));
   } catch (e) {
     window.alert('Não consegui anexar essa pasta. Verifique se o caminho existe e tem código Python.');
     renderCards();

@@ -5,6 +5,7 @@ import { wsSend, wsReady } from './ws.js';
 import { speak } from './voice.js';
 import { renderMarkdown, enhanceCodeBlocks } from './markdown.js';
 import { api } from './core/api.js';
+import { pickFolderPath } from './core/folder.js';
 
 let aiBubble = null;
 let attached = [];
@@ -152,16 +153,7 @@ export async function attachFiles(files, onDone) {
 // (caminho absoluto); no navegador, pede o caminho. Para grafo de código de um
 // projeto, o caminho é a aba 🧠 ▸ Projetos.
 export async function attachFolder(onDone) {
-  let path = null;
-  // 1) Electron (.exe): diálogo nativo do sistema. 2) do FONTE: o backend abre o
-  // explorador nativo (tkinter). 3) último recurso: pede o caminho.
-  try { if (window.aila && window.aila.pickFolder) path = await window.aila.pickFolder(); }
-  catch (e) { /* sem bridge Electron */ }
-  if (!path) {
-    try { const r = await api.pickFolder(); path = r && r.path; } catch (e) { /* sem picker nativo */ }
-  }
-  if (!path) path = window.prompt('Caminho da pasta (a Aila lê direto do disco):');
-  path = (path || '').trim();
+  const path = await pickFolderPath();   // nativo (Electron→backend); cancelar = aborta
   if (!path) return;
   try {
     const r = await api.attachFolder(path);
