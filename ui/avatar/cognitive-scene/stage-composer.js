@@ -29,17 +29,17 @@ export class StageComposer {
 
     if (ring) ring.position.set(c.x, feetY + 0.002, c.z);
 
-    // monitor PRINCIPAL (grande): AO LADO da Aila (não na frente dela). Profundidade
-    // quase junto da Aila, deslocado p/ a esquerda.
+    // monitor PRINCIPAL (grande): totalmente à ESQUERDA da Aila (borda direita
+    // livre dela → ela não fica "em cima" da tela). Mesmo plano das duas telas.
     if (monitorGroup) {
-      monitorGroup.position.set(c.x - h * 0.78, eyeY - h * 0.04, c.z + h * 0.10);
+      monitorGroup.position.set(c.x - h * 1.18, eyeY - h * 0.04, c.z + h * 0.05);
       monitorGroup.rotation.set(0, 0.26, 0);
       monitorGroup.scale.setScalar(s);
     }
-    // STATUS: menor e COLADA à esquerda do monitor, no MESMO plano/ângulo → parece
-    // um painel contíguo (uma dashboard só, dividida em duas).
+    // STATUS: à esquerda do monitor, MESMO plano/ângulo, com um pequeno ESPAÇO
+    // (lado a lado, sem uma parecer em cima da outra na perspectiva).
     if (statusGroup) {
-      statusGroup.position.set(c.x - h * 2.05, eyeY - h * 0.04, c.z + h * 0.10);
+      statusGroup.position.set(c.x - h * 2.55, eyeY - h * 0.04, c.z + h * 0.05);
       statusGroup.rotation.set(0, 0.26, 0);
       statusGroup.scale.setScalar(s);
     }

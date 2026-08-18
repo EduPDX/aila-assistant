@@ -36,11 +36,13 @@ export class SceneManager {
     if (this._built || !this.enabled) return;
     this._built = true;
 
-    // chão: grade sutil no plano XZ + anel sob a Aila (o "palco")
-    const gh = new THREE.GridHelper(6, 24, HOLO.teal, HOLO.blue);
-    gh.material.transparent = true; gh.material.opacity = 0.12; gh.material.depthWrite = false;
+    // chão "INFINITO": grade grande + neblina escura que a faz sumir na distância
+    // (a Aila e as telas ficam PERTO da câmera → intocadas pela neblina).
+    const gh = new THREE.GridHelper(50, 100, HOLO.teal, HOLO.blue);
+    gh.material.transparent = true; gh.material.opacity = 0.11; gh.material.depthWrite = false;
     gh.position.y = 0.001;
     this.root.add(gh);
+    if (!this.scene.fog) this.scene.fog = new THREE.Fog(0x0a0e14, 7, 20);   // horizonte que desvanece
     const ringGeo = new THREE.RingGeometry(0.42, 0.46, 48);
     const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
       color: HOLO.teal, transparent: true, opacity: 0.4, side: THREE.DoubleSide,
