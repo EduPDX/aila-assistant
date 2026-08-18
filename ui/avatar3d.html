@@ -77,6 +77,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 import { AnimationController } from './avatar/animation-controller.js';
 import { AvatarDebug } from './avatar/debug.js';
+import { SceneManager } from './avatar/cognitive-scene/scene-manager.js';   // Cognitive Scene (Fase 1)
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -113,6 +114,11 @@ controls.enableDamping = true; controls.dampingFactor = 0.08;
 controls.enablePan = false;               // esquerdo = orbitar, scroll = zoom; direito = pan (abaixo)
 controls.minDistance = 0.4; controls.maxDistance = 8;
 controls.update();
+
+// Cognitive Scene (Fase 1): ambiente holográfico na MESMA scene/câmera/loop.
+// Flag localStorage 'aila.scene'='off' desliga tudo (avatar volta ao normal).
+const sceneManager = new SceneManager(scene, camera, controls);
+window.ailaScene = sceneManager;   // console: ailaScene.setEnabled(false)
 
 // enquadra o VRM inteiro (cabeça aos pés), adaptando a qualquer altura de modelo
 function frameVRM() {
@@ -265,6 +271,8 @@ function loadVRM(url) {
     try { vrm.springBoneManager?.reset?.(); } catch(e){}       // molas assentadas
     clock.getDelta();                                          // zera o dt (evita saia "explodir")
     frameVRM();
+    sceneManager.build();                                      // Cognitive Scene: chão + monitor (1x)
+    sceneManager.compose(vrm);                                 // posiciona monitor + diagonal + enquadra o palco
     $('loading').style.display = 'none';
   }, undefined, (e) => {
     $('loading').style.display = 'none';
@@ -290,6 +298,7 @@ function animate() {
   if (paused || document.hidden || _ctxLost) { clock.getDelta(); return; }   // zera o dt e sai
   const dt = Math.min(clock.getDelta(), 0.05);   // limita o dt: molas não explodem
   if (controller) controller.update(dt);          // camadas → PoseBuffer → VRM
+  sceneManager.update(dt);                         // Cognitive Scene (monitor/scanlines/anel)
   debug.update();                                 // helpers só quando ligado
   controls.update();
   renderer.render(scene, camera);
@@ -323,6 +332,7 @@ function applyVramPressure(state) {
   const ratio = vramState === 'red' ? 0.6 : vramState === 'yellow' ? 1.0 : cap;
   renderer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight);   // realoca o drawing buffer no novo ratio
+  sceneManager.setVramState(vramState);        // 🔴 esconde a cena cognitiva (prioriza o avatar)
   console.info(`[avatar] pressão de VRAM: ${vramState} → pixelRatio ${ratio.toFixed(2)}`);
 }
 
@@ -332,7 +342,7 @@ function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
-    if (m.type === 'avatar.behavior') { controller?.applyBehavior(m); $('emotion').textContent = m.emotion || 'neutral'; }
+    if (m.type === 'avatar.behavior') { controller?.applyBehavior(m); $('emotion').textContent = m.emotion || 'neutral'; sceneManager.setState(m.intent); }
     else if (m.type === 'avatar.state') applyEmotion(m.emotion, m.gesture);
     else if (m.type === 'avatar.gesture') controller?.triggerGesture(m.value);
     else if (m.type === 'aila.state') applyStatus(m.status);
@@ -350,10 +360,10 @@ addEventListener('message', (e) => {
   switch (d.type) {
     case 'aila:reloadVRM': loadVRM('/static/models/avatar.vrm?t=' + Date.now()); break;
     case 'aila:emotion':   applyEmotion(d.value, d.gesture); if (d.state) $('state').textContent = d.state; break;
-    case 'aila:behavior':  controller?.applyBehavior(d.spec); if (d.spec) $('emotion').textContent = d.spec.emotion || 'neutral'; break;
+    case 'aila:behavior':  controller?.applyBehavior(d.spec); if (d.spec) { $('emotion').textContent = d.spec.emotion || 'neutral'; sceneManager.setState(d.spec.intent); } break;
     case 'aila:status':    applyStatus(d.value); break;
-    case 'aila:show':      paused = false; clock.getDelta(); break;   // volta ao palco → retoma
-    case 'aila:hide':      paused = true; break;                       // saiu do palco → pausa render
+    case 'aila:show':      paused = false; clock.getDelta(); sceneManager.setPaused(false); break;   // volta ao palco → retoma
+    case 'aila:hide':      paused = true; sceneManager.setPaused(true); break;                       // saiu do palco → pausa render
     case 'aila:mouth':     controller?.setMouth(d.value); break;
     case 'aila:gesture':   controller?.triggerGesture(d.value); break;
     case 'aila:vram-pressure': applyVramPressure(d.state); break;
