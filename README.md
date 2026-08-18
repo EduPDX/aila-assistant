@@ -262,6 +262,20 @@ ollama serve                                  # em outro terminal
 
 Abra o endereço mostrado no terminal (porta livre a partir de `8770`).
 
+### 4. Avatar 3D (opcional)
+
+O chat, os agentes e a cognição funcionam **sem nenhum modelo de avatar** — só com o
+Ollama. O avatar 3D (VRM) **não vem no repositório** (`ui/models/` é gitignored: os
+modelos VRM têm licença própria e são grandes). Para ativá-lo:
+
+1. Baixe/exporte um avatar **`.vrm`** (ex.: gratuito no [VRoid Hub](https://hub.vroid.com/)
+   ou criado no [VRoid Studio](https://vroid.com/en/studio) — respeite a licença de cada modelo).
+2. Salve como **`ui/models/avatar.vrm`** (a pasta é criada na 1ª execução).
+3. Recarregue a página. Sem esse arquivo, a área do avatar fica vazia e o resto segue normal.
+
+As animações de gesto (`.vrma`) são opcionais e ficam em `ui/models/gestures/`; sem elas,
+a Aila usa a gesticulação procedural embutida.
+
 ## Rodar do código-fonte (`run.bat`)
 
 Para desenvolver **sem gerar `.exe`** — o jeito mais rápido de ver mudanças na hora:
