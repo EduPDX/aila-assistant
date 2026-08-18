@@ -288,9 +288,15 @@ export class ForceGraph3D {
     col.needsUpdate = true;
   }
 
+  // Pausa/retoma o loop quando a aba 🧠 fecha/abre — libera GPU+CPU (senão o 3D
+  // renderiza 884 nós no fundo pra sempre e ROUBA VRAM do avatar → trava/some).
+  pause() { this._paused = true; if (this._raf) cancelAnimationFrame(this._raf); this._raf = null; }
+  resume() { if (!this._paused && this._raf) return; this._paused = false; if (!this._raf) this._loop(); }
+
   // -------------------------------------------------------- loop
   _loop() {
     const step = () => {
+      if (this._paused) { this._raf = null; return; }   // 🧠 fechado → não renderiza
       const spin = localStorage.getItem('aila.graph.spin') === 'true';
       if (this.alpha > 0.02) { this._tick(); this.alpha *= 0.978; }
       else if (spin) { this.alpha = 0.03; this._tick(); }

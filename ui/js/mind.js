@@ -23,7 +23,12 @@ let projectList = [];        // cache dos projetos (nome/contagens p/ a grade)
 let activeProject = null;    // slug do projeto em que a Aila está "trabalhando"
 
 export function showMind(on) {
-  if (on && !built) build();
+  if (on) {
+    if (!built) build();
+    else fg?.resume?.();     // reabriu o 🧠 → retoma o render do grafo
+  } else {
+    fg?.pause?.();           // fechou o 🧠 → para o loop (libera GPU/CPU p/ o avatar)
+  }
 }
 
 /** abre já num grafo específico: 'code' (arquivos internos) | 'knowledge' (conversa) */

@@ -86,10 +86,15 @@ export class ForceGraph {
     this.t.y = this.h / 2 - (miny + gh / 2) * this.t.k;
   }
 
-  kick(a = 1) { this.alpha = Math.max(this.alpha, a); if (!this._raf) this._loop(); }
+  kick(a = 1) { if (this._paused) return; this.alpha = Math.max(this.alpha, a); if (!this._raf) this._loop(); }
+
+  // Pausa/retoma quando a aba 🧠 fecha/abre — libera CPU/GPU p/ o avatar.
+  pause() { this._paused = true; if (this._raf) cancelAnimationFrame(this._raf); this._raf = null; }
+  resume() { this._paused = false; this.kick(0.2); }
 
   _loop() {
     const step = () => {
+      if (this._paused) { this._raf = null; return; }
       let active = false;
       if (this.alpha > 0.02) { this._tick(); this.alpha *= 0.975; active = true; }
       else if (this.opts.mini) { this.alpha = 0.06; this._tick(); active = true; }  // mini nunca congela
