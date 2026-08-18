@@ -81,11 +81,27 @@ import { AvatarDebug } from './avatar/debug.js';
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const MODEL_URL = params.get('model') || '/static/models/avatar.vrm';
+let currentModelUrl = MODEL_URL;   // p/ recarregar no restore do contexto WebGL
 
 // ---------------- cena ----------------
 const renderer = new THREE.WebGLRenderer({ canvas: $('canvas'), antialias:true, alpha:true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
+
+// Recuperação de CONTEXTO WebGL: sob pressão de VRAM (ex.: Ollama carregando um
+// modelo grande enquanto a GPU renderiza o VRM), o navegador pode PERDER o
+// contexto → o avatar "some". Preventivo: pausa e, ao restaurar, recarrega o VRM.
+let _ctxLost = false;
+$('canvas').addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();                 // permite a restauração
+  _ctxLost = true;
+  console.warn('WebGL context perdido (VRAM?) — aguardando restauração.');
+}, false);
+$('canvas').addEventListener('webglcontextrestored', () => {
+  _ctxLost = false;
+  console.warn('WebGL context restaurado — recarregando o avatar.');
+  try { loadVRM(currentModelUrl); } catch (e) {}
+}, false);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(30, innerWidth/innerHeight, 0.1, 20);
@@ -229,6 +245,7 @@ function disposeVRM() {
 }
 
 function loadVRM(url) {
+  currentModelUrl = url;
   $('err').classList.remove('show');
   $('loading').style.display = 'flex';
   loader.load(url, (gltf) => {
@@ -270,7 +287,7 @@ let paused = false;   // P8: pausa quando o avatar NÃO está visível (chat/�
                       // aba está em segundo plano → não renderiza um VRM à toa.
 function animate() {
   requestAnimationFrame(animate);
-  if (paused || document.hidden) { clock.getDelta(); return; }   // zera o dt e sai
+  if (paused || document.hidden || _ctxLost) { clock.getDelta(); return; }   // zera o dt e sai
   const dt = Math.min(clock.getDelta(), 0.05);   // limita o dt: molas não explodem
   if (controller) controller.update(dt);          // camadas → PoseBuffer → VRM
   debug.update();                                 // helpers só quando ligado
