@@ -311,6 +311,21 @@ function applyStatus(status) {
   $('state').textContent = String(status).toLowerCase();
 }
 
+// VRAM Fase 2: o avatar DEGRADA sob pressão em vez de deixar o WebGL cair.
+// O framebuffer escala com pixelRatio² — cair de 2 → 0.6 corta o custo de VRAM
+// do render para ~9%. É a alavanca de VRAM real no cliente (o pai manda o estado
+// verde/amarelo/vermelho medido por nvidia-smi). Reaplica o size p/ realocar o buffer.
+let vramState = 'green';
+function applyVramPressure(state) {
+  if (state === vramState) return;
+  vramState = state || 'green';
+  const cap = Math.min(window.devicePixelRatio, 2);
+  const ratio = vramState === 'red' ? 0.6 : vramState === 'yellow' ? 1.0 : cap;
+  renderer.setPixelRatio(ratio);
+  renderer.setSize(innerWidth, innerHeight);   // realoca o drawing buffer no novo ratio
+  console.info(`[avatar] pressão de VRAM: ${vramState} → pixelRatio ${ratio.toFixed(2)}`);
+}
+
 // ---------------- Aila: WebSocket (standalone) ----------------
 let ws, ttsAudio, lipCtx, lipAnalyser, lipBuf;
 function connect() {
@@ -341,6 +356,7 @@ addEventListener('message', (e) => {
     case 'aila:hide':      paused = true; break;                       // saiu do palco → pausa render
     case 'aila:mouth':     controller?.setMouth(d.value); break;
     case 'aila:gesture':   controller?.triggerGesture(d.value); break;
+    case 'aila:vram-pressure': applyVramPressure(d.state); break;
   }
 });
 
