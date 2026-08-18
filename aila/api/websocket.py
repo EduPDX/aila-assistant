@@ -90,7 +90,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     # rodam fora do turno (só no event bus) → encaminha p/ a tela em tempo real.
     from aila.core.event_bus import bus as _bus
 
-    _FWD = ("memory.consolidated", "graph.updated", "skill.ran")
+    _FWD = ("memory.consolidated", "graph.updated", "skill.ran", "system.vram")
 
     async def _forward(event) -> None:  # noqa: ANN001
         try:

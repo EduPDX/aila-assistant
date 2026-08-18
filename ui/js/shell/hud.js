@@ -12,7 +12,6 @@ import { avatarVramPressure } from '../avatar.js';
 
 const R = 26;
 const C = 2 * Math.PI * R;
-let _lastVramState = null;   // última pressão de VRAM enviada ao avatar (evita spam)
 
 const fmtUptime = (s) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -119,11 +118,12 @@ function render(s) {
     setGauge('hud-gpu', m.gpu.util, `${Math.round(m.gpu.util)}%`);
     const vp = m.gpu.vram_total_mb ? (m.gpu.vram_used_mb / m.gpu.vram_total_mb) * 100 : 0;
     setBar('hud-vram', vp, `${(m.gpu.vram_used_mb / 1024).toFixed(1)}/${(m.gpu.vram_total_mb / 1024).toFixed(1)}G`);
-    // "dial" de VRAM: colore a barra por estado (verde/amarelo/vermelho)...
+    // "dial" de VRAM: colore a barra por estado (verde/amarelo/vermelho) e reassume
+    // o estado REAL no avatar a cada poll — assim, se o backend forçou 'red' no
+    // pré-voo da visão, o HUD restaura quando a VRAM libera. O avatar deduplica.
     const vs = m.gpu.state || 'green';
     document.getElementById('hud-vram')?.closest('.hud-bar')?.setAttribute('data-state', vs);
-    // ...e, SÓ na mudança, manda o avatar degradar o pixelRatio (Fase 2).
-    if (vs !== _lastVramState) { _lastVramState = vs; avatarVramPressure(vs); }
+    avatarVramPressure(vs);
   } else {
     setGauge('hud-gpu', 0, 'n/d');
     setBar('hud-vram', 0, 'n/d');

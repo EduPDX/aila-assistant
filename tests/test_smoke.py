@@ -2073,3 +2073,47 @@ def test_vram_measure_composes_plan(monkeypatch):
         assert plan.models_mb == 5200 and plan.models[0]["name"] == "qwen2.5:7b"
 
     asyncio.run(go())
+
+
+def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
+    """Fase 3: antes de carregar a visão (2º modelo), se a VRAM não comporta,
+    o pré-voo emite system.vram 'red' p/ encolher o avatar preventivamente."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.vision_agent import VisionAgent
+    from aila.core import event_bus, vram
+    from aila.core.config import get_settings
+
+    s = get_settings()
+    deps = AgentDeps(
+        settings=s,
+        permissions=PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl")),
+        sandbox=PathSandbox(tmp_path), llm=None,
+    )
+    va = VisionAgent(deps)
+
+    got: list = []
+
+    async def _cap(ev):
+        got.append((ev.type, ev.payload.get("state"), ev.payload.get("reason")))
+
+    event_bus.bus.subscribe("system.vram", _cap)
+
+    # headroom baixo (< VISION_HEADROOM_MB) → deve pré-encolher
+    async def _tight(self):
+        return vram.VramPlan(available=True, total_mb=8188, used_mb=6200,
+                             free_mb=2000, headroom_mb=2000, state="yellow")
+
+    monkeypatch.setattr(vram.VramPlanner, "measure", _tight)
+    asyncio.run(va._vram_preflight())
+    assert got == [("system.vram", "red", "vision-preload")]
+
+    # com folga (>= limiar) NÃO emite; sem nvidia-smi também não
+    got.clear()
+
+    async def _roomy(self):
+        return vram.VramPlan(available=True, total_mb=8188, used_mb=800,
+                             free_mb=7000, headroom_mb=7000, state="green")
+
+    monkeypatch.setattr(vram.VramPlanner, "measure", _roomy)
+    asyncio.run(va._vram_preflight())
+    assert got == []

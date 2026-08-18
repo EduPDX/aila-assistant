@@ -6,7 +6,7 @@
 //  Reações são BREVES e têm cooldown por categoria p/ o avatar não "tiquetear"
 //  (memory.recalled acontece todo turno; consolidação roda em background).
 // ============================================================
-import { avatarGesture, avatarStatus } from './avatar.js';
+import { avatarGesture, avatarStatus, avatarVramPressure } from './avatar.js';
 
 const last = {};
 function cool(key, ms) {
@@ -30,6 +30,9 @@ export function cognitiveAvatar(m) {
       break;
     case 'permission.request':                  // esperando decisão → postura atenta
       avatarStatus('LISTENING');
+      break;
+    case 'system.vram':                         // pressão de VRAM (ex.: pré-voo da visão)
+      avatarVramPressure(m.state);              // → avatar encolhe o pixelRatio na hora
       break;
   }
 }

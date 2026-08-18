@@ -33,6 +33,10 @@ log = get_logger("vram")
 YELLOW_MB = 1024   # abaixo disso, começa a apertar
 RED_MB = 384       # abaixo disso, está no limite (risco de perder o contexto WebGL)
 
+# Folga mínima para carregar um SEGUNDO modelo local (~7B, ~5 GB) sem estourar.
+# Abaixo disso, o pré-voo da visão encolhe o avatar antes do pico (Fase 3).
+VISION_HEADROOM_MB = 5000
+
 _MB = 1024 * 1024
 
 

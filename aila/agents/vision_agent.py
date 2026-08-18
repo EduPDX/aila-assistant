@@ -79,9 +79,33 @@ class VisionAgent(BaseAgent):
         ]
 
     # ------------------------------------------------------------------ #
+    async def _vram_preflight(self) -> None:
+        """VRAM Fase 3: antes de carregar o modelo de VISÃO (2º modelo ~5 GB) nos
+        8 GB, verifica se cabe. Se o headroom for baixo, encolhe o avatar
+        PREVENTIVAMENTE (libera framebuffer) e avisa — em vez de deixar o WebGL
+        cair no pico da carga (o bug 'pedi análise e o avatar sumiu'). O HUD
+        reassume o estado real em ~2 s. No-op sem nvidia-smi; nunca quebra a visão."""
+        try:
+            from aila.core.event_bus import bus
+            from aila.core.vram import VISION_HEADROOM_MB, VramPlanner
+
+            plan = await VramPlanner(self.deps.settings.llm.base_url).measure()
+            if plan.available and plan.headroom_mb < VISION_HEADROOM_MB:
+                payload = plan.to_dict()
+                payload["state"] = "red"            # encolhimento preventivo
+                payload["reason"] = "vision-preload"
+                await bus.emit("system.vram", payload, source="vision")
+                log.warning(
+                    f"VRAM apertada p/ o modelo de visão (livre {plan.headroom_mb} MB "
+                    f"< {VISION_HEADROOM_MB}); avatar reduzido preventivamente."
+                )
+        except Exception as exc:  # noqa: BLE001 - preflight jamais derruba a visão
+            log.debug(f"preflight de VRAM ignorado: {exc!r}")
+
     async def _describe(self, image_b64: str, prompt: str) -> ToolResult:
         """Envia imagem+pergunta ao modelo multimodal via Ollama."""
         messages = [{"role": "user", "content": prompt, "images": [image_b64]}]
+        await self._vram_preflight()   # abre espaço na VRAM antes de carregar a visão
         try:
             out = await self.deps.llm.complete(messages, model=self.vision_model)
         except httpx.HTTPStatusError as exc:
