@@ -32,6 +32,25 @@ export function showKind(k) {
   else { updateKindButtons(); refresh(); }
 }
 
+/** abre o grafo de um PROJETO direto (chamado pela Central de comando). */
+export function showProject(slug) {
+  currentProject = slug;
+  kind = 'project';
+  if (!built) build();           // build() → refresh() abre o projeto (kind+currentProject setados)
+  else openProject(slug);
+}
+
+/** anexa um projeto pelo seletor NATIVO (sem depender da view do 🧠 estar aberta). */
+export async function addProject() {
+  let path = null;
+  try { if (window.aila && window.aila.pickFolder) path = await window.aila.pickFolder(); } catch (e) { /* sem Electron */ }
+  if (!path) { try { const r = await api.pickFolder(); path = r && r.path; } catch (e) { /* sem picker */ } }
+  if (!path) path = window.prompt('Caminho da pasta do projeto:');
+  if (!path || !path.trim()) return false;
+  try { await api.addProject(path.trim(), null); return true; }
+  catch (e) { window.alert('Não consegui anexar essa pasta (existe e tem código Python?).'); return false; }
+}
+
 // roteia a view conforme o `kind`: 'project' sem projeto aberto → grade;
 // projeto aberto ou code/knowledge → grafo único.
 function refresh() {

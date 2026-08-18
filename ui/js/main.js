@@ -12,6 +12,7 @@ import * as voice from './voice.js';
 import { initSettings, openSettings, closeSettings, settingsTab, loadStatus, setLlm } from './settings.js';
 import { ingest } from './core/events.js';
 import { cognitiveAvatar } from './cognitive-avatar.js';
+import * as central from './central.js';
 import { humanizeTool } from './core/humanize.js';
 import { initDirector } from './core/director.js';
 import { initTopbar, refreshStatus } from './shell/topbar.js';
@@ -31,6 +32,7 @@ function showTab(t) {
   mind.showMind(t === 'mind');
   avatar.avatarShow(t === 'avatar');  // P8: só renderiza o avatar quando ele está no palco
 }
+window.showTab = showTab;   // a Central (sidebar) usa p/ trocar de aba
 
 /** abre a aba do grafo (Mente) já no grafo pedido (código | conhecimento) */
 function openGraph(kind) {
@@ -76,6 +78,9 @@ function route(m) {
     case 'session.loaded': chat.renderMessages(m.messages); State.set({ activeSession: m.id }); sidebar.loadSessions(); break;
     case 'session.changed': chat.clearChat(); State.set({ activeSession: m.id }); sidebar.loadSessions(); break;
     case 'error': chat.onSys('erro: ' + m.message); break;
+    // Central de comando: atualiza Projetos/Tarefas/Memória quando muda
+    case 'graph.updated': case 'memory.consolidated':
+    case 'task.created': case 'task.state': central.loadCentral(); break;
   }
 }
 
@@ -149,4 +154,5 @@ connectWS({
   onClose: () => { State.set({ connection: 'offline', llmOnline: false }); setLlm(false); },
 });
 sidebar.loadSessions();
+central.initCentral();   // Central de comando: Projetos/Tarefas/Memória + ações
 loadStatus();   // status de voz (uma vez); a topbar cuida do poll de /api/status
