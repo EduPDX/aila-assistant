@@ -2155,3 +2155,40 @@ def test_code_review_wraps_code_and_detects_profile(tmp_path):
         assert not r3.ok
 
     asyncio.run(go())
+
+
+def test_code_review_folder_scans_and_caps(tmp_path):
+    """code.review numa PASTA varre os .py (pulando ruído tipo .venv), respeita
+    max_files e sinaliza revisão parcial."""
+    from aila.agents.base import AgentDeps
+    from aila.agents.code_agent import CodeAgent
+    from aila.core.config import get_settings
+
+    class FakeLLM:
+        async def complete(self, messages, *, model=None, **kw):
+            return "VEREDITO: ok"
+
+    proj = tmp_path / "proj"
+    (proj / "pkg").mkdir(parents=True)
+    (proj / ".venv").mkdir()
+    (proj / "a.py").write_text("def a():\n    return 1\n")
+    (proj / "pkg" / "b.py").write_text("def b():\n    return 2\n")
+    (proj / ".venv" / "noise.py").write_text("x = 1\n")   # deve ser PULADO
+
+    s = get_settings()
+    deps = AgentDeps(
+        settings=s,
+        permissions=PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl")),
+        sandbox=PathSandbox(tmp_path), llm=FakeLLM(),
+    )
+    agent = CodeAgent(deps)
+
+    async def go():
+        r = await agent._review({"path": str(proj)})
+        assert r.ok and r.data["files_total"] == 2 and r.data["files_reviewed"] == 2
+        assert "noise" not in r.content and ".venv" not in r.content
+        # cap: só 1 dos 2 → parcial
+        r2 = await agent._review({"path": str(proj), "max_files": 1})
+        assert r2.data["files_reviewed"] == 1 and r2.data["partial"] is True
+
+    asyncio.run(go())

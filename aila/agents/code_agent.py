@@ -54,6 +54,16 @@ def _repo_resolve(rel: str) -> Path | None:
     return p if str(p).startswith(str(root)) else None
 
 
+# code.review de PASTA: pula ruído, limita tamanho/quantidade e respeita o
+# backstop de 180s do tool (orçamento de tempo → revisão parcial em vez de abortar).
+_REVIEW_SKIP_DIRS = {
+    ".venv", "venv", "env", "__pycache__", ".git", "node_modules", "build",
+    "dist", ".mypy_cache", ".ruff_cache", ".pytest_cache", "site-packages",
+}
+_REVIEW_MAX_CHARS = 16000        # por arquivo (cabe no contexto dos 8 GB)
+_REVIEW_SOFT_BUDGET_S = 150.0    # margem sob o backstop de 180s
+
+
 class CodeAgent(BaseAgent):
     name = "code"
     description = (
@@ -88,15 +98,17 @@ class CodeAgent(BaseAgent):
             Tool(
                 name="code.review",
                 description=(
-                    "REVISA um ARQUIVO a fundo (do repo da Aila OU de uma pasta de "
-                    "projeto anexada) com um checklist de revisor especializado. "
-                    "Detecta o perfil pelo arquivo (python/fastapi) e caça falhas "
-                    "silenciosas. Use para 'revisar/analisar o código de X'. "
+                    "REVISA um ARQUIVO ou uma PASTA inteira a fundo (do repo da Aila "
+                    "OU de um projeto anexado) com checklists de revisor especializado. "
+                    "Numa pasta, varre os .py e consolida (amostra os primeiros; use "
+                    "max_files p/ mais). Detecta o perfil (python/fastapi) e caça "
+                    "falhas silenciosas. Use para 'revisar/analisar o código/projeto X'. "
                     "profile opcional: python, fastapi, silent-failures, security."
                 ),
                 params=[
-                    ToolParam("path", "string", "arquivo, ex.: aila/core/engine.py"),
+                    ToolParam("path", "string", "arquivo ou pasta, ex.: aila/core/engine.py"),
                     ToolParam("profile", "string", "perfil de revisão (opcional)", required=False),
+                    ToolParam("max_files", "integer", "máx. de arquivos numa pasta (default 6)", required=False),
                 ],
                 handler=self._review,
                 agent=self.name,
@@ -247,40 +259,102 @@ class CodeAgent(BaseAgent):
         )
         return ToolResult.success(out)
 
-    async def _review(self, args: dict) -> ToolResult:
-        await self.authorize("code.review", args)      # revisão read-only → SAFE
+    def _resolve_review_path(self, rel: str) -> Path | None:
+        """Arquivo/pasta a revisar: tenta o repo da Aila; se não achar, a pasta
+        anexada (sandbox read). Serve tanto arquivo quanto diretório."""
+        p = _repo_resolve(rel)
+        if p is not None and p.exists():
+            return p
+        try:
+            p = self.deps.sandbox.resolve(rel, read=True)
+        except Exception:  # noqa: BLE001 - fora do sandbox
+            return None
+        return p if p.exists() else None
+
+    async def _review_one(self, p: Path, display: str, profile_arg: str | None) -> ToolResult:
+        """Revisa UM arquivo: detecta perfil, embrulha como DADO externo e chama o
+        modelo. Núcleo reusado pela revisão de pasta."""
         from aila.agents import review_profiles
         from aila.security.injection import wrap_external
 
-        rel = str(args.get("path", "")).strip()
-        if not rel:
-            return ToolResult.error("Informe o caminho do arquivo a revisar.")
-        # tenta o repo da Aila; se não achar, tenta pasta anexada (sandbox read)
-        p = _repo_resolve(rel)
-        if p is None or not p.is_file():
-            try:
-                p = self.deps.sandbox.resolve(rel, read=True)
-            except Exception:  # noqa: BLE001 - fora do sandbox
-                p = None
-        if p is None or not p.is_file():
-            return ToolResult.error(f"Arquivo não encontrado: {rel}")
-
         code = p.read_text(encoding="utf-8", errors="replace")
         if not code.strip():
-            return ToolResult.error(f"Arquivo vazio: {rel}")
-        clipped = code[:16000]                          # cabe no contexto dos 8 GB
-        profile = (args.get("profile") or "").strip().lower()
+            return ToolResult.error(f"Arquivo vazio: {display}")
+        clipped = code[:_REVIEW_MAX_CHARS]
+        profile = (profile_arg or "").strip().lower()
         if profile not in review_profiles.available():
-            profile = review_profiles.detect(rel, code)
+            profile = review_profiles.detect(display, code)
 
         system = review_profiles.system_prompt(profile)
         # o código é DADO externo — embrulha p/ o modelo não obedecer instruções nele
-        user = f"Arquivo: {rel} (perfil: {profile})\n\n" + wrap_external(
+        user = f"Arquivo: {display} (perfil: {profile})\n\n" + wrap_external(
             clipped, source="arquivo em revisão")
         out = await self._ask_code_model(system, user)
         return ToolResult.success(
             out, path=str(p), profile=profile,
             truncated=len(code) > len(clipped),
+        )
+
+    async def _review(self, args: dict) -> ToolResult:
+        await self.authorize("code.review", args)      # revisão read-only → SAFE
+        rel = str(args.get("path", "")).strip()
+        if not rel:
+            return ToolResult.error("Informe o caminho do arquivo ou pasta a revisar.")
+        p = self._resolve_review_path(rel)
+        if p is None:
+            return ToolResult.error(f"Caminho não encontrado: {rel}")
+        if p.is_file():
+            return await self._review_one(p, rel, args.get("profile"))
+        if p.is_dir():
+            return await self._review_dir(p, rel, args)
+        return ToolResult.error(f"Não é arquivo nem pasta: {rel}")
+
+    async def _review_dir(self, base: Path, rel: str, args: dict) -> ToolResult:
+        """Revisa uma PASTA: varre .py (pulando ruído), revisa até max_files e
+        consolida. Respeita um orçamento de tempo p/ não estourar o backstop de
+        180s — se estourar, devolve o parcial em vez de abortar."""
+        import time
+
+        files = [
+            f for f in sorted(base.rglob("*.py"))
+            if f.is_file() and not any(part in _REVIEW_SKIP_DIRS for part in f.parts)
+        ]
+        if not files:
+            return ToolResult.error(f"Nenhum arquivo .py para revisar em: {rel}")
+        try:
+            max_files = int(args.get("max_files") or 6)
+        except (TypeError, ValueError):
+            max_files = 6
+        max_files = max(1, min(max_files, 20))
+
+        start = time.monotonic()
+        sections: list[str] = []
+        reviewed = 0
+        timed_out = False
+        for f in files[:max_files]:
+            if time.monotonic() - start > _REVIEW_SOFT_BUDGET_S:
+                timed_out = True
+                break
+            try:
+                disp = str(f.relative_to(base))
+            except ValueError:
+                disp = f.name
+            r = await self._review_one(f, disp, args.get("profile"))
+            reviewed += 1
+            body = r.content.strip() if r.ok else f"(não revisado: {r.content})"
+            sections.append(f"### {disp}\n{body}")
+
+        total = len(files)
+        capped = total > max_files
+        header = f"Revisão do projeto: {reviewed} de {total} arquivos .py"
+        if capped:
+            header += f" (amostra dos {max_files} primeiros — aumente max_files)"
+        if timed_out:
+            header += " [parcial: orçamento de tempo atingido]"
+        report = header + ".\n\n" + "\n\n".join(sections)
+        return ToolResult.success(
+            report, path=str(base), files_total=total,
+            files_reviewed=reviewed, partial=bool(capped or timed_out),
         )
 
     async def _fix(self, args: dict) -> ToolResult:
