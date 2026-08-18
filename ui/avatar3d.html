@@ -367,6 +367,7 @@ addEventListener('message', (e) => {
     case 'aila:mouth':     controller?.setMouth(d.value); break;
     case 'aila:gesture':   controller?.triggerGesture(d.value); break;
     case 'aila:vram-pressure': applyVramPressure(d.state); break;
+    case 'aila:metrics':   sceneManager.setMetrics(d.payload); break;   // dados reais → tela de STATUS
   }
 });
 

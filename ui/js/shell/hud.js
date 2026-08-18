@@ -8,7 +8,7 @@
 // ============================================================
 import { State, STATUS_LABEL } from '../state.js';
 import { api } from '../core/api.js';
-import { avatarVramPressure } from '../avatar.js';
+import { avatarVramPressure, avatarMetrics } from '../avatar.js';
 
 const R = 26;
 const C = 2 * Math.PI * R;
@@ -66,6 +66,13 @@ export function initHud() {
       ${readout('hud-emotion', 'EMOÇÃO')}
     </div>`;
   stage.appendChild(el);
+
+  // Cognitive Scene ligada: os dados (GPU/CPU/VRAM/modelo/tokens) migram p/ a tela
+  // de STATUS holográfica → esconde os TRILHOS laterais (mantém só o cabeçalho).
+  if (localStorage.getItem('aila.scene') !== 'off') {
+    el.querySelector('.hud-left')?.style.setProperty('display', 'none');
+    el.querySelector('.hud-right')?.style.setProperty('display', 'none');
+  }
 
   State.on(render);
   render(State.get());
@@ -135,5 +142,8 @@ async function poll() {
   try {
     const m = await api.metrics();
     State.set({ metrics: m });
+    // encaminha os dados REAIS p/ a tela de STATUS holográfica (Cognitive Scene)
+    const s = State.get();
+    avatarMetrics({ ...m, model: s.model, network: s.networkMode, autonomy: s.autonomy, emotion: s.emotion });
   } catch (e) { /* offline: mantém últimos valores */ }
 }

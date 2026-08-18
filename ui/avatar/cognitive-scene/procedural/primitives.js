@@ -130,6 +130,17 @@ export function barMeter(count, w, h, mat) {
   return { group: g, set };
 }
 
+/** BARRA horizontal (fundo + preenchimento). set(0..1) escala o preenchimento. */
+export function hbar(w, h, fillColor = HOLO.teal, bgColor = HOLO.blue) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.PlaneGeometry(w, h), fillMat(bgColor, 0.14)));
+  const fill = new THREE.Mesh(new THREE.PlaneGeometry(w, h), glowMat(fillColor, 0.85));
+  fill.position.z = 0.001; g.add(fill);
+  const set = (v) => { const c = Math.max(0, Math.min(1, v)); fill.scale.x = c || 1e-3; fill.position.x = -w / 2 + (w * c) / 2; };
+  set(0);
+  return { group: g, set };
+}
+
 /** MINI-GRAFO de nós (pontos + arestas de vizinhança) com jitter sutil. */
 export function nodeCluster(nCount, radius, ptMat, lnMat) {
   const g = new THREE.Group();

@@ -16,3 +16,5 @@ export const avatarReload = () => toAvatar({ type: 'aila:reloadVRM' });
 export const avatarShow = (on) => toAvatar({ type: on ? 'aila:show' : 'aila:hide' });
 // VRAM Fase 2: encaminha o estado (green/yellow/red) p/ o avatar degradar o pixelRatio
 export const avatarVramPressure = (state) => toAvatar({ type: 'aila:vram-pressure', state });
+// Cognitive Scene: métricas REAIS (GPU/CPU/VRAM/modelo/tokens) → tela de STATUS
+export const avatarMetrics = (payload) => toAvatar({ type: 'aila:metrics', payload });

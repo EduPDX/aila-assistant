@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { HOLO, lineMat, disposeObject } from './procedural/primitives.js';
 import { createMonitor } from './procedural/monitor.js';
+import { createStatusPanel } from './procedural/status-panel.js';
 import { StageComposer } from './stage-composer.js';
 
 export function sceneEnabled() { return localStorage.getItem('aila.scene') !== 'off'; }
@@ -47,16 +48,23 @@ export class SceneManager {
     this.root.add(ring);
     this._ring = ring;
 
-    // monitor holográfico
+    // monitor holográfico principal (cognitivo)
     this.monitor = createMonitor({ width: 1.7, height: 0.96 });
     this.root.add(this.monitor.group);
+
+    // segunda tela: STATUS do sistema (dados reais via setMetrics)
+    this.status = createStatusPanel({ width: 0.86, height: 0.96 });
+    this.root.add(this.status.group);
   }
 
-  /** posiciona o monitor relativo ao avatar + compõe a câmera diagonal. */
+  /** posiciona as telas relativo ao avatar + compõe a câmera diagonal. */
   compose(vrm) {
     if (!this.enabled || !this._built || !vrm) return;
-    this.composer.compose(vrm, this.monitor.group, this._ring);
+    this.composer.compose(vrm, this.monitor.group, this._ring, this.status.group);
   }
+
+  /** alimenta a tela de STATUS com o snapshot real de /api/metrics (+ estado). */
+  setMetrics(m) { this.status?.setMetrics(m); }
 
   /** Fase 2 (stub): troca o conteúdo por estado. Guardado desde já. */
   setState(intent) { this.intent = intent || 'conversation'; }
@@ -74,6 +82,7 @@ export class SceneManager {
   update(dt) {
     if (!this.enabled || !this._built || this.paused || this.root.visible === false) return;
     this.monitor?.update(dt);
+    this.status?.update(dt);
     if (this._ring) this._ring.rotation.z += dt * 0.15;   // giro lento do anel
   }
 
