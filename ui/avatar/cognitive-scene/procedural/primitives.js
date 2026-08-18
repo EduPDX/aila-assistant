@@ -68,32 +68,81 @@ export function corners(w, h, L, mat) {
   return new THREE.LineSegments(g, mat);
 }
 
-/** TEXTO como plano com CanvasTexture (cacheada). Devolve {mesh, texture}.
- *  Barato: desenha 1x num canvas 2D e usa como mapa aditivo. Não recriar por frame. */
+/** TEXTO como plano com CanvasTexture (cacheada). Devolve {mesh, setText}.
+ *  Barato: desenha num canvas 2D e usa como mapa aditivo. setText redesenha só
+ *  quando o valor muda (não recriar por frame — atualizar em baixa frequência). */
 export function textPlane(text, { width = 1, px = 256, align = 'left', color = HOLO.text, size = 40, font = 'ui-monospace, monospace' } = {}) {
   const cv = document.createElement('canvas');
   const ratio = 0.25;                          // altura relativa do canvas
   cv.width = px; cv.height = Math.round(px * ratio);
   const ctx = cv.getContext('2d');
-  ctx.clearRect(0, 0, cv.width, cv.height);
-  ctx.fillStyle = color;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = align;
-  // auto-encolhe a fonte p/ o texto CABER na largura (fim do título cortado)
-  const maxW = cv.width - 16;
-  let fs = size;
-  ctx.font = `${fs}px ${font}`;
-  const w = ctx.measureText(text).width;
-  if (w > maxW) { fs = Math.max(9, Math.floor(size * maxW / w)); ctx.font = `${fs}px ${font}`; }
-  const tx = align === 'center' ? cv.width / 2 : align === 'right' ? cv.width - 8 : 8;
-  ctx.fillText(text, tx, cv.height / 2);
   const tex = new THREE.CanvasTexture(cv);
   tex.minFilter = THREE.LinearFilter;
+  const tx = align === 'center' ? cv.width / 2 : align === 'right' ? cv.width - 8 : 8;
+  const maxW = cv.width - 16;
+  let _last = null;
+  function draw(str) {
+    if (str === _last) return; _last = str;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = color; ctx.textBaseline = 'middle'; ctx.textAlign = align;
+    let fs = size; ctx.font = `${fs}px ${font}`;
+    const w = ctx.measureText(str).width;         // auto-encolhe p/ caber
+    if (w > maxW) { fs = Math.max(9, Math.floor(size * maxW / w)); ctx.font = `${fs}px ${font}`; }
+    ctx.fillText(str, tx, cv.height / 2);
+    tex.needsUpdate = true;
+  }
+  draw(text);
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-  const geo = new THREE.PlaneGeometry(width, width * ratio);
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width * ratio), mat);
   mesh.userData._tex = tex;
-  return { mesh, texture: tex, canvas: cv };
+  return { mesh, texture: tex, canvas: cv, setText: draw };
+}
+
+/** GRÁFICO DE LINHA atualizável (waveform). set(fn) reescreve os Y (0 GC). */
+export function lineGraph(w, h, n, mat) {
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = -w / 2 + (w * i) / (n - 1); }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const line = new THREE.Line(geo, mat);
+  const set = (fn) => { for (let i = 0; i < n; i++) pos[i * 3 + 1] = (fn(i / (n - 1)) - 0.5) * h; geo.attributes.position.needsUpdate = true; };
+  return { line, set, n };
+}
+
+/** MEDIDOR DE BARRAS (algumas barras verticais). set(arr 0..1) escala a altura.
+ *  Geometria compartilhada ancorada na base → escala em Y só estica pra cima. */
+export function barMeter(count, w, h, mat) {
+  const g = new THREE.Group();
+  const bw = (w / count) * 0.55;
+  const geo = new THREE.PlaneGeometry(bw, h); geo.translate(0, h / 2, 0);   // base na origem
+  const bars = [];
+  for (let i = 0; i < count; i++) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.x = -w / 2 + (i + 0.5) * (w / count);
+    m.position.y = -h / 2;
+    g.add(m); bars.push(m);
+  }
+  const set = (arr) => bars.forEach((m, i) => { m.scale.y = Math.max(0.02, arr[i] || 0); });
+  return { group: g, set };
+}
+
+/** MINI-GRAFO de nós (pontos + arestas de vizinhança) com jitter sutil. */
+export function nodeCluster(nCount, radius, ptMat, lnMat) {
+  const g = new THREE.Group();
+  const base = [];
+  for (let i = 0; i < nCount; i++) base.push(new THREE.Vector3((Math.random() - 0.5) * radius * 2, (Math.random() - 0.5) * radius * 2, 0));
+  const pgeo = new THREE.BufferGeometry().setFromPoints(base.map((v) => v.clone()));
+  const points = new THREE.Points(pgeo, ptMat);
+  const ep = [];
+  for (let i = 0; i < nCount; i++) for (let j = i + 1; j < nCount; j++) if (base[i].distanceTo(base[j]) < radius * 0.85) ep.push(base[i].x, base[i].y, 0.001, base[j].x, base[j].y, 0.001);
+  const egeo = new THREE.BufferGeometry(); egeo.setAttribute('position', new THREE.Float32BufferAttribute(ep, 3));
+  g.add(new THREE.LineSegments(egeo, lnMat)); g.add(points);
+  const a = pgeo.attributes.position;
+  const update = (t) => {
+    for (let i = 0; i < nCount; i++) a.setXY(i, base[i].x + Math.sin(t * 1.3 + i) * radius * 0.04, base[i].y + Math.cos(t * 1.1 + i * 1.7) * radius * 0.04);
+    a.needsUpdate = true;
+  };
+  return { group: g, update };
 }
 
 /** libera geometrias/materiais/texturas de um Object3D (evita vazamento). */
