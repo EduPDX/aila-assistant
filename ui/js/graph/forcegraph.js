@@ -43,8 +43,10 @@ export class ForceGraph {
     this.byId.clear();
     // cores por comunidade (ordem de count, já vem ordenada do backend)
     (data.communities || []).forEach((c, i) => this.color.set(c.id, PALETTE[i % PALETTE.length]));
+    // começa espalhado conforme o tamanho (grafo grande abre; o fit reenquadra)
+    const spread0 = Math.min(4, Math.max(1, Math.sqrt((data.nodes || []).length / 200)));
     this.nodes = (data.nodes || []).map((n) => {
-      const a = 2 * Math.PI * Math.random(), rr = Math.min(W, H) * 0.35 * Math.sqrt(Math.random());
+      const a = 2 * Math.PI * Math.random(), rr = Math.min(W, H) * 0.35 * spread0 * Math.sqrt(Math.random());
       const node = {
         ...n, x: W / 2 + Math.cos(a) * rr, y: H / 2 + Math.sin(a) * rr, vx: 0, vy: 0,
         r: Math.max(2.5, Math.min(11, 2.5 + Math.sqrt(n.degree || 0) * 1.4)),
@@ -100,7 +102,11 @@ export class ForceGraph {
       else if (this.opts.mini) { this.alpha = 0.06; this._tick(); active = true; }  // mini nunca congela
       else if (localStorage.getItem('aila.graph.spin') === 'true') { this.alpha = 0.03; this._tick(); active = true; }  // movimento contínuo
       else if (!this._fitted) { this.fit(); this._fitted = true; }   // assentou → reenquadra 1x
-      if (this.opts.mini && (((this._frame = (this._frame || 0) + 1)) % 12 === 0)) this.fit();  // mini: sempre enquadrado
+      // reenquadre CONTÍNUO enquanto anima: o grafo grande espalha muito ao
+      // assentar; sem isso a view fica desenquadrada por segundos ("não achei").
+      this._frame = (this._frame || 0) + 1;
+      if ((this.opts.mini && this._frame % 12 === 0)
+          || (!this.opts.mini && active && this._frame % 15 === 0)) this.fit();
       this.draw();
       this._raf = active ? requestAnimationFrame(step) : null;   // assentou → para (economiza CPU)
     };
@@ -111,7 +117,12 @@ export class ForceGraph {
     const nodes = this.nodes, N = nodes.length;
     if (!N) return;
     const mini = this.opts.mini;
-    const REP = 220, R = 78, SPRING = 0.06, LEN = mini ? 14 : 24, GRAV = mini ? 0.02 : 0.004,
+    // escala o layout com o tamanho: grafos grandes (~884 nós) precisam de molas
+    // MAIS LONGAS e gravidade MAIS FRACA, senão desabam num novelo no centro.
+    // spread = 1 até ~200 nós (grafos pequenos inalterados), sobe com sqrt(N) até 4.
+    const spread = mini ? 1 : Math.min(4, Math.max(1, Math.sqrt(N / 200)));
+    const REP = 220, R = 78, SPRING = 0.06, LEN = (mini ? 14 : 24) * spread,
+      GRAV = (mini ? 0.02 : 0.004) / spread,
       COMM = 0.06, DAMP = 0.85, CREP = mini ? 0 : 32000;   // mini: blob compacto, sem explodir comunidades
     const a = this.alpha;
     // grade espacial p/ repulsão local (O(n))

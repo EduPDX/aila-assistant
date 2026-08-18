@@ -56,7 +56,8 @@ export class ForceGraph3D {
       this.color.set(c.id, '#' + hex.toString(16).padStart(6, '0'));
       this._colHex.set(c.id, new THREE.Color(hex));
     });
-    const S = 260;
+    // começa já espalhado conforme o tamanho (evita solavanco inicial de colapso)
+    const S = 260 * Math.min(4, Math.max(1, Math.sqrt((data.nodes || []).length / 200)));
     this.nodes = (data.nodes || []).map((n) => ({
       ...n,
       x: (Math.random() - 0.5) * S, y: (Math.random() - 0.5) * S, z: (Math.random() - 0.5) * S,
@@ -184,7 +185,12 @@ export class ForceGraph3D {
 
   _tick() {
     const nodes = this.nodes, N = nodes.length; if (!N) return;
-    const REP = 260, R = 84, SPRING = 0.05, LEN = 26, GRAV = 0.006, COMM = 0.05, DAMP = 0.85, CREP = 2.2e5;
+    // escala com o tamanho: grafos grandes (~884 nós) precisam de molas MAIS
+    // LONGAS e gravidade MAIS FRACA p/ os 17 lóbulos ABRIREM em vez de colapsar
+    // no centro (era o "se juntando pro meio + riscos"). spread=1 até ~200 nós.
+    const spread = Math.min(4, Math.max(1, Math.sqrt(N / 200)));
+    const REP = 260, R = 84, SPRING = 0.05, LEN = 26 * spread, GRAV = 0.006 / spread,
+      COMM = 0.05, DAMP = 0.85, CREP = 2.2e5;
     const a = this.alpha, cell = R;
     const grid = new Map();
     const key = (x, y, z) => x + ',' + y + ',' + z;
