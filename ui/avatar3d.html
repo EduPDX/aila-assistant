@@ -353,7 +353,9 @@ function connect() {
     else if (m.type === 'avatar.state') applyEmotion(m.emotion, m.gesture);
     else if (m.type === 'avatar.gesture') controller?.triggerGesture(m.value);
     else if (m.type === 'aila.state') applyStatus(m.status);
-    else if (m.type === 'assistant.message' && m.text) speak(m.text);
+    else if (m.type === 'assistant.message' && m.text && !EMBEDDED) speak(m.text);  // standalone only
+    else if (m.type === 'thinking.step') sceneManager.showThinking(m.text || '...');
+    else if (m.type === 'thinking.done') sceneManager.hideThinking();
   };
   ws.onclose = () => setTimeout(connect, 2000);
 }
@@ -377,6 +379,8 @@ addEventListener('message', (e) => {
     case 'aila:metrics':   sceneManager.setMetrics(d.payload); break;   // dados reais → tela de STATUS
     case 'aila:say':       sceneManager.showMessage(d.text); break;     // resumo → balão holográfico
     case 'aila:interaction': sceneManager.interact(d.spec); break;      // {type,target} → aponta (IK)
+    case 'aila:thinking.step': sceneManager.showThinking(d.text || '...'); break;
+    case 'aila:thinking.done': sceneManager.hideThinking(); break;
   }
 });
 

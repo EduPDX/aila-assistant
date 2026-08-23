@@ -26,11 +26,11 @@ import { initBoot } from './shell/boot.js';
 function showTab(t) {
   ['avatar', 'chat', 'mind'].forEach((x) => {
     byId('pane-' + x)?.classList.toggle('active', x === t);
-    byId('tab-' + x)?.classList.toggle('active', x === t);   // abas do topo podem não existir
+    byId('tab-' + x)?.classList.toggle('active', x === t);
   });
-  document.body.dataset.tab = t;      // CSS esconde o mini-subconsciente na aba 🧠
+  document.body.dataset.tab = t;
   mind.showMind(t === 'mind');
-  avatar.avatarShow(t === 'avatar');  // P8: só renderiza o avatar quando ele está no palco
+  avatar.avatarShow(t === 'avatar');
 }
 window.showTab = showTab;   // a Central (sidebar) usa p/ trocar de aba
 

@@ -17,6 +17,7 @@ import { createInteractionManager } from './interactions/interaction-manager.js'
 import { StageComposer } from './stage-composer.js';
 import { STATE_VISUALS, DEFAULT_STATE_VISUAL } from './state-visuals.js';
 import { preloadAssets, getAsset, cloneAsset } from './scene-assets.js';
+import { createThinkingPanel } from './procedural/thinking-panel.js';
 
 // intent → âncora que a Aila aponta (Fase 3)
 const POINT_TARGET = { analysis: 'panel_analysis', coding: 'panel_analysis', reading: 'panel_analysis', search: 'panel_memory', thinking: 'panel_memory' };
@@ -78,6 +79,11 @@ export class SceneManager {
     this.message = createMessagePanel();
     this.root.add(this.message.group);
 
+    // painel de Extended Thinking: mostra passos do raciocínio em tempo real
+    this.thinking = createThinkingPanel();
+    this.thinking.group.visible = false;
+    this.root.add(this.thinking.group);
+
     // Fase 8: tenta carregar assets GLB (async, não bloqueia).
     // Se existirem, substitui os elementos procedurais por meshes.
     this._loadAssets();
@@ -115,6 +121,24 @@ export class SceneManager {
 
   /** mostra o RESUMO curto da resposta da Aila no balão holográfico (Jarvis). */
   showMessage(text) { this.message?.show(text); }
+
+  // ---- Extended Thinking ----
+  /** Mostra o painel de thinking e adiciona um passo. */
+  showThinking(stepText) {
+    if (!this.thinking) return;
+    this.thinking.show();
+    if (stepText) this.thinking.addStep(stepText);
+  }
+
+  /** Adiciona um novo passo ao thinking (sem mostrar o painel se já estiver oculto). */
+  addThinkingStep(stepText) {
+    if (this.thinking) this.thinking.addStep(stepText);
+  }
+
+  /** Esconde o painel de thinking e limpa os passos. */
+  hideThinking() {
+    if (this.thinking) { this.thinking.hide(); this.thinking.clear(); }
+  }
 
   /** Fase 2+3+6: o backend DIRIGE a cena via BehaviorSpec.
    *  `cui` pode ser:
@@ -216,6 +240,7 @@ export class SceneManager {
     this.monitor?.update(dt);
     this.status?.update(dt);
     this.message?.update(dt);
+    this.thinking?.update(dt);
     this.interactions.update(dt);
     if (this._pointCooldown > 0) this._pointCooldown -= dt;
     if (this._ring) this._ring.rotation.z += dt * this._ringSpeed;   // giro lento do anel

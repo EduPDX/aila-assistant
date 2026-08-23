@@ -83,19 +83,21 @@
         <div class="chat" id="chat">
           <div class="msg sys"><div class="bubble">Converse com a Aila — ela responde aqui e reage no avatar.</div></div>
         </div>
-        <div class="composer">
-          <div class="attachments" id="attachments"></div>
-          <div class="cbox">
-            <button class="icon-btn" id="attach" title="Anexar arquivo">📎</button>
-            <button class="icon-btn" id="attachdir" title="Anexar pasta (a Aila lê direto do disco)">📁</button>
-            <input type="file" id="attachfile" multiple style="display:none" />
-            <textarea id="input" rows="1" placeholder="Fale com a Aila…  (Enter envia)"></textarea>
-            <button class="icon-btn" id="mic" title="Falar">🎙</button>
-            <button class="icon-btn stop" id="btn-stop" title="Parar de falar">⏹</button>
-            <button class="icon-btn send" id="btn-send" title="Enviar">➤</button>
-          </div>
-        </div>
       </section>
+
+      <!-- composer: sempre visível (em cima das abas Avatar e Conversa) -->
+      <div class="composer stage-composer">
+        <div class="attachments" id="attachments"></div>
+        <div class="cbox">
+          <button class="icon-btn" id="attach" title="Anexar arquivo">📎</button>
+          <button class="icon-btn" id="attachdir" title="Anexar pasta (a Aila lê direto do disco)">📁</button>
+          <input type="file" id="attachfile" multiple style="display:none" />
+          <textarea id="input" rows="1" placeholder="Fale com a Aila…  (Enter envia)"></textarea>
+          <button class="icon-btn" id="mic" title="Falar">🎙</button>
+          <button class="icon-btn stop" id="btn-stop" title="Parar de falar">⏹</button>
+          <button class="icon-btn send" id="btn-send" title="Enviar">➤</button>
+        </div>
+      </div>
 
       <section id="pane-mind" class="pane mind">
         <div class="mind-graphwrap">
