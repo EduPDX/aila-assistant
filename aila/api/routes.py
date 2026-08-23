@@ -10,6 +10,7 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/api")
 
 _IMG_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+_MAX_UPLOAD_MB = 10   # limite de upload (MB) — previne OOM
 
 
 @router.get("/status")
@@ -290,14 +291,26 @@ async def get_config() -> dict:
 
 
 @router.patch("/config")
-async def patch_config(body: dict = Body(...)) -> dict:  # noqa: B008
+async def patch_config(request: Request, body: dict = Body(...)) -> dict:  # noqa: B008
     """Grava um patch (parcial, aninhado) no local.yaml e recarrega a config.
     A maioria dos ajustes só entra em vigor ao REINICIAR (são lidos no boot);
-    autonomia/rede têm endpoints próprios que aplicam na hora."""
+    autonomia/rede têm endpoints próprios que aplicam na hora.
+
+    SEGURANÇA: bloqueia alterações em security.read_only e autonomy_level
+    via este endpoint (usar /api/autonomy para mudar autonomia)."""
     from aila.core.config import get_settings, update_local_yaml
 
     if not isinstance(body, dict) or not body:
         raise HTTPException(status_code=400, detail="Corpo vazio ou inválido.")
+
+    # Proteção: não permitir desativar read_only ou forçar autonomia alta via patch
+    sec = body.get("security", {})
+    if isinstance(sec, dict):
+        if "read_only" in sec and sec["read_only"] is False:
+            raise HTTPException(status_code=403, detail="read_only não pode ser desativado via patch. Use /api/autonomy.")
+        if "autonomy_level" in sec:
+            raise HTTPException(status_code=403, detail="autonomy_level não pode ser alterado via patch. Use /api/autonomy.")
+
     update_local_yaml(body)
     get_settings.cache_clear()          # próxima leitura pega o novo valor
     return {"ok": True, "restart_recommended": True, "config": _redacted_config()}
@@ -491,9 +504,15 @@ async def upload(request: Request, file: UploadFile = File(...)) -> dict:
     ext = ("." + (file.filename or "img.png").rsplit(".", 1)[-1]).lower()
     if ext not in _IMG_EXT:
         raise HTTPException(status_code=400, detail=f"Extensão não suportada: {ext}")
+
+    # Limite de tamanho: previne OOM com arquivos enormes
     data = await file.read()
+    max_bytes = _MAX_UPLOAD_MB * 1024 * 1024
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=413, detail=f"Arquivo excede {_MAX_UPLOAD_MB}MB.")
     if not data:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
+
     rel = f"uploads/{int(time.time())}{ext}"
     dest = sandbox.resolve(rel)
     dest.parent.mkdir(parents=True, exist_ok=True)

@@ -136,9 +136,35 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 await session.emit("session.changed", {"id": engine.session_id})
 
             elif mtype == "session.load":
-                engine.load_session(int(data.get("id")))
-                msgs = engine.store.get_messages(engine.session_id) if engine.store else []
-                await session.emit("session.loaded", {"id": engine.session_id, "messages": msgs})
+                sid = data.get("id")
+                if sid is None:
+                    await session.emit("error", {"message": "session.load requer 'id'"})
+                else:
+                    engine.load_session(int(sid))
+                    msgs = engine.store.get_messages(engine.session_id) if engine.store else []
+                    await session.emit("session.loaded", {"id": engine.session_id, "messages": msgs})
+
+            # ---- Plan/Execute ----
+            elif mtype == "plan.approve":
+                if engine.plan_manager.approve():
+                    await session.emit("plan.approved", {"id": engine.plan_manager.active_plan.id if engine.plan_manager.active_plan else ""})
+                    # Executa em background
+                    async def _run_plan():
+                        async def _exec_tool(name, args):
+                            return await engine.agents.registry.execute(name, args)
+                        plan = engine.plan_manager.active_plan or engine.plan_manager._history[-1]
+                        await engine.plan_manager.execute(plan, _exec_tool, session.emit)
+                    task = asyncio.create_task(_run_plan())
+                    tasks.add(task)
+                    task.add_done_callback(tasks.discard)
+                else:
+                    await session.emit("error", {"message": "Nenhum plano pendente para aprovar."})
+
+            elif mtype == "plan.reject":
+                if engine.plan_manager.reject():
+                    await session.emit("plan.rejected", {})
+                else:
+                    await session.emit("error", {"message": "Nenhum plano pendente para rejeitar."})
 
             else:
                 await session.emit("error", {"message": f"tipo desconhecido: {mtype}"})

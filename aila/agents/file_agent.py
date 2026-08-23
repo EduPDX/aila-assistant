@@ -7,6 +7,8 @@ confirmação de ações destrutivas.
 
 from __future__ import annotations
 
+import fnmatch
+import re
 import shutil
 
 from aila.agents.base import AgentDeps, BaseAgent
@@ -49,6 +51,21 @@ class FileAgent(BaseAgent):
                 agent=self.name,
             ),
             Tool(
+                name="file.edit",
+                description=(
+                    "Edita um arquivo IN-PLACE: substitui old_string por new_string. "
+                    "old_string deve ser único no arquivo (se aparecer múltiplas vezes, "
+                    "a edit falha). Use para mudanças cirúrgicas sem reescrever o arquivo inteiro."
+                ),
+                params=[
+                    ToolParam("path", "string", "Caminho relativo ao workspace"),
+                    ToolParam("old_string", "string", "Texto exato a substituir (deve ser único)"),
+                    ToolParam("new_string", "string", "Novo texto (pode ser vazio para deletar)"),
+                ],
+                handler=self._edit,
+                agent=self.name,
+            ),
+            Tool(
                 name="file.list",
                 description="Lista arquivos e pastas de um diretório.",
                 params=[
@@ -67,6 +84,33 @@ class FileAgent(BaseAgent):
                     ),
                 ],
                 handler=self._search,
+                agent=self.name,
+            ),
+            Tool(
+                name="file.grep",
+                description=(
+                    "Busca por REGEX no conteúdo de arquivos (como ripgrep). "
+                    "Retorna linhas com número e nome do arquivo. Muito mais poderoso que file.search."
+                ),
+                params=[
+                    ToolParam("pattern", "string", "Regex (Python re) para buscar"),
+                    ToolParam("path", "string", "Diretório base (vazio = workspace)", required=False),
+                    ToolParam("include", "string", "Glob de arquivos (ex: *.py)", required=False),
+                ],
+                handler=self._grep,
+                agent=self.name,
+            ),
+            Tool(
+                name="file.glob",
+                description=(
+                    "Busca arquivos por padrão (glob patterns). "
+                    "Suporta ** para recursivo. Ex: **/*.py, src/**/*.ts"
+                ),
+                params=[
+                    ToolParam("pattern", "string", "Glob pattern (ex: **/*.py)"),
+                    ToolParam("path", "string", "Diretório base (vazio = workspace)", required=False),
+                ],
+                handler=self._glob,
                 agent=self.name,
             ),
             Tool(
@@ -108,6 +152,85 @@ class FileAgent(BaseAgent):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(args["content"], encoding="utf-8")
         return ToolResult.success(f"Arquivo salvo: {args['path']}", path=str(path))
+
+    async def _edit(self, args: dict) -> ToolResult:
+        """Edita um arquivo in-place: substitui old_string por new_string.
+        Se old_string aparecer 0 ou >1 vezes, a edit falha (segurança)."""
+        await self.authorize("file.write", args)
+        path = self.sandbox.resolve(args["path"])
+        if not path.is_file():
+            return ToolResult.error(f"Arquivo não encontrado: {args['path']}")
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return ToolResult.error("Arquivo não é texto UTF-8.")
+        old = args["old_string"]
+        new = args.get("new_string", "")
+        count = text.count(old)
+        if count == 0:
+            return ToolResult.error(
+                "old_string não encontrada no arquivo. "
+                "Verifique o texto exato (incluindo espaços/indentação)."
+            )
+        if count > 1:
+            return ToolResult.error(
+                f"old_string aparece {count} vezes no arquivo. "
+                "Deve ser única. Forneça mais contexto para torná-la única."
+            )
+        new_text = text.replace(old, new, 1)
+        path.write_text(new_text, encoding="utf-8")
+        # Calcula diff para feedback
+        old_lines = old.splitlines()
+        new_lines = new.splitlines()
+        return ToolResult.success(
+            f"Editado: {args['path']} ({len(old_lines)}→{len(new_lines)} linhas)",
+            path=str(path),
+        )
+
+    async def _grep(self, args: dict) -> ToolResult:
+        """Busca regex no conteúdo de arquivos (estilo ripgrep)."""
+        await self.authorize("file.search", args)
+        pattern = args["pattern"]
+        try:
+            rx = re.compile(pattern, re.IGNORECASE)
+        except re.error as e:
+            return ToolResult.error(f"Regex inválida: {e}")
+        include = args.get("include")
+        base = self.sandbox.resolve(args.get("path") or ".", read=True)
+        if not base.is_dir():
+            return ToolResult.error(f"Diretório não encontrado: {args.get('path')}")
+        hits: list[str] = []
+        for p in base.rglob("*"):
+            if not p.is_file():
+                continue
+            if include and not fnmatch.fnmatch(p.name, include):
+                continue
+            try:
+                text = p.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for i, line in enumerate(text.splitlines(), 1):
+                if rx.search(line):
+                    rel = p.relative_to(base)
+                    hits.append(f"{rel}:{i}: {line.strip()[:120]}")
+                    if len(hits) >= 100:
+                        break
+            if len(hits) >= 100:
+                break
+        return ToolResult.success("\n".join(hits) or "Nenhum resultado.", count=len(hits))
+
+    async def _glob(self, args: dict) -> ToolResult:
+        """Busca arquivos por padrão glob (suporta ** para recursivo)."""
+        await self.authorize("file.search", args)
+        pattern = args["pattern"]
+        base = self.sandbox.resolve(args.get("path") or ".", read=True)
+        if not base.is_dir():
+            return ToolResult.error(f"Diretório não encontrado: {args.get('path')}")
+        matches = sorted(str(p.relative_to(base)) for p in base.rglob("*") if p.is_file() and fnmatch.fnmatch(p.name, pattern))
+        if not matches:
+            # Tentar glob patterns com ** (rglob já faz isso)
+            matches = sorted(str(p.relative_to(base)) for p in base.rglob(pattern) if p.is_file())
+        return ToolResult.success("\n".join(matches[:200]) or "Nenhum resultado.", count=len(matches))
 
     async def _list(self, args: dict) -> ToolResult:
         await self.authorize("file.list", args)
@@ -152,6 +275,13 @@ class FileAgent(BaseAgent):
         if not path.exists():
             return ToolResult.error(f"Não existe: {args['path']}")
         if path.is_dir():
+            # Profundidade máxima: evita deletar árvores inteiras acidentalmente
+            depth = sum(1 for _ in path.rglob("*") if _.is_dir())
+            if depth > 10:
+                return ToolResult.error(
+                    f"Diretório muito profundo ({depth} subdiretórios). "
+                    "Máximo seguro: 10. Use file.move ou delete manual."
+                )
             shutil.rmtree(path)
         else:
             path.unlink()

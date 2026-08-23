@@ -26,6 +26,15 @@ class PathSandbox:
             self.read_roots.append(p)
         return p
 
+    def remove_read_root(self, path: str | Path) -> bool:
+        """Remove uma raiz de leitura (revogação). Retorna True se existia."""
+        p = Path(path).expanduser().resolve()
+        try:
+            self.read_roots.remove(p)
+            return True
+        except ValueError:
+            return False
+
     def read_bases(self) -> list[Path]:
         """Raízes onde a LEITURA é permitida (workspace + pastas anexadas)."""
         return [self.root, *self.read_roots]

@@ -111,6 +111,7 @@ class AilaEngine:
             self.consolidator = Consolidator(memory, self.kgraph, bus=self.bus, min_evidence=1)
         self._consolidating = False
         self._turns = 0
+        self._bg_tasks: set[asyncio.Task] = set()   # referências de tasks background (previne exception loss)
         self.emotions = EmotionEngine()
         # Guardrails (Fase 7): trilho de saída — redige segredos antes de
         # exibir/falar/gravar. Complementa authorize()/policy/injection.
@@ -118,6 +119,9 @@ class AilaEngine:
         # Behavior Planner: decide o comportamento do avatar pelo SIGNIFICADO
         # da resposta (emoção/postura/olhar/ritmo/gestos), antes do TTS.
         self.planner = BehaviorPlanner(self.emotions)
+        # Plan/Execute: mostra planos antes de executar tarefas complexas.
+        from aila.core.plan_manager import PlanManager
+        self.plan_manager = PlanManager()
         # Task Manager + Planner de tarefas (tarefas longas autônomas — L4+).
         self.tasks = TaskManager(self.bus)
         self.task_planner = Planner(self.router)
@@ -286,7 +290,9 @@ class AilaEngine:
                 self._consolidating = False
 
         try:
-            asyncio.create_task(_run())
+            task = asyncio.create_task(_run())
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
         except RuntimeError:           # sem event loop (ex.: testes síncronos)
             self._consolidating = False
 
@@ -340,7 +346,9 @@ class AilaEngine:
                 log.debug(f"refino de entidades falhou: {exc!r}")
 
         try:
-            asyncio.create_task(_run())
+            task = asyncio.create_task(_run())
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
         except RuntimeError:           # sem event loop (ex.: testes síncronos)
             pass
 
@@ -382,10 +390,15 @@ class AilaEngine:
 
         ``mode="auto"`` (padrão): a IA decide sozinha se usa ferramentas.
         ``mode="chat"``: força conversa pura (sem ferramentas), menor latência.
+        ``mode="plan"``: gera plano primeiro, aguarda aprovação, depois executa.
         """
         emit = self._to_bus(emit)   # cada evento vai ao cliente E ao Event Bus
         await self._avatar(emit, self.emotions.thinking().to_event_payload())
         await emit("aila.state", {"status": "THINKING"})
+
+        # ---- Plan/Execute: se mode="plan", gera plano e retorna ----
+        if mode == "plan":
+            return await self._generate_plan(user_text, emit)
 
         # Recupera memórias relevantes ANTES de adicionar a mensagem ao contexto.
         mem_block = await self._recall(user_text, emit)
@@ -425,6 +438,12 @@ class AilaEngine:
                 ):
                     if chunk.reasoning:
                         await emit("assistant.reasoning", {"text": chunk.reasoning})
+                        # Extended Thinking: mostra passos do raciocínio na cena cognitiva
+                        reasoning_text = chunk.reasoning.strip()
+                        if reasoning_text:
+                            # Pega a primeira frase como passo
+                            step = reasoning_text.split('\n')[0][:120]
+                            await emit("thinking.step", {"text": step})
                     if chunk.content:
                         collected.append(chunk.content)
                         await emit("assistant.token", {"text": chunk.content})
@@ -462,6 +481,16 @@ class AilaEngine:
             self.context._messages.append(
                 Message(role="assistant", content=text, tool_calls=_normalize_tool_args(tool_calls))
             )
+
+            # Execução PARALELA de tools independentes (Fase 9):
+            # Agrupa tools que não têm dependências e executa em concorrência.
+            # Tools de ESCRITA (file.write, file.edit, file.delete) ficam serializadas
+            # por segurança (evitar race conditions em arquivos compartilhados).
+            _WRITE_TOOLS = {"file.write", "file.edit", "file.delete", "file.move",
+                            "code.write_file", "code.execute", "memory.save"}
+            serial_batch = []   # tools de escrita (serializadas)
+            parallel_batch = []  # tools de leitura (paralelas)
+
             for call in tool_calls:
                 fn = call.get("function", {})
                 name = fn.get("name", "")
@@ -477,12 +506,34 @@ class AilaEngine:
                     continue
                 tools_used.append(name)
                 await emit("agent.invoked", {"tool": name, "args": args})
+                if name in _WRITE_TOOLS:
+                    serial_batch.append((name, args, call))
+                else:
+                    parallel_batch.append((name, args, call))
+
+            # Executa leituras em paralelo
+            if parallel_batch:
+                async def _run_tool(n, a):
+                    await emit("aila.state", {"status": _tool_status(n), "tool": n})
+                    return n, await self.agents.registry.execute(n, a)
+
+                results = await asyncio.gather(
+                    *[_run_tool(n, a) for n, a, _ in parallel_batch],
+                    return_exceptions=True,
+                )
+                for res in results:
+                    if isinstance(res, Exception):
+                        log.warning(f"tool paralela falhou: {res!r}")
+                        continue
+                    name, result = res
+                    await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
+                    self.context.add_tool(name, _safe_tool_context(name, result.content))
+
+            # Executa escritas em série
+            for name, args, _ in serial_batch:
                 await emit("aila.state", {"status": _tool_status(name), "tool": name})
                 result = await self.agents.registry.execute(name, args)
-                await emit(
-                    "agent.result",
-                    {"tool": name, "ok": result.ok, "content": result.content[:2000]},
-                )
+                await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                 self.context.add_tool(name, _safe_tool_context(name, result.content))
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
@@ -515,6 +566,7 @@ class AilaEngine:
             except Exception as exc:  # noqa: BLE001
                 log.warning(f"avatar_sink falhou: {exc!r}")
 
+        await emit("thinking.done", {})
         await emit("assistant.message", {"text": final_text})
         # gesto explícito pedido pela IA (via AvatarAgent) tem prioridade
         if self.pending_gesture:
@@ -522,6 +574,46 @@ class AilaEngine:
             self.pending_gesture = None
         await emit("aila.state", {"status": "IDLE"})
         return final_text
+
+    # ======================= Plan/Execute ============================== #
+    async def _generate_plan(self, user_text: str, emit: Emit) -> str:
+        """Gera um plano via LLM e emite para a UI aguardando aprovação."""
+        from aila.core.plan import PLAN_SYSTEM_PROMPT
+
+        # Monta contexto mínimo para o LLM gerar o plano
+        caps = self.agents.describe_capabilities()
+        msgs = [
+            {"role": "system", "content": PLAN_SYSTEM_PROMPT + "\n\n" + caps},
+            {"role": "user", "content": user_text},
+        ]
+
+        collected: list[str] = []
+        opts = {"num_ctx": self.settings.llm.num_ctx}
+        task = RouteTask(kind="chat", needs_tools=False)
+        backend = self.router.chain(task)[0]
+
+        try:
+            async for chunk in backend.chat(msgs, stream=True, tools=None, options=opts):
+                if chunk.content:
+                    collected.append(chunk.content)
+                    await emit("assistant.token", {"text": chunk.content})
+        except Exception as exc:
+            log.warning(f"geração de plano falhou: {exc!r}")
+            await emit("error", {"message": f"Falha ao gerar plano: {exc}"})
+            return ""
+
+        text = "".join(collected)
+        plan = self.plan_manager.parse_llm_response(text)
+
+        if plan is None:
+            # LLM não gerou JSON válido → cai em modo normal
+            await emit("plan.error", {"message": "Não consegui gerar um plano. Vou executar direto."})
+            return text
+
+        # Emite o plano para a UI
+        await emit("plan.created", plan.to_event_payload())
+        await emit("aila.state", {"status": "PLAN_READY"})
+        return text
 
     # ======================= tarefas longas (Fase 8) =================== #
     @staticmethod

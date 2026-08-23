@@ -360,3 +360,15 @@ class MemoryStore:
 
     def close(self) -> None:
         self.conn.close()
+
+    def __del__(self) -> None:
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()

@@ -377,10 +377,13 @@ class CodeAgent(BaseAgent):
                 "Python não encontrado no PATH deste computador. Instale o Python "
                 "(python.org) para executar código."
             )
-        path = self.deps.sandbox.resolve("_aila_run.py")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(code, encoding="utf-8")
+        import os
+        import tempfile
+        fd, tmppath = tempfile.mkstemp(suffix=".py", prefix="_aila_run_", dir=str(self.deps.sandbox.resolve(".")))
+        os.close(fd)   # fecha o fd do mkstemp (senao vaza 1 fd por execucao)
+        path = Path(tmppath)
         try:
+            path.write_text(code, encoding="utf-8")
             proc = subprocess.run(
                 [exe, str(path)],
                 capture_output=True, text=True, timeout=30,

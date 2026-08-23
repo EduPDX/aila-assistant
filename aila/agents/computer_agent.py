@@ -247,7 +247,15 @@ class ComputerAgent(BaseAgent):
         await self.authorize("computer.keyboard", args)
         if err := _need_gui():
             return err
-        pyautogui.typewrite(args["text"], interval=0.02)
+        text = args["text"]
+        # pyautogui.typewrite só suporta ASCII; para texto com acentos (pt-BR),
+        # usamos clipboard + Ctrl+V que funciona com qualquer Unicode.
+        if any(ord(c) > 127 for c in text):
+            import pyperclip
+            pyperclip.copy(text)
+            pyautogui.hotkey("ctrl", "v")
+        else:
+            pyautogui.typewrite(text, interval=0.02)
         return ToolResult.success("Texto digitado.")
 
     async def _hotkey(self, args: dict) -> ToolResult:
@@ -262,8 +270,17 @@ class ComputerAgent(BaseAgent):
 
     async def _open_app(self, args: dict) -> ToolResult:
         await self.authorize("computer.open_app", args)
-        subprocess.Popen(["cmd", "/c", "start", "", args["app"]], shell=False)
-        return ToolResult.success(f"Solicitado abrir: {args['app']}")
+        app = args["app"]
+        # CommandGuard: bloqueia apps que podem ser usados para bypass de segurança
+        # (ex.: abrir powershell/cmd diretamente ignora o filter de run_command).
+        blocked_apps = {"powershell", "pwsh", "cmd", "wt", "wsl", "bash", "sh"}
+        if app.lower().split("/")[-1].split("\\")[-1].split(".")[0] in blocked_apps:
+            return ToolResult.error(
+                f"App bloqueado pelo CommandGuard: {app}. "
+                "Use run_command() para executar comandos."
+            )
+        subprocess.Popen(["cmd", "/c", "start", "", app], shell=False)
+        return ToolResult.success(f"Solicitado abrir: {app}")
 
     async def _run_command(self, args: dict) -> ToolResult:
         command = (args.get("command") or "").strip()
