@@ -177,7 +177,9 @@ class AilaEngine:
             "reescrever o arquivo inteiro. Uma mudança de cada vez.\n"
             "3) VERIFIQUE: depois de alterar código, RODE os testes (code.test) ou o "
             "comando pertinente. Se falhar, LEIA o erro, corrija e rode de novo — "
-            "repita até passar. Não entregue sem verificar.\n"
+            "repita até passar. Não entregue sem verificar. Obs.: eu checo a SINTAXE "
+            "automaticamente após cada escrita; se vier um resultado 'auto.verify' com "
+            "❌, o arquivo ficou quebrado — corrija-o ANTES de qualquer outra coisa.\n"
             "4) Tarefa grande: faça UM passo, confira o resultado da ferramenta, e só "
             "então siga. Não tente resolver tudo numa tacada só.\n\n"
             "=== SEGURANÇA ===\n"
@@ -547,6 +549,16 @@ class AilaEngine:
                 result = await self.agents.registry.execute(name, args)
                 await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                 self.context.add_tool(name, _safe_tool_context(name, result.content))
+                # Auto-verificação (o "verifica" do loop, garantido): se acabou de
+                # escrever código/JSON, checa a sintaxe JÁ e realimenta o erro no
+                # contexto → o modelo se auto-corrige na próxima iteração, mesmo
+                # que tenha esquecido de rodar os testes.
+                if result.ok and name in _VERIFY_WRITE_TOOLS:
+                    vpath = (result.data or {}).get("path") or args.get("path")
+                    verr = await asyncio.to_thread(_auto_verify_file, vpath)
+                    if verr:
+                        await emit("agent.result", {"tool": "auto.verify", "ok": False, "content": verr})
+                        self.context.add_tool("auto.verify", verr)
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
 
@@ -697,6 +709,13 @@ class AilaEngine:
                            {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                 msgs.append({"role": "tool", "name": name,
                              "content": _safe_tool_context(name, result.content)})
+                # Auto-verificação de sintaxe (ver process()): realimenta o erro.
+                if result.ok and name in _VERIFY_WRITE_TOOLS:
+                    vpath = (result.data or {}).get("path") or args.get("path")
+                    verr = await asyncio.to_thread(_auto_verify_file, vpath)
+                    if verr:
+                        await emit("agent.result", {"tool": "auto.verify", "ok": False, "content": verr})
+                        msgs.append({"role": "tool", "name": "auto.verify", "content": verr})
         return final
 
     async def start_task(self, goal: str, emit: Emit | None = None):
@@ -822,6 +841,49 @@ def _safe_tool_context(name: str, content: str) -> str:
     if is_untrusted_source(name):
         return wrap_external(clipped, source=name)
     return clipped
+
+
+# Ferramentas de ESCRITA cujo resultado deve ser auto-verificado (sintaxe).
+_VERIFY_WRITE_TOOLS = {"file.write", "file.edit", "code.write_file"}
+
+
+def _auto_verify_file(path: str | None) -> str | None:
+    """Verificação IMEDIATA e barata de um arquivo recém-escrito.
+
+    Roda um check de SINTAXE determinístico (sem subprocess, sem rede):
+      - ``.py``   -> ``compile()``   (SyntaxError = código quebrado)
+      - ``.json`` -> ``json.loads``
+
+    Devolve uma mensagem de erro se o arquivo estiver quebrado, ou ``None`` se
+    estiver OK (ou se o tipo não for verificável / o arquivo não existir).
+    NUNCA levanta exceção — é auxiliar e jamais deve derrubar o turno.
+    """
+    if not path:
+        return None
+    from pathlib import Path
+
+    try:
+        p = Path(path)
+        suffix = p.suffix.lower()
+        if suffix not in (".py", ".json") or not p.is_file():
+            return None
+        src = p.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    try:
+        if suffix == ".py":
+            compile(src, str(p), "exec")
+        else:  # .json
+            json.loads(src)
+    except SyntaxError as e:
+        return (f"❌ VERIFICAÇÃO: sintaxe Python inválida em {p.name} "
+                f"(linha {e.lineno}): {e.msg}. Corrija com file.edit antes de continuar.")
+    except json.JSONDecodeError as e:
+        return (f"❌ VERIFICAÇÃO: JSON inválido em {p.name} "
+                f"(linha {e.lineno}): {e.msg}. Corrija antes de continuar.")
+    except ValueError as e:  # ex.: null bytes no fonte
+        return f"❌ VERIFICAÇÃO: conteúdo inválido em {p.name}: {e}. Corrija antes de continuar."
+    return None
 
 
 def _iter_json_objects(text: str) -> list[dict]:
