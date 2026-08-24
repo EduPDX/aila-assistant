@@ -2005,6 +2005,36 @@ def test_registry_tool_timeout():
     asyncio.run(go())
 
 
+def test_registry_recovery_hints():
+    """Robustez p/ modelos 7B: nome de tool errado sugere o parecido; arg
+    obrigatório ausente/vazio devolve mensagem clara em vez de KeyError opaco."""
+    from aila.tools.registry import ToolRegistry
+    from aila.tools.schema import Tool, ToolParam, ToolResult
+
+    async def h(args):
+        return ToolResult.success("ok")
+
+    reg = ToolRegistry()
+    reg.register(Tool("code.read_file", "lê", [ToolParam("path", "string", "p")], h, "code"))
+    reg.register(Tool("file.edit", "edita",
+                      [ToolParam("path", "string", "p"), ToolParam("old_string", "string", "o")], h, "file"))
+
+    async def go():
+        # nome errado → sugere um registrado parecido
+        r = await reg.execute("file.read", {"path": "a"})
+        assert not r.ok and "desconhecida" in r.content and "Você quis dizer" in r.content
+        # arg obrigatório faltando → mensagem clara (não KeyError)
+        r2 = await reg.execute("file.edit", {"path": "a"})
+        assert not r2.ok and "old_string" in r2.content and "obrigatório" in r2.content
+        # arg vazio conta como ausente
+        r3 = await reg.execute("code.read_file", {"path": ""})
+        assert not r3.ok and "path" in r3.content
+        # chamada válida passa
+        assert (await reg.execute("code.read_file", {"path": "x"})).ok
+
+    asyncio.run(go())
+
+
 def test_vram_classify_thresholds():
     """O 'dial' em degraus: verde/amarelo/vermelho pelo headroom."""
     from aila.core.vram import RED_MB, YELLOW_MB, classify
