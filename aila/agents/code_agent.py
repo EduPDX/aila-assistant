@@ -149,7 +149,10 @@ class CodeAgent(BaseAgent):
                     "erros de estilo. RÁPIDO — use depois de editar código, antes dos "
                     "testes, para pegar erros óbvios. Read-only (não altera nada)."
                 ),
-                params=[ToolParam("path", "string", "arquivo/pasta, ex.: aila/core/engine.py", required=False)],
+                params=[
+                    ToolParam("path", "string", "arquivo/pasta, ex.: aila/core/engine.py", required=False),
+                    ToolParam("select", "string", "regras ruff (ex.: 'F' só pyflakes/bugs; vazio = tudo)", required=False),
+                ],
                 handler=self._lint,
                 agent=self.name,
             ),
@@ -437,10 +440,13 @@ class CodeAgent(BaseAgent):
         target = str(args.get("path") or ".").strip()
         if _repo_resolve(target) is None:
             return ToolResult.error("Caminho fora do repositório.")
+        cmd = [exe, "-m", "ruff", "check", target, "--output-format=concise"]
+        select = str(args.get("select") or "").strip()
+        if select:
+            cmd += ["--select", select]
         try:
             proc = subprocess.run(
-                [exe, "-m", "ruff", "check", target, "--output-format=concise"],
-                cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=60,
+                cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=60,
             )
         except subprocess.TimeoutExpired:
             return ToolResult.error("Lint excedeu o tempo limite (60s).")
