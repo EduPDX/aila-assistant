@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 SAFE, REVIEW, DANGER, BLOCKED = "safe", "review", "danger", "blocked"
 
-_READ_SUFFIXES = (".read", ".list", ".search", ".get", ".info", ".analyze", ".review")
+_READ_SUFFIXES = (".read", ".list", ".search", ".get", ".info", ".analyze", ".review", ".lint")
 
 # nível MÍNIMO de autonomia por prefixo de ação (escrita). Leituras = 1 sempre.
 _MIN_AUTONOMY: list[tuple[str, int]] = [

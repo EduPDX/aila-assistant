@@ -142,6 +142,18 @@ class CodeAgent(BaseAgent):
                 agent=self.name,
             ),
             Tool(
+                name="code.lint",
+                description=(
+                    "Roda o LINTER (ruff) num arquivo/pasta do repo e devolve os "
+                    "problemas: nome indefinido, import não usado, variável não usada, "
+                    "erros de estilo. RÁPIDO — use depois de editar código, antes dos "
+                    "testes, para pegar erros óbvios. Read-only (não altera nada)."
+                ),
+                params=[ToolParam("path", "string", "arquivo/pasta, ex.: aila/core/engine.py", required=False)],
+                handler=self._lint,
+                agent=self.name,
+            ),
+            Tool(
                 name="code.read_file",
                 description="Lê um arquivo do repositório do projeto (caminho relativo à raiz).",
                 params=[ToolParam("path", "string", "ex.: aila/core/engine.py")],
@@ -417,6 +429,29 @@ class CodeAgent(BaseAgent):
             passed=passed, returncode=proc.returncode,
         )
 
+    async def _lint(self, args: dict) -> ToolResult:
+        await self.authorize("code.lint", args)   # análise read-only → SAFE (L1)
+        exe = _venv_python()
+        if not exe:
+            return ToolResult.error("Python não encontrado (venv/PATH).")
+        target = str(args.get("path") or ".").strip()
+        if _repo_resolve(target) is None:
+            return ToolResult.error("Caminho fora do repositório.")
+        try:
+            proc = subprocess.run(
+                [exe, "-m", "ruff", "check", target, "--output-format=concise"],
+                cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            return ToolResult.error("Lint excedeu o tempo limite (60s).")
+        except FileNotFoundError:
+            return ToolResult.error("ruff não instalado no venv (pip install ruff).")
+        out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        clean = proc.returncode == 0
+        if clean:
+            return ToolResult.success("✓ Sem problemas de lint.", clean=True, returncode=0)
+        return ToolResult.success(out[-4000:], clean=False, returncode=proc.returncode)
+
     async def _read_file(self, args: dict) -> ToolResult:
         await self.authorize("code.read", args)      # leitura → SAFE
         p = _repo_resolve(args["path"])
@@ -578,7 +613,8 @@ class CodeAgent(BaseAgent):
             for nid in frontier:
                 for src, _rel in store.neighbors(nid, relation="calls", direction="in"):
                     if src not in seen:
-                        seen.add(src); nxt.add(src)
+                        seen.add(src)
+                        nxt.add(src)
             frontier = nxt
             if not frontier:
                 break
