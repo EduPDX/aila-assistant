@@ -2035,6 +2035,30 @@ def test_registry_recovery_hints():
     asyncio.run(go())
 
 
+def test_looks_like_missed_toolcall():
+    """Recuperação p/ 7B: detectar quando o modelo NARROU a ação sem chamar a
+    tool (p/ dar 1 empurrão), sem incomodar respostas conversacionais/longas."""
+    from aila.core.engine import _looks_like_missed_toolcall as f
+
+    class _T:
+        def __init__(self, n): self.name = n
+
+    class _Reg:
+        def all(self): return [_T("code.map"), _T("web.search")]
+
+    r = _Reg()
+    # narrou ação → True
+    assert f("Vou ler o arquivo config.py", r)
+    assert f("Let me search the web", r)
+    assert f('{"tool": "code.read_file", "args":', r)       # json malformado
+    assert f("Vou usar code.map para começar", r)           # nomeia tool registrada
+    # conversa normal / vazio → False
+    assert not f("Claro, posso te ajudar com isso!", r)
+    assert not f("", r)
+    # resposta longa e final (mesmo com verbo+ação) → não incomoda
+    assert not f("Vou explicar como arquivos funcionam: " + "ler e escrever dados " * 20, r)
+
+
 def test_vram_classify_thresholds():
     """O 'dial' em degraus: verde/amarelo/vermelho pelo headroom."""
     from aila.core.vram import RED_MB, YELLOW_MB, classify

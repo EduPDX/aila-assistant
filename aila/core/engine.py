@@ -453,6 +453,7 @@ class AilaEngine:
         )
         # rodadas de ferramenta: configurável (Configurações ▸ Segurança). Antes
         # era fixo em 5 → "analisar o código" (ler arquivos, grep, testes) estourava.
+        nudged = 0   # empurrões p/ o modelo que "narra" a ação sem chamar a tool (máx. 1)
         for _ in range(max(MAX_TOOL_ITERS, self.settings.security.max_tool_calls)):
             collected: list[str] = []
             tool_calls: list[dict] = []
@@ -501,6 +502,22 @@ class AilaEngine:
                     text = strip_tool_call_text(text)
 
             if not tool_calls:
+                # Recuperação: o modelo DESCREVEU a ação mas não emitiu a tool-call?
+                # Dá UM empurrão (lembrete do formato) e deixa iterar de novo — em vez
+                # de encerrar o turno com a "narração" como se fosse a resposta final.
+                if (mode != "chat" and nudged < 1
+                        and _looks_like_missed_toolcall(text, self.agents.registry)):
+                    nudged += 1
+                    self.context.add_assistant(text.strip())
+                    self.context.add_tool(
+                        "system.reminder",
+                        "Você DESCREVEU a ação mas não a EXECUTOU. Para agir de verdade, "
+                        "responda com UM único objeto JSON, sozinho, sem texto em volta: "
+                        '{"tool": "<nome_exato>", "args": {...}}. '
+                        "Se já concluiu e era só uma resposta, responda normalmente, sem JSON.",
+                    )
+                    await emit("aila.state", {"status": "THINKING"})
+                    continue
                 final_text = text.strip()
                 break
 
@@ -1000,6 +1017,32 @@ def strip_tool_call_text(text: str) -> str:
     """Remove blocos de código cercados (onde o JSON da tool-call costuma vir),
     deixando só a prosa que o modelo escreveu antes/depois."""
     return re.sub(r"```[\s\S]*?```", "", text).strip()
+
+
+_INTENT_RX = re.compile(
+    r"\b(vou|vamos|deixa eu|deixe-me|preciso|irei|let me|i['’]?ll|i will|"
+    r"i['’]?m going to|i am going to|first[, ]|primeiro)\b", re.IGNORECASE)
+_ACTION_RX = re.compile(
+    r"\b(arquivo|ler|leio|abrir|escrever|editar|criar|rodar|executar|comando|"
+    r"pesquisar|buscar|grep|testar|teste|file|read|write|edit|run|execute|"
+    r"command|search|lint)\b", re.IGNORECASE)
+
+
+def _looks_like_missed_toolcall(text: str, registry: Any) -> bool:
+    """True quando o modelo NARROU uma ação (intenção de usar ferramenta) mas não
+    emitiu a tool-call — sinal p/ dar UM empurrão em vez de encerrar o turno cedo.
+    Conservador: prefere não incomodar uma resposta final legítima (só nudge 1x)."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    # 1) tentou emitir o JSON da tool-call (fragmento malformado / não casou)
+    if ('"tool"' in t or '"name"' in t or "```json" in t) and "{" in t:
+        return True
+    # 2) nomeou uma ferramenta registrada existente (nomes 'ns.acao' são distintivos)
+    if any(tool.name in t for tool in registry.all()):
+        return True
+    # 3) verbo de intenção + contexto de ação em texto CURTO (anúncio, não resposta longa)
+    return bool(len(t) <= 200 and _INTENT_RX.search(t) and _ACTION_RX.search(t))
 
 
 def _tool_status(tool_name: str) -> str:
