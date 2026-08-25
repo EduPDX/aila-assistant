@@ -44,6 +44,30 @@ def _venv_python() -> str | None:
     return _find_python()
 
 
+def _detect_test_runner(base: Path) -> tuple[list[str], str] | None:
+    """Detecta o ecossistema pela marca no diretório e devolve (comando, rótulo).
+    Devolve ``None`` p/ Python (tratado à parte, via venv/pytest). Ordem por
+    especificidade: Rust > Go > Node (só se houver script 'test' no package.json)."""
+    if (base / "Cargo.toml").is_file():
+        return (["cargo", "test"], "Rust/cargo")
+    if (base / "go.mod").is_file():
+        return (["go", "test", "./..."], "Go")
+    pkg = base / "package.json"
+    if pkg.is_file():
+        try:
+            import json as _json
+            scripts = _json.loads(pkg.read_text(encoding="utf-8")).get("scripts") or {}
+        except (OSError, ValueError):
+            scripts = {}
+        if "test" in scripts:                    # sem script 'test' → não é testável via npm
+            if (base / "pnpm-lock.yaml").is_file():
+                return (["pnpm", "test"], "Node/pnpm")
+            if (base / "yarn.lock").is_file():
+                return (["yarn", "test"], "Node/yarn")
+            return (["npm", "test", "--silent"], "Node/npm")
+    return None
+
+
 def _repo_resolve(rel: str) -> Path | None:
     """Resolve um caminho DENTRO do repositório (bloqueia escapar do PROJECT_ROOT)."""
     root = PROJECT_ROOT.resolve()
@@ -136,7 +160,11 @@ class CodeAgent(BaseAgent):
             ),
             Tool(
                 name="code.test",
-                description="Roda a suíte de testes do projeto (pytest) e devolve o resultado.",
+                description=(
+                    "Roda a suíte de testes do projeto e devolve o resultado. Detecta o "
+                    "ecossistema: pytest (Python), cargo test (Rust), go test (Go), "
+                    "npm/pnpm/yarn test (Node). path opcional = pasta do projeto/arquivo de teste."
+                ),
                 params=[ToolParam("path", "string", "arquivo/pasta de teste", required=False)],
                 handler=self._test,
                 agent=self.name,
@@ -413,22 +441,51 @@ class CodeAgent(BaseAgent):
 
     async def _test(self, args: dict) -> ToolResult:
         await self.authorize("code.test", args)   # roda a suíte (L3; sem confirmar a cada run)
-        exe = _venv_python()   # precisa do Python do projeto (com as deps)
+        path = str(args.get("path") or "").strip()
+        base = PROJECT_ROOT           # diretório onde detectar o ecossistema
+        py_target = "tests"           # alvo do pytest (arquivo/pasta)
+        if path:
+            resolved = _repo_resolve(path)
+            if resolved is None:
+                return ToolResult.error("Caminho fora do repositório.")
+            if resolved.is_dir():
+                base = resolved
+            py_target = path          # pytest aceita arquivo ou pasta
+
+        # Multi-linguagem: detecta o runner do ecossistema (Rust/Go/Node); se nada
+        # casar, cai no Python/pytest (comportamento original).
+        runner = _detect_test_runner(base)
+        if runner is not None:
+            cmd, label = runner
+            if shutil.which(cmd[0]) is None:
+                return ToolResult.error(
+                    f"'{cmd[0]}' não encontrado no PATH (necessário p/ testar projeto {label}).")
+            try:
+                proc = subprocess.run(
+                    cmd, cwd=str(base), capture_output=True, text=True, timeout=300)
+            except subprocess.TimeoutExpired:
+                return ToolResult.error(f"Testes ({label}) excederam o tempo limite (300s).")
+            out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+            passed = proc.returncode == 0
+            return ToolResult.success(
+                f"[{label}] {'✓ PASSOU' if passed else '✗ FALHOU'}\n{out[-1800:]}",
+                passed=passed, returncode=proc.returncode,
+            )
+
+        exe = _venv_python()   # Python: precisa do Python do projeto (com as deps)
         if not exe:
             return ToolResult.error("Python não encontrado (venv/PATH).")
-        target = args.get("path") or "tests"
         try:
             proc = subprocess.run(
-                [exe, "-m", "pytest", "-q", "--no-header", target],
+                [exe, "-m", "pytest", "-q", "--no-header", py_target],
                 cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=180,
             )
         except subprocess.TimeoutExpired:
             return ToolResult.error("Testes excederam o tempo limite (180s).")
         out = ((proc.stdout or "") + (proc.stderr or "")).strip()
         passed = proc.returncode == 0
-        tail = out[-1500:]
         return ToolResult.success(
-            f"{'✓ PASSOU' if passed else '✗ FALHOU'}\n{tail}",
+            f"{'✓ PASSOU' if passed else '✗ FALHOU'}\n{out[-1500:]}",
             passed=passed, returncode=proc.returncode,
         )
 

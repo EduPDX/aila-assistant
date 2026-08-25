@@ -2035,6 +2035,32 @@ def test_registry_recovery_hints():
     asyncio.run(go())
 
 
+def test_detect_test_runner(tmp_path: Path):
+    """code.test detecta o ecossistema pela marca: Rust/Go/Node; Python (e Node
+    sem script 'test') → None (cai no pytest via venv)."""
+    import json as _json
+
+    from aila.agents.code_agent import _detect_test_runner as d
+
+    def mk(sub: str, files: dict) -> Path:
+        p = tmp_path / sub
+        p.mkdir(parents=True)
+        for n, c in files.items():
+            (p / n).write_text(c, encoding="utf-8")
+        return p
+
+    assert d(mk("rust", {"Cargo.toml": "[package]"})) == (["cargo", "test"], "Rust/cargo")
+    assert d(mk("go", {"go.mod": "module x"})) == (["go", "test", "./..."], "Go")
+    assert d(mk("npm", {"package.json": _json.dumps({"scripts": {"test": "jest"}})})) \
+        == (["npm", "test", "--silent"], "Node/npm")
+    assert d(mk("pnpm", {"package.json": _json.dumps({"scripts": {"test": "v"}}),
+                         "pnpm-lock.yaml": ""})) == (["pnpm", "test"], "Node/pnpm")
+    # sem script 'test' → None (não é testável via npm)
+    assert d(mk("nb", {"package.json": _json.dumps({"scripts": {"build": "x"}})})) is None
+    # Python → None (pytest à parte)
+    assert d(mk("py", {"pyproject.toml": "[tool]"})) is None
+
+
 def test_auto_verify_multilang(tmp_path: Path):
     """Auto-verify de sintaxe escolhe o verificador pela extensão (multi-linguagem).
     In-process (py/json/toml/yaml) sempre; externos (js/go) só se a ferramenta existir."""
