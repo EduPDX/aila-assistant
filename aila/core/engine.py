@@ -466,12 +466,17 @@ class AilaEngine:
         self.context.add_user(user_text)
         self._persist("user", user_text)
 
-        tools = self.agents.registry.schemas() if mode != "chat" else None
+        # Classifica a mensagem p/ escolher o modelo CERTO de cara (sem "bounce"
+        # favorito→local que atrasa) e decidir se oferece ferramentas:
+        #   casual/cumprimento → LOCAL, rápido, SEM ferramentas
+        #   código             → cadeia 'code' (ex.: Gemini)
+        #   conversa           → cadeia 'chat' (ex.: Nvidia)
+        task, use_tools = _classify_task(user_text, mode)
+        tools = self.agents.registry.schemas() if use_tools else None
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
         # Model Router: cadeia de provedores (o 1º; os demais são fallback).
-        task = RouteTask(kind="chat", needs_tools=(mode != "chat"))
         chain = self.router.chain(task)
         backend = chain[0]
         if backend is not self.llm:
@@ -1184,6 +1189,47 @@ def _looks_like_missed_toolcall(text: str, registry: Any) -> bool:
         return True
     # 3) verbo de intenção + contexto de ação em texto CURTO (anúncio, não resposta longa)
     return bool(len(t) <= 200 and _INTENT_RX.search(t) and _ACTION_RX.search(t))
+
+
+_CASUAL_RX = re.compile(
+    r"^(oi+|ol[áa]+|e a[íi]|eae|opa|al[ôo]|hey|hi|hello|bom dia|boa tarde|boa noite|"
+    r"tudo (bem|certo|jo[ií]a|tranquilo|ok)|como (vai|voc[êe] (est[áa]|ta)|est[áa]|ta)|"
+    r"obrigad[oa]|obg|valeu|vlw|beleza|blz|de nada|tchau|at[ée] (mais|logo|breve)|"
+    r"boa|legal|massa|show|top|kk+|k?haha\w*|rs+)\b", re.IGNORECASE)
+_CODE_RX = re.compile(
+    r"(```|\b(c[óo]digo|program\w+|fun[çc][ãa]o|function|def |class |m[ée]todo|"
+    r"bug|erro|exce[çc][ãa]o|traceback|compil\w+|refator\w+|implement\w+|corrig\w+|"
+    r"depur\w+|debug|script|api\b|endpoint|reposit[óo]rio|commit|git\b|lint|"
+    r"testes?\b|pytest|npm\b|cargo\b|\.py\b|\.js\b|\.ts\b|\.go\b|\.rs\b))",
+    re.IGNORECASE)
+
+
+def _is_code_request(t: str) -> bool:
+    return bool(_CODE_RX.search(t or ""))
+
+
+def _is_casual(t: str) -> bool:
+    """Cumprimento/conversa curta e sem sinais de tarefa → tratar como 'básico'
+    (roteia p/ o modelo LOCAL, rápido, sem ferramentas)."""
+    t = (t or "").strip()
+    if not t:
+        return False
+    words = t.split()
+    if _CASUAL_RX.match(t) and len(words) <= 8:
+        return True
+    return len(words) <= 3 and not _is_code_request(t)
+
+
+def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
+    """Classifica a mensagem → (RouteTask p/ o router, oferecer_ferramentas?).
+    Faz o modelo certo ser escolhido de cara, evitando o 'bounce' favorito→local."""
+    if mode == "chat":
+        return RouteTask(kind="chat", needs_tools=False), False
+    if _is_casual(user_text):
+        # básico/casual → LOCAL (prefer_local filtra p/ só local), sem ferramentas
+        return RouteTask(kind="basic", needs_tools=False, prefer_local=True), False
+    kind = "code" if _is_code_request(user_text) else "chat"
+    return RouteTask(kind=kind, needs_tools=True), True
 
 
 def _tool_status(tool_name: str) -> str:

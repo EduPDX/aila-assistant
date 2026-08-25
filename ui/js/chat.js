@@ -81,9 +81,18 @@ export function onMessage(m) {
   // ler código gigante (Jarvis).
   if (text) {
     const summary = spokenSummary(text);
-    avatarSay(summary);                              // balão holográfico
-    if (State.get('voiceOut')) speak(summary);       // fala o RESUMO, não o textão
+    avatarSay(summary);                              // balão holográfico (mantém emoji)
+    // fala só o RESUMO e SEM emoji (senão o TTS lê "rosto sorridente" etc.)
+    if (State.get('voiceOut')) speak(stripEmoji(summary));
   }
+}
+
+/** Remove emojis/pictogramas p/ a fala (o TTS lê o NOME do emoji senão). Mantido
+ *  fora do spokenSummary pra o balão holográfico ainda mostrar o emoji. */
+function stripEmoji(t) {
+  return String(t || '')
+    .replace(/[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}‍️]/gu, ' ')
+    .replace(/\s+/g, ' ').trim();
 }
 
 /** resumo FALÁVEL: remove código/marcação e corta em ~2 frases. O completo fica

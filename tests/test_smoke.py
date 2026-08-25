@@ -2005,6 +2005,27 @@ def test_registry_tool_timeout():
     asyncio.run(go())
 
 
+def test_classify_task_routing():
+    """Classificação p/ roteamento: casual → local sem tools; código → kind=code;
+    conversa → kind=chat. Evita o 'bounce' favorito→local e o tool-spam no cumprimento."""
+    from aila.core.engine import _classify_task
+
+    for msg in ("oi", "olá como vai?", "bom dia", "obrigado!", "tudo bem?"):
+        task, use_tools = _classify_task(msg, "auto")
+        assert task.kind == "basic" and task.prefer_local and not use_tools
+
+    for msg in ("corrija o bug em engine.py", "escreva uma função de soma", "rode os testes"):
+        task, use_tools = _classify_task(msg, "auto")
+        assert task.kind == "code" and use_tools
+
+    task, use_tools = _classify_task("o que você acha sobre IA?", "auto")
+    assert task.kind == "chat" and use_tools
+    # mode chat: nunca ferramentas
+    assert _classify_task("corrija o bug", "chat") == (_classify_task("corrija o bug", "chat"))
+    _, ut = _classify_task("qualquer coisa", "chat")
+    assert ut is False
+
+
 def test_call_budget_antiloop():
     """Anti-loop: teto por-NOME pega o modelo que varia args triviamente (placeholders)
     p/ escapar do teto por-assinatura; ferramentas de leitura ficam isentas; o teto
