@@ -221,8 +221,8 @@ class CodeAgent(BaseAgent):
                 description=(
                     "Anexa uma PASTA de projeto e constrói o Code Graph dela (aparece na "
                     "aba Projetos). Use quando o usuário pedir para 'salvar o projeto', "
-                    "'adicionar aos projetos' ou analisar uma pasta a fundo. Só mapeia "
-                    "Python (.py) por enquanto. Passe o caminho da pasta."
+                    "'adicionar aos projetos' ou analisar uma pasta a fundo. Mapeia "
+                    "Python, JavaScript/TypeScript, Go e Rust. Passe o caminho da pasta."
                 ),
                 params=[
                     ToolParam("path", "string", "caminho da pasta do projeto"),

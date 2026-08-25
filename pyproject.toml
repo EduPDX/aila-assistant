@@ -33,6 +33,7 @@ computer = ["pyautogui>=0.9.54", "pygetwindow>=0.0.9", "pywin32>=306", "mss>=9.0
 voice = ["faster-whisper>=1.0", "av>=11.0", "edge-tts>=6.1"]  # STT (Whisper) + TTS neural (Edge)
 piper = ["piper-tts>=1.2"]                     # TTS neural de alta qualidade (opcional)
 vision = ["mss>=9.0"]   # captura de tela; a análise é feita pelo modelo no Ollama
+codegraph = ["tree-sitter>=0.23", "tree-sitter-language-pack>=1.0"]  # Code Graph JS/TS/Go/Rust (Python usa a stdlib)
 avatar = ["python-osc>=1.8"]   # ponte OSC para o avatar 3D no Unreal Engine
 # leitura/criação de documentos (PDF/Word/Excel/PowerPoint). Tudo local/offline.
 docs = ["pypdf>=4.0", "python-docx>=1.1", "openpyxl>=3.1", "fpdf2>=2.7", "python-pptx>=0.6"]

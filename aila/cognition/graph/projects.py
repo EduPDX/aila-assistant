@@ -132,7 +132,21 @@ class ProjectRegistry:
 
         st = GraphStore(db)
         t0 = time.time()
-        rep = CodeGraph(st, src).build()
+        rep = CodeGraph(st, src).build()                 # Python (ast) — preciso
+        files = rep.get("files", 0)
+        langs: dict[str, int] = {"python": files} if files else {}
+        # Multi-linguagem (JS/TS/Go/Rust) via tree-sitter — ADITIVO e OPCIONAL:
+        # popula o MESMO grafo; se não estiver instalado, degrada (só Python).
+        try:
+            from aila.cognition.graph.treesitter_graph import TreeSitterGraph, available
+
+            if available():
+                rep_ts = TreeSitterGraph(st, src).build()
+                files += rep_ts.get("files", 0)
+                for lang, n in (rep_ts.get("by_lang") or {}).items():
+                    langs[lang] = n
+        except Exception as exc:  # noqa: BLE001 - tree-sitter é opcional; nunca quebra o add
+            log.warning(f"grafo multi-linguagem indisponível: {exc!r}")
         st.recompute_importance()
         counts = st.counts()
         st.close()
@@ -144,7 +158,8 @@ class ProjectRegistry:
             "nodes": counts["nodes"],
             "edges": counts["edges"],
             "by_type": counts.get("by_type", {}),
-            "files": rep.get("files", 0),
+            "files": files,
+            "languages": langs,
             "built_ms": int((time.time() - t0) * 1000),
             "created_at": (existing or {}).get("created_at") or _now(),
             "updated_at": _now(),

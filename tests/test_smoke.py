@@ -2035,6 +2035,38 @@ def test_registry_recovery_hints():
     asyncio.run(go())
 
 
+def test_treesitter_graph_multilang(tmp_path: Path):
+    """Code Graph multi-linguagem: extrai module/class/function + calls de JS/Go/
+    Rust no MESMO schema do builder Python. Pulado se tree-sitter não instalado."""
+    from aila.cognition.graph.treesitter_graph import TreeSitterGraph, available
+
+    if not available():
+        import pytest
+        pytest.skip("tree-sitter não instalado (extra 'codegraph')")
+
+    from aila.cognition.graph import GraphStore
+
+    (tmp_path / "a.js").write_text(
+        "function baz(n){return 1;}\nclass Foo{bar(){return baz(1);}}\nconst g=()=>baz(2);\n",
+        encoding="utf-8")
+    (tmp_path / "s.go").write_text(
+        "package main\ntype Server struct{p int}\nfunc (s *Server) Start(){}\n", encoding="utf-8")
+
+    st = GraphStore(tmp_path / "g.db")
+    rep = TreeSitterGraph(st, tmp_path).build()
+    assert rep["errors"] == 0 and rep["files"] == 2
+    labels = {r[1] for r in st.conn.execute("SELECT type,label FROM kg_node")}
+    assert {"Foo", "baz", "g", "Server", "Start"} <= labels     # JS classe/func/arrow + Go struct/método
+    rels = {(r[0]) for r in st.conn.execute("SELECT relation FROM kg_edge")}
+    assert "defines" in rels and "calls" in rels                # bar→baz vira 'calls'
+    # método 'bar' é definido SOB a classe Foo (aresta defines aninhada)
+    method_edges = st.conn.execute(
+        "SELECT 1 FROM kg_edge WHERE relation='defines' AND source LIKE '%Foo' AND target LIKE '%Foo.bar'"
+    ).fetchall()
+    assert method_edges
+    st.close()
+
+
 def test_detect_test_runner(tmp_path: Path):
     """code.test detecta o ecossistema pela marca: Rust/Go/Node; Python (e Node
     sem script 'test') → None (cai no pytest via venv)."""
