@@ -167,7 +167,13 @@ class AilaEngine:
             "tente de novo — não desista na primeira falha.\n"
             "Use ferramentas só quando necessário: para conversa, opinião ou gerar "
             "código simples, responda direto SEM ferramenta. Nunca invente "
-            "resultados de ferramentas.\n\n"
+            "resultados de ferramentas.\n"
+            "CUMPRIMENTO / CONVERSA CASUAL (ex.: 'oi', 'olá', 'como vai', 'tudo bem?', "
+            "'bom dia'): responda em 1–2 frases, natural e simpática, SEM ferramenta "
+            "nenhuma. NÃO revise o projeto, NÃO rode git/lint/testes, NÃO pesquise na "
+            "web por conta própria — só faça isso quando o usuário PEDIR claramente uma "
+            "tarefa. Se emitir uma tool-call, emita UM único JSON e PARE (não repita a "
+            "mesma ferramenta várias vezes; se falhar, mude de abordagem ou responda).\n\n"
             "=== PROCESSO (tarefas de código/arquivos) ===\n"
             "Trabalhe como um engenheiro cuidadoso, em passos pequenos e VERIFICADOS:\n"
             "1) EXPLORE antes de mexer: use file.grep / file.glob / code.read_file / "
@@ -203,6 +209,26 @@ class AilaEngine:
         if verr:
             return verr
         return await asyncio.to_thread(_auto_lint_file, vpath)     # lint (pyflakes)
+
+    async def _finalize_without_tools(self, backend, mem_block, opts, emit) -> str:  # noqa: ANN001
+        """Encerra o turno com UMA resposta natural, SEM ferramentas — usado quando
+        o loop de tools esgotou o orçamento ou entrou em loop, p/ o usuário receber
+        uma resposta de verdade em vez de JSON cru ou uma mensagem seca."""
+        msgs = to_provider_messages(
+            self._messages_with_memory(mem_block), backend.capabilities().local)
+        msgs.append({"role": "system", "content":
+                     "PARE de usar ferramentas. Responda ao usuário AGORA, de forma "
+                     "direta, breve e natural, em português do Brasil, com base no que "
+                     "já foi feito. NÃO emita JSON nem chame ferramentas."})
+        parts: list[str] = []
+        try:
+            async for chunk in backend.chat(msgs, stream=True, tools=None, options=opts):
+                if chunk.content:
+                    parts.append(chunk.content)
+                    await emit("assistant.token", {"text": chunk.content})
+        except Exception as exc:  # noqa: BLE001 - finalização best-effort
+            log.warning(f"finalização sem ferramentas falhou: {exc!r}")
+        return "".join(parts).strip() or "Acho que me enrolei aqui. Pode reformular o pedido?"
 
     # ------------------------ sessões / persistência ------------------- #
     def ensure_session(self, title: str = "Nova conversa") -> int:
@@ -463,6 +489,7 @@ class AilaEngine:
         for _ in range(max(MAX_TOOL_ITERS, self.settings.security.max_tool_calls)):
             collected: list[str] = []
             tool_calls: list[dict] = []
+            suppress_stream = False   # a resposta virou uma tool-call em JSON? não streama
             # adapta o histórico ao provedor (externo: tool-history vira texto)
             msgs = to_provider_messages(
                 self._messages_with_memory(mem_block), backend.capabilities().local
@@ -481,7 +508,16 @@ class AilaEngine:
                             await emit("thinking.step", {"text": step})
                     if chunk.content:
                         collected.append(chunk.content)
-                        await emit("assistant.token", {"text": chunk.content})
+                        # Não vazar tool-call na tela: se a resposta começa com { / [ /
+                        # ```  ou contém "tool"/"name", é JSON de ferramenta → suprime o
+                        # streaming (o resultado real vem depois; a prosa final é emitida
+                        # no fim). Prosa normal não começa com chave, então segue streamando.
+                        if not suppress_stream:
+                            acc = "".join(collected).lstrip()
+                            if acc[:1] in "{[" or acc[:3] == "```" or '"tool"' in acc or '"name"' in acc:
+                                suppress_stream = True
+                            else:
+                                await emit("assistant.token", {"text": chunk.content})
                     if chunk.tool_calls:
                         tool_calls = chunk.tool_calls
             except Exception as exc:  # noqa: BLE001 - provedor falhou → fallback
@@ -593,6 +629,13 @@ class AilaEngine:
                 if check:
                     await emit("agent.result", {"tool": "auto.verify", "ok": False, "content": check})
                     self.context.add_tool("auto.verify", check)
+
+            # FREIO anti-loop: orçamento esgotado, OU o modelo só emitiu tools
+            # rejeitadas (nenhuma rodou) → está preso/enrolado. Encerra com UMA
+            # resposta natural (sem ferramentas) em vez de seguir streamando JSON.
+            if budget.exhausted or not (parallel_batch or serial_batch):
+                final_text = await self._finalize_without_tools(backend, mem_block, opts, emit)
+                break
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
 
@@ -748,6 +791,8 @@ class AilaEngine:
                 if check:
                     await emit("agent.result", {"tool": "auto.verify", "ok": False, "content": check})
                     msgs.append({"role": "tool", "name": "auto.verify", "content": check})
+            if budget.exhausted:        # orçamento da tarefa esgotou → encerra o passo
+                break
         return final
 
     async def start_task(self, goal: str, emit: Emit | None = None):

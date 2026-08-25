@@ -2005,6 +2005,28 @@ def test_registry_tool_timeout():
     asyncio.run(go())
 
 
+def test_call_budget_antiloop():
+    """Anti-loop: teto por-NOME pega o modelo que varia args triviamente (placeholders)
+    p/ escapar do teto por-assinatura; ferramentas de leitura ficam isentas; o teto
+    TOTAL marca `exhausted` (o engine encerra o turno)."""
+    from aila.security.limits import CallBudget
+
+    # code.fix com args sempre diferentes → trava no max_per_tool (não é 'repetível')
+    b = CallBudget(max_total=40, max_repeat=3, max_per_tool=6)
+    res = [b.check("code.fix", {"code": f"x{i}", "error": f"e{i}"}) for i in range(9)]
+    assert res[5] is None and res[6] is not None and "loop" in res[6]
+
+    # ferramenta de leitura repete à vontade (paths distintos) — não trava
+    b2 = CallBudget(max_total=40, max_repeat=3, max_per_tool=6)
+    assert all(b2.check("code.read_file", {"path": f"f{i}.py"}) is None for i in range(12))
+
+    # teto TOTAL → exhausted (sinal p/ o engine parar o loop)
+    b3 = CallBudget(max_total=5, max_repeat=99, max_per_tool=99)
+    for i in range(5):
+        assert b3.check("code.read_file", {"path": str(i)}) is None
+    assert b3.check("code.read_file", {"path": "x"}) is not None and b3.exhausted
+
+
 def test_registry_recovery_hints():
     """Robustez p/ modelos 7B: nome de tool errado sugere o parecido; arg
     obrigatório ausente/vazio devolve mensagem clara em vez de KeyError opaco."""
