@@ -172,10 +172,10 @@ class CodeAgent(BaseAgent):
             Tool(
                 name="code.lint",
                 description=(
-                    "Roda o LINTER (ruff) num arquivo/pasta do repo e devolve os "
-                    "problemas: nome indefinido, import não usado, variável não usada, "
-                    "erros de estilo. RÁPIDO — use depois de editar código, antes dos "
-                    "testes, para pegar erros óbvios. Read-only (não altera nada)."
+                    "Roda o LINTER e devolve os problemas (nome indefinido, import/"
+                    "variável não usada, etc.). Detecta o ecossistema: ruff (Python), "
+                    "go vet (Go); Rust/JS avisam p/ rodar clippy/eslint. RÁPIDO — use "
+                    "depois de editar, antes dos testes. Read-only (não altera nada)."
                 ),
                 params=[
                     ToolParam("path", "string", "arquivo/pasta, ex.: aila/core/engine.py", required=False),
@@ -491,12 +491,43 @@ class CodeAgent(BaseAgent):
 
     async def _lint(self, args: dict) -> ToolResult:
         await self.authorize("code.lint", args)   # análise read-only → SAFE (L1)
+        target = str(args.get("path") or ".").strip()
+        resolved = _repo_resolve(target)
+        if resolved is None:
+            return ToolResult.error("Caminho fora do repositório.")
+        base = resolved if resolved.is_dir() else (resolved.parent or PROJECT_ROOT)
+
+        # Fora de Python: escolhe o linter por ecossistema (só os RÁPIDOS e sem config).
+        is_python = (base.resolve() == PROJECT_ROOT.resolve()
+                     or (base / "pyproject.toml").is_file()
+                     or (base / "setup.py").is_file() or (base / "setup.cfg").is_file())
+        if not is_python:
+            if (base / "go.mod").is_file():
+                if shutil.which("go") is None:
+                    return ToolResult.error("'go' não encontrado no PATH (necessário p/ go vet).")
+                try:
+                    proc = subprocess.run(["go", "vet", "./..."], cwd=str(base),
+                                          capture_output=True, text=True, timeout=120)
+                except subprocess.TimeoutExpired:
+                    return ToolResult.error("go vet excedeu o tempo limite (120s).")
+                out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+                clean = proc.returncode == 0
+                return ToolResult.success(
+                    "✓ Sem problemas (go vet)." if clean else out[-4000:],
+                    clean=clean, returncode=proc.returncode)
+            if (base / "Cargo.toml").is_file():
+                return ToolResult.success(
+                    "Lint automático de Rust não integrado — rode `cargo clippy`. "
+                    "(A sintaxe é checada no auto-verify; os testes no code.test.)", clean=None)
+            if (base / "package.json").is_file():
+                return ToolResult.success(
+                    "Lint automático de JS/TS não integrado — rode o eslint do projeto. "
+                    "(A sintaxe JS é checada no auto-verify; os testes no code.test.)", clean=None)
+
+        # Python: ruff (com select opcional)
         exe = _venv_python()
         if not exe:
             return ToolResult.error("Python não encontrado (venv/PATH).")
-        target = str(args.get("path") or ".").strip()
-        if _repo_resolve(target) is None:
-            return ToolResult.error("Caminho fora do repositório.")
         cmd = [exe, "-m", "ruff", "check", target, "--output-format=concise"]
         select = str(args.get("select") or "").strip()
         if select:
