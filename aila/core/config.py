@@ -89,6 +89,12 @@ class LLMConfig(BaseModel):
 class ContextConfig(BaseModel):
     max_turns: int = 20
     summarize_after: int = 40
+    # Gestão de janela p/ num_ctx pequeno: fração do num_ctx (em chars ~3.5/token)
+    # gasta com o histórico de mensagens; o resto fica p/ schemas de tools + resposta.
+    window_budget_ratio: float = 0.5
+    # quantos resultados de ferramenta RECENTES manter íntegros (os antigos, já
+    # usados, são compactados p/ caber sem truncar o system prompt/plano).
+    keep_recent_tools: int = 4
 
 
 class SecurityConfig(BaseModel):

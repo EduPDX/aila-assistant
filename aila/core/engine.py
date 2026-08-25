@@ -410,7 +410,13 @@ class AilaEngine:
         if mem_block:
             # insere logo após o prompt de sistema principal
             msgs.insert(1, {"role": "system", "content": mem_block})
-        return msgs
+        # Gestão de janela: compacta resultados de tool antigos p/ caber no num_ctx
+        # (protege system/plano de ser truncado silenciosamente em turnos longos).
+        cfg = self.settings.context
+        budget = int(self.settings.llm.num_ctx * _CHARS_PER_TOKEN * cfg.window_budget_ratio)
+        return _fit_context_window(
+            msgs, budget_chars=budget, keep_recent_tools=cfg.keep_recent_tools,
+        )
 
     # ------------------------------------------------------------------ #
     async def process(self, user_text: str, emit: Emit, mode: str = "auto") -> str:
@@ -867,6 +873,42 @@ def _safe_tool_context(name: str, content: str) -> str:
     if is_untrusted_source(name):
         return wrap_external(clipped, source=name)
     return clipped
+
+
+#: chars por token (aprox. p/ pt/en/código) — só p/ estimar o orçamento da janela.
+_CHARS_PER_TOKEN = 3.5
+
+
+def _fit_context_window(
+    msgs: list[dict], *, budget_chars: int, keep_recent_tools: int, stub_min: int = 80,
+) -> list[dict]:
+    """Mantém a janela de mensagens dentro de um orçamento de caracteres, COMPACTANDO
+    os resultados de ferramenta ANTIGOS (role='tool', já usados pelo modelo) e
+    preservando system/user/assistant e os ``keep_recent_tools`` resultados mais
+    recentes. Evita que um modelo de num_ctx pequeno trunque silenciosamente o
+    system prompt/plano no meio de um turno agêntico longo.
+
+    Não muta a lista/dicts de entrada (devolve cópia quando compacta). Se ainda
+    estourar após compactar tudo que podia, devolve o melhor esforço."""
+    total = sum(len(m.get("content") or "") for m in msgs)
+    if budget_chars <= 0 or total <= budget_chars:
+        return msgs
+    tool_idx = [i for i, m in enumerate(msgs) if m.get("role") == "tool"]
+    protect = set(tool_idx[-keep_recent_tools:]) if keep_recent_tools > 0 else set()
+    out = [dict(m) for m in msgs]                     # cópia rasa (não muta entrada)
+    for i in tool_idx:                                # do mais ANTIGO p/ o recente
+        if total <= budget_chars:
+            break
+        if i in protect:
+            continue
+        content = out[i].get("content") or ""
+        if len(content) <= stub_min:
+            continue
+        name = out[i].get("name") or "tool"
+        stub = f"[resultado de {name} compactado p/ caber no contexto: {len(content)} chars omitidos]"
+        total -= len(content) - len(stub)
+        out[i]["content"] = stub
+    return out
 
 
 # Ferramentas de ESCRITA cujo resultado deve ser auto-verificado (sintaxe).

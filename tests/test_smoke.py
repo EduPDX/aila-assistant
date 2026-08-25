@@ -2035,6 +2035,37 @@ def test_registry_recovery_hints():
     asyncio.run(go())
 
 
+def test_fit_context_window():
+    """Gestão de janela: compacta resultados de tool ANTIGOS mantendo os recentes,
+    system e user — p/ num_ctx pequeno não truncar o system/plano em turno longo."""
+    import copy
+
+    from aila.core.engine import _fit_context_window as fit
+
+    msgs = [{"role": "system", "content": "S" * 500}, {"role": "user", "content": "faça X"}]
+    for k in range(6):
+        msgs.append({"role": "assistant", "content": "", "tool_calls": [{}]})
+        msgs.append({"role": "tool", "name": "code.read_file", "content": f"R{k}" + "x" * 1000})
+    orig = copy.deepcopy(msgs)
+    total = sum(len(m.get("content") or "") for m in msgs)
+
+    # sob orçamento → mesma lista (identidade, sem cópia)
+    assert fit(msgs, budget_chars=total + 10, keep_recent_tools=4) is msgs
+    # budget<=0 desliga
+    assert fit(msgs, budget_chars=0, keep_recent_tools=4) is msgs
+
+    # estoura → compacta os 2 mais antigos, mantém 4 recentes íntegros
+    r = fit(msgs, budget_chars=3500, keep_recent_tools=4)
+    tools = [m for m in r if m["role"] == "tool"]
+    compact = [m for m in tools if "compactado" in m["content"]]
+    assert len(compact) == 2                                  # só os antigos
+    assert "compactado" in r[3]["content"]                    # o mais antigo
+    assert "compactado" not in r[-1]["content"]               # o mais recente intacto
+    assert r[0]["content"] == orig[0]["content"]              # system intacto
+    assert r[1]["content"] == orig[1]["content"]              # user intacto
+    assert msgs == orig                                       # não mutou a entrada
+
+
 def test_looks_like_missed_toolcall():
     """Recuperação p/ 7B: detectar quando o modelo NARROU a ação sem chamar a
     tool (p/ dar 1 empurrão), sem incomodar respostas conversacionais/longas."""
