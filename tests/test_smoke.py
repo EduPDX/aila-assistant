@@ -2035,6 +2035,37 @@ def test_registry_recovery_hints():
     asyncio.run(go())
 
 
+def test_auto_verify_multilang(tmp_path: Path):
+    """Auto-verify de sintaxe escolhe o verificador pela extensão (multi-linguagem).
+    In-process (py/json/toml/yaml) sempre; externos (js/go) só se a ferramenta existir."""
+    import shutil
+
+    from aila.core.engine import _auto_verify_file as v
+
+    def w(name: str, content: str) -> str:
+        p = tmp_path / name
+        p.write_text(content, encoding="utf-8")
+        return str(p)
+
+    # in-process: válido → None, inválido → mensagem
+    assert v(w("a.py", "x = 1\n")) is None
+    assert v(w("b.py", "def f(:\n")) is not None
+    assert v(w("a.json", '{"x": 1}')) is None
+    assert v(w("b.json", '{"x": }')) is not None
+    assert v(w("a.toml", "x = 1\n")) is None
+    assert v(w("b.toml", "x = = 1\n")) is not None
+    assert v(w("a.yaml", "a: 1\nb:\n  - c\n")) is None
+    assert v(w("b.yaml", "a: 1\n  b: 2\n :\n- x\n")) is not None
+    # tipo não verificável / inexistente → None
+    assert v(w("c.txt", "def f(:")) is None
+    assert v(str(tmp_path / "nao_existe.py")) is None
+    assert v(None) is None
+    # externo: só valida se a ferramenta existir (degrada em silêncio)
+    if shutil.which("node"):
+        assert v(w("ok.js", "function f(){ return 1 }\n")) is None
+        assert v(w("bad.js", "function f({ return 1\n")) is not None
+
+
 def test_fit_context_window():
     """Gestão de janela: compacta resultados de tool ANTIGOS mantendo os recentes,
     system e user — p/ num_ctx pequeno não truncar o system/plano em turno longo."""

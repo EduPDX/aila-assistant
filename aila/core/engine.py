@@ -915,42 +915,96 @@ def _fit_context_window(
 _VERIFY_WRITE_TOOLS = {"file.write", "file.edit", "code.write_file"}
 
 
+def _verr(lang: str, name: str, detail: str) -> str:
+    """Mensagem padrão de falha de sintaxe (o prefixo ❌ VERIFICAÇÃO é o gancho que
+    o system prompt manda o modelo priorizar)."""
+    return (f"❌ VERIFICAÇÃO: sintaxe {lang} inválida em {name}: {detail}. "
+            "Corrija antes de continuar.")
+
+
+def _verify_external(cmd: list[str], name: str, lang: str) -> str | None:
+    """Check de sintaxe via ferramenta EXTERNA (ex.: node --check, gofmt -e).
+    Só roda se a ferramenta existir no PATH (degrada em silêncio se não). Nunca
+    levanta exceção; timeout curto p/ não travar o turno."""
+    import shutil
+    import subprocess
+
+    if shutil.which(cmd[0]) is None:      # ferramenta não instalada → não verifica
+        return None
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    if proc.returncode == 0:
+        return None
+    lines = [ln for ln in (proc.stderr or proc.stdout or "").splitlines() if ln.strip()]
+    # prefere a linha do erro real (node: 'SyntaxError: ...'); fallback: 1ª linha
+    # (gofmt: 'arq.go:2:1: expected ...'). Evita devolver só o caminho do arquivo.
+    detail = next((ln for ln in lines if "error" in ln.lower()), lines[0] if lines else "")
+    return _verr(lang, name, detail.strip()[:300] or "erro de sintaxe")
+
+
 def _auto_verify_file(path: str | None) -> str | None:
-    """Verificação IMEDIATA e barata de um arquivo recém-escrito.
+    """Verificação IMEDIATA e barata de SINTAXE de um arquivo recém-escrito,
+    escolhendo o verificador pela extensão. Multi-linguagem:
 
-    Roda um check de SINTAXE determinístico (sem subprocess, sem rede):
-      - ``.py``   -> ``compile()``   (SyntaxError = código quebrado)
-      - ``.json`` -> ``json.loads``
+    In-process (sempre disponível, instantâneo):
+      - ``.py``            -> ``compile()``
+      - ``.json``          -> ``json.loads``
+      - ``.toml``          -> ``tomllib``
+      - ``.yaml``/``.yml`` -> ``yaml.safe_load``
+    Externo (só se a ferramenta existir no PATH; degrada em silêncio):
+      - ``.js``/``.mjs``/``.cjs``/``.jsx`` -> ``node --check``
+      - ``.go``                            -> ``gofmt -e``
 
-    Devolve uma mensagem de erro se o arquivo estiver quebrado, ou ``None`` se
-    estiver OK (ou se o tipo não for verificável / o arquivo não existir).
-    NUNCA levanta exceção — é auxiliar e jamais deve derrubar o turno.
-    """
+    Devolve mensagem de erro se o arquivo estiver quebrado, ou ``None`` se OK / tipo
+    não verificável / arquivo inexistente. NUNCA levanta exceção."""
     if not path:
         return None
     from pathlib import Path
 
+    _JS = {".js", ".mjs", ".cjs", ".jsx"}
+    _INPROC = {".py", ".json", ".toml", ".yaml", ".yml"}
     try:
         p = Path(path)
         suffix = p.suffix.lower()
-        if suffix not in (".py", ".json") or not p.is_file():
+        if suffix not in _INPROC and suffix not in _JS and suffix != ".go":
             return None
+        if not p.is_file():
+            return None
+    except (OSError, ValueError):
+        return None
+
+    # --- verificadores EXTERNOS (não precisam ler o arquivo aqui) ---
+    if suffix in _JS:
+        return _verify_external(["node", "--check", str(p)], p.name, "JavaScript")
+    if suffix == ".go":
+        return _verify_external(["gofmt", "-e", str(p)], p.name, "Go")
+
+    # --- verificadores IN-PROCESS ---
+    try:
         src = p.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError, ValueError):
         return None
     try:
         if suffix == ".py":
             compile(src, str(p), "exec")
-        else:  # .json
+        elif suffix == ".json":
             json.loads(src)
+        elif suffix == ".toml":
+            import tomllib
+            tomllib.loads(src)
+        else:  # .yaml / .yml
+            import yaml
+            yaml.safe_load(src)
     except SyntaxError as e:
-        return (f"❌ VERIFICAÇÃO: sintaxe Python inválida em {p.name} "
-                f"(linha {e.lineno}): {e.msg}. Corrija com file.edit antes de continuar.")
+        return _verr("Python", p.name, f"linha {e.lineno}: {e.msg}")
     except json.JSONDecodeError as e:
-        return (f"❌ VERIFICAÇÃO: JSON inválido em {p.name} "
-                f"(linha {e.lineno}): {e.msg}. Corrija antes de continuar.")
-    except ValueError as e:  # ex.: null bytes no fonte
-        return f"❌ VERIFICAÇÃO: conteúdo inválido em {p.name}: {e}. Corrija antes de continuar."
+        return _verr("JSON", p.name, f"linha {e.lineno}: {e.msg}")
+    except ValueError as e:  # tomllib.TOMLDecodeError herda de ValueError; null bytes
+        return _verr(suffix.lstrip(".").upper() or "arquivo", p.name, str(e)[:200])
+    except Exception as e:  # noqa: BLE001 - yaml.YAMLError etc.; verificação nunca derruba
+        return _verr(suffix.lstrip(".").upper() or "arquivo", p.name, str(e).splitlines()[0][:200])
     return None
 
 
