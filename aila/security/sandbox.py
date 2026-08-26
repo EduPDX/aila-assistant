@@ -83,12 +83,33 @@ class PathSandbox:
     def _within(resolved: Path, base: Path) -> bool:
         return resolved == base or base in resolved.parents
 
+    @staticmethod
+    def _apply_alias(path_str: str) -> str:
+        """Mapeia apelidos no INÍCIO de um caminho relativo p/ a pasta real do
+        usuário (Documents/Documentos/Desktop/Downloads). Ajuda o modelo 7B, que
+        erra o caminho absoluto e escreve 'Documentos/x.py' (nome nem existe: é
+        'Documents'). Sem apelido, devolve o caminho como veio."""
+        parts = Path(path_str).parts
+        if not parts:
+            return path_str
+        home = Path.home()
+        aliases = {
+            "documents": home / "Documents", "documentos": home / "Documents",
+            "documento": home / "Documents",
+            "desktop": home / "Desktop", "downloads": home / "Downloads",
+            "download": home / "Downloads",
+        }
+        target = aliases.get(parts[0].lower().strip())
+        return str(target.joinpath(*parts[1:])) if target else path_str
+
     def resolve(self, path: str | Path, *, read: bool = False) -> Path:
-        """Resolve ``path`` e valida o confinamento. Escrita (``read=False``) só
-        no workspace; leitura (``read=True``) também nas pastas anexadas pelo
-        usuário. Aceita caminho relativo (à raiz) ou absoluto.
+        """Resolve ``path`` e valida o confinamento. Escrita (``read=False``) no
+        workspace + write_roots; leitura (``read=True``) também nas pastas
+        anexadas. Aceita relativo, absoluto, ou apelido (Documents/Desktop/…).
         """
         candidate = Path(path)
+        if not candidate.is_absolute():
+            candidate = Path(self._apply_alias(str(path)))     # Documents/… → pasta real
         if not candidate.is_absolute():
             candidate = self.root / candidate
         resolved = candidate.resolve()

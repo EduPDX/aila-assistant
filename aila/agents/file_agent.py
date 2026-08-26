@@ -171,7 +171,9 @@ class FileAgent(BaseAgent):
         await self.authorize(action, args)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(args["content"], encoding="utf-8")
-        return ToolResult.success(f"Arquivo salvo: {args['path']}", path=str(path))
+        # devolve o caminho ABSOLUTO real (o modelo relata onde salvou de fato)
+        return ToolResult.success(
+            f"Arquivo salvo em: {path} ({len(args['content'])} bytes)", path=str(path))
 
     async def _edit(self, args: dict) -> ToolResult:
         """Edita um arquivo in-place: substitui old_string por new_string.

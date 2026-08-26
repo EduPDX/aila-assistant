@@ -2005,6 +2005,21 @@ def test_registry_tool_timeout():
     asyncio.run(go())
 
 
+def test_sandbox_folder_aliases(tmp_path: Path):
+    """Apelidos de pasta (Documents/Documentos/Desktop/Downloads) no início de um
+    caminho relativo → pasta REAL do usuário (o 7B erra o caminho absoluto)."""
+    from aila.security.sandbox import PathSandbox
+
+    home = Path.home()
+    sb = PathSandbox(tmp_path / "ws")
+    sb.add_write_root(str(home))                       # como o default amplo
+    assert sb.resolve("Documentos/jogo.py") == home / "Documents" / "jogo.py"
+    assert sb.resolve("Documents/jogo.py") == home / "Documents" / "jogo.py"
+    assert sb.resolve("Desktop/a.txt") == home / "Desktop" / "a.txt"
+    # nome comum NÃO é apelido → relativo ao workspace
+    assert sb.resolve("src/x.py") == (tmp_path / "ws" / "src" / "x.py")
+
+
 def test_sandbox_protected_paths(tmp_path: Path):
     """Com acesso amplo (home + drives), caminhos de sistema/credenciais seguem
     BLOQUEADOS p/ escrita — a menos que um write_root explícito esteja lá dentro."""
