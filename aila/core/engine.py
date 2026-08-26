@@ -592,9 +592,11 @@ class AilaEngine:
         backend = chain[0]
         # SEMPRE mostra qual modelo está atendendo (inclusive o local) — o usuário
         # vê na lista de atividades se foi local/nvidia/gemini e qual modelo.
+        _fast = (self.settings.llm.fast_model or "").strip()
         await emit("model.selected", {
             "provider": backend.name,
-            "model": getattr(backend, "default_model", "") or "",
+            "model": (_fast if (task.kind == "basic" and _fast and backend.capabilities().local)
+                      else getattr(backend, "default_model", "") or ""),
         })
         final_text = ""
         failed: set = set()   # provedores que JÁ falharam neste turno (não voltar → sem ping-pong)
@@ -620,9 +622,14 @@ class AilaEngine:
                 ),
                 backend.capabilities().local,
             )
+            # papo casual num backend LOCAL → modelo pequeno/rápido (se configurado):
+            # resposta e gesto quase imediatos, sem ocupar a VRAM do modelo grande.
+            fast = (self.settings.llm.fast_model or "").strip()
+            turn_model = (fast if (task.kind == "basic" and fast
+                                   and backend.capabilities().local) else None)
             try:
                 async for chunk in backend.chat(
-                    msgs, stream=True, tools=tools, options=opts,
+                    msgs, stream=True, tools=tools, options=opts, model=turn_model,
                 ):
                     if chunk.reasoning:
                         await emit("assistant.reasoning", {"text": chunk.reasoning})

@@ -81,6 +81,9 @@ class LLMConfig(BaseModel):
     base_url: str = "http://127.0.0.1:11434"
     model: str = "qwen2.5:7b-instruct"
     code_model: str = "deepseek-coder:6.7b"
+    # modelo PEQUENO p/ conversa casual/gestos (resposta quase imediata).
+    # Vazio = usa `model`. Deve estar instalado no Ollama.
+    fast_model: str = ""
     vision_model: str = "llava:7b"
     temperature: float = 0.7
     max_tokens: int = 2048

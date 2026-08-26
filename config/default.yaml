@@ -27,8 +27,10 @@ log_level: "INFO"
 llm:
   backend: "ollama"           # ollama | llamacpp
   base_url: "http://127.0.0.1:11434"
-  model: "qwen2.5-coder:7b"         # conversa + roteamento + tool-calling (Qwen2.5, cabe na 4060 8GB)
-  code_model: "qwen2.5-coder:7b"    # Code Agent usa o mesmo (evita 2º modelo na VRAM/disco)
+  model: "qwen2.5:7b-instruct"      # conversa + tool-calling. INSTRUCT, não coder: o
+                                    # coder responde CÓDIGO até p/ "oi" (foi treinado p/ isso)
+  code_model: "qwen2.5-coder:7b"    # Code Agent (gerar/analisar/corrigir código)
+  fast_model: "qwen2.5:3b-instruct" # papo casual/gesto: responde quase na hora (vazio = usa `model`)
   vision_model: "llava:7b"          # Vision Agent (ollama pull llava:7b)
   temperature: 0.7
   max_tokens: 2048
