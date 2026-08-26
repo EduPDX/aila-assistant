@@ -44,6 +44,16 @@ def _venv_python() -> str | None:
     return _find_python()
 
 
+async def _run_proc(cmd: list[str], **kw: object) -> subprocess.CompletedProcess:
+    """``subprocess.run`` numa THREAD. Chamar subprocess.run direto num handler
+    async TRAVA o event loop inteiro pelo tempo do processo (até 300s nos testes):
+    o avatar congela, o WebSocket para e o usuário nem consegue confirmar uma
+    permissão. Em thread, o servidor segue vivo enquanto o processo roda."""
+    import asyncio
+
+    return await asyncio.to_thread(lambda: subprocess.run(cmd, **kw))  # noqa: S603
+
+
 def _detect_test_runner(base: Path) -> tuple[list[str], str] | None:
     """Detecta o ecossistema pela marca no diretório e devolve (comando, rótulo).
     Devolve ``None`` p/ Python (tratado à parte, via venv/pytest). Ordem por
@@ -427,7 +437,7 @@ class CodeAgent(BaseAgent):
         path = Path(tmppath)
         try:
             path.write_text(code, encoding="utf-8")
-            proc = subprocess.run(
+            proc = await _run_proc(
                 [exe, str(path)],
                 capture_output=True, text=True, timeout=30,
                 stdin=subprocess.DEVNULL,  # input() falha rápido em vez de travar
@@ -461,7 +471,7 @@ class CodeAgent(BaseAgent):
                 return ToolResult.error(
                     f"'{cmd[0]}' não encontrado no PATH (necessário p/ testar projeto {label}).")
             try:
-                proc = subprocess.run(
+                proc = await _run_proc(
                     cmd, cwd=str(base), capture_output=True, text=True, timeout=300)
             except subprocess.TimeoutExpired:
                 return ToolResult.error(f"Testes ({label}) excederam o tempo limite (300s).")
@@ -476,7 +486,7 @@ class CodeAgent(BaseAgent):
         if not exe:
             return ToolResult.error("Python não encontrado (venv/PATH).")
         try:
-            proc = subprocess.run(
+            proc = await _run_proc(
                 [exe, "-m", "pytest", "-q", "--no-header", py_target],
                 cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=180,
             )
@@ -506,8 +516,8 @@ class CodeAgent(BaseAgent):
                 if shutil.which("go") is None:
                     return ToolResult.error("'go' não encontrado no PATH (necessário p/ go vet).")
                 try:
-                    proc = subprocess.run(["go", "vet", "./..."], cwd=str(base),
-                                          capture_output=True, text=True, timeout=120)
+                    proc = await _run_proc(["go", "vet", "./..."], cwd=str(base),
+                                           capture_output=True, text=True, timeout=120)
                 except subprocess.TimeoutExpired:
                     return ToolResult.error("go vet excedeu o tempo limite (120s).")
                 out = ((proc.stdout or "") + (proc.stderr or "")).strip()
@@ -533,7 +543,7 @@ class CodeAgent(BaseAgent):
         if select:
             cmd += ["--select", select]
         try:
-            proc = subprocess.run(
+            proc = await _run_proc(
                 cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=60,
             )
         except subprocess.TimeoutExpired:

@@ -21,6 +21,7 @@ screenshot. Elas dão à IA "olhos" sobre a tela sem alterar nada.
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 
 from aila.agents.base import BaseAgent
@@ -300,11 +301,15 @@ class ComputerAgent(BaseAgent):
             )
         await self.authorize("computer.run_command", args)
         try:
-            proc = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", args["command"]],
-                capture_output=True,
-                text=True,
-                timeout=60,
+            # em THREAD: subprocess.run direto no handler async travaria o event
+            # loop por até 60s (avatar/WebSocket congelados durante o comando).
+            proc = await asyncio.to_thread(
+                lambda: subprocess.run(  # noqa: S603
+                    ["powershell", "-NoProfile", "-Command", args["command"]],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
             )
         except subprocess.TimeoutExpired:
             return ToolResult.error("Comando excedeu o tempo limite (60s).")

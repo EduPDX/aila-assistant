@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 
-
 # Ferramentas de LEITURA/exploração que é NORMAL chamar muitas vezes num turno
 # (com args diferentes: caminhos, símbolos). Isentas do teto por-nome.
 _REPEATABLE = frozenset({
