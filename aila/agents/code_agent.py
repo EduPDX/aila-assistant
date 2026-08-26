@@ -171,9 +171,10 @@ class CodeAgent(BaseAgent):
             Tool(
                 name="code.test",
                 description=(
-                    "Roda a suíte de testes do projeto e devolve o resultado. Detecta o "
-                    "ecossistema: pytest (Python), cargo test (Rust), go test (Go), "
-                    "npm/pnpm/yarn test (Node). path opcional = pasta do projeto/arquivo de teste."
+                    "Roda a SUÍTE DE TESTES DO PROJETO (pytest/cargo/go/npm). Use só para "
+                    "verificar o projeto depois de alterar o código DELE. NÃO use para "
+                    "'testar' um script que você acabou de escrever para o usuário — "
+                    "para isso use code.run (executa o código e mostra a saída)."
                 ),
                 params=[ToolParam("path", "string", "arquivo/pasta de teste", required=False)],
                 handler=self._test,

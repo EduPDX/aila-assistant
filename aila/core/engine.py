@@ -733,6 +733,15 @@ class AilaEngine:
                     self.context.add_tool(name, over)   # o modelo vê e deve concluir
                     continue
                 tools_used.append(name)
+                # Guarda o código que o modelo produziu, venha de onde vier: ele
+                # frequentemente manda o código p/ code.run (ou tenta escrever e
+                # falha) sem nunca pôr num bloco ``` — a rede de segurança usa isto
+                # p/ salvar o arquivo pedido em vez de o usuário ficar sem nada.
+                for _k in ("code", "content"):
+                    _v = args.get(_k)
+                    if isinstance(_v, str) and len(_v.strip()) > 40:
+                        generated_code = _v
+                        break
                 await emit("agent.invoked", {"tool": name, "args": args})
                 if name in _WRITE_TOOLS:
                     serial_batch.append((name, args, call))
@@ -1333,7 +1342,10 @@ def strip_tool_call_text(text: str) -> str:
 _FORMAT_ECHO_RX = re.compile(
     r"<function[-_ ]?name>|<args[-_ ]?json[-_ ]?object>|<nome[_ ]?exato>|<args?>|"
     r"respostas? ser[ãa]o formatad|ser[ãa]o? formatad[ao]s? como|"
-    r"para (realizar|executar) a[çc][õo]es.*formatad", re.IGNORECASE)
+    r"para (realizar|executar) a[çc][õo]es.*formatad|"
+    # o modelo "narrando" o mecanismo de ferramentas em vez de responder ao usuário
+    r"none of the (functions|tools)|tool palette|nenhuma das (fun[çc][õo]es|ferramentas) "
+    r"(fornecidas|dispon[íi]veis)|no function call can be", re.IGNORECASE)
 
 
 def _looks_like_json_toolcall(text: str) -> bool:
