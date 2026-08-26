@@ -558,6 +558,36 @@ class CodeAgent(BaseAgent):
         return ToolResult.success(text[:20000], path=args["path"])
 
     async def _write_file(self, args: dict) -> ToolResult:
+        path_arg = str(args.get("path", ""))
+        content = args.get("content", "")
+        # Caminho de PASTA DO USUÁRIO (apelido Documents/… ou ~/… ou absoluto fora
+        # do repo)? Então NÃO é auto-código: escreve via sandbox (escrita de usuário,
+        # L2 + salvaguardas), em vez de gravar no repositório (L5). Assim "salve em
+        # Documentos" funciona mesmo que o modelo use code.write_file.
+        from pathlib import Path as _P
+
+        from aila.security.sandbox import SandboxViolation
+        parts = _P(path_arg).parts
+        first = parts[0].lower().strip() if parts else ""
+        is_user = (
+            first in {"documents", "documentos", "documento", "desktop", "downloads", "download"}
+            or path_arg.startswith("~")
+            or (_P(path_arg).is_absolute() and _repo_resolve(path_arg) is None)
+        )
+        if is_user and self.deps.sandbox is not None:
+            try:
+                target = self.deps.sandbox.resolve(path_arg)
+            except SandboxViolation as exc:
+                return ToolResult.error(str(exc))
+            await self.authorize("file.overwrite" if target.exists() else "file.write", args)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                target.write_text(content, encoding="utf-8")
+            except OSError as exc:
+                return ToolResult.error(f"Falha ao escrever: {exc}")
+            return ToolResult.success(
+                f"Arquivo salvo em: {target} ({len(content)} bytes)", path=str(target))
+
         # auto-modificação do próprio código → gate de autonomia L5 (self-improve)
         await self.authorize("code.write", args)
         p = _repo_resolve(args["path"])

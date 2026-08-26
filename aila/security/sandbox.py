@@ -109,9 +109,13 @@ class PathSandbox:
         """
         candidate = Path(path)
         if not candidate.is_absolute():
-            candidate = Path(self._apply_alias(str(path)))     # Documents/… → pasta real
-        if not candidate.is_absolute():
-            candidate = self.root / candidate
+            expanded = candidate.expanduser()                  # ~/Documents → pasta real
+            if expanded.is_absolute():
+                candidate = expanded
+            else:
+                candidate = Path(self._apply_alias(str(path)))  # Documents/… → pasta real
+                if not candidate.is_absolute():
+                    candidate = self.root / candidate
         resolved = candidate.resolve()
 
         bases = self.read_bases() if read else self.write_bases()

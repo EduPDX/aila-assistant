@@ -656,10 +656,10 @@ class AilaEngine:
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
 
-        # Blindagem: NUNCA mostrar tool-call JSON crua como resposta. Se a saída
-        # final ficou sendo o JSON (o modelo emitiu e não virou tool), fecha o turno
-        # com uma resposta natural sem ferramentas.
-        if _looks_like_json_toolcall(final_text):
+        # Blindagem: NUNCA mostrar tool-call JSON crua NEM o "eco" das instruções de
+        # formato (ex.: "<function-name>", "respostas serão formatadas como…") como
+        # resposta. Se a saída final for isso, fecha o turno com resposta natural.
+        if _looks_like_json_toolcall(final_text) or _FORMAT_ECHO_RX.search(final_text or ""):
             final_text = await self._finalize_without_tools(backend, mem_block, opts, emit)
 
         # Guardrail de SAÍDA: redige segredos ANTES de gravar no contexto/memória
@@ -1181,6 +1181,12 @@ def strip_tool_call_text(text: str) -> str:
     """Remove blocos de código cercados (onde o JSON da tool-call costuma vir),
     deixando só a prosa que o modelo escreveu antes/depois."""
     return re.sub(r"```[\s\S]*?```", "", text).strip()
+
+
+_FORMAT_ECHO_RX = re.compile(
+    r"<function[-_ ]?name>|<args[-_ ]?json[-_ ]?object>|<nome[_ ]?exato>|<args?>|"
+    r"respostas? ser[ãa]o formatad|ser[ãa]o? formatad[ao]s? como|"
+    r"para (realizar|executar) a[çc][õo]es.*formatad", re.IGNORECASE)
 
 
 def _looks_like_json_toolcall(text: str) -> bool:
