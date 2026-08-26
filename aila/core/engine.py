@@ -157,7 +157,11 @@ class AilaEngine:
             "REGRA: se o usuário pedir para SALVAR/CRIAR/ESCREVER um arquivo, você DEVE "
             "chamar file.write AGORA (com o conteúdo inteiro). É PROIBIDO escrever o "
             "código no chat e pedir para o usuário salvar/colar manualmente — AJA, não "
-            "instrua. Depois confirme o caminho onde salvou.\n\n"
+            "instrua. Depois confirme o caminho onde salvou.\n"
+            "NUNCA invente caminhos de exemplo ('example/path/file.py', 'new/file.txt') "
+            "e NUNCA toque no código-fonte da PRÓPRIA Aila (aila/…, ui/…, tests/…) para "
+            "atender um pedido do usuário — o arquivo dele vai na PASTA DELE. Só mexa no "
+            "código da Aila se o usuário pedir isso explicitamente.\n\n"
             "=== IDIOMA (OBRIGATÓRIO) ===\n"
             "Responda SEMPRE em português do Brasil (pt-BR), mesmo que os arquivos, "
             "o código, os comentários ou os resultados de ferramentas estejam em "
@@ -302,8 +306,12 @@ class AilaEngine:
         # Fallback DETERMINÍSTICO: o modelo não chamou a tool → extraio o código do
         # bloco ``` e o nome do arquivo do pedido, e salvo eu mesmo (garantido).
         m = re.search(r"```(?:python|py|js|javascript|ts)?\s*\n(.*?)```", code_text, re.DOTALL)
+        # sem cerca ``` (ex.: veio do code.generate) → usa o texto todo, se parecer código
+        code_body = m.group(1) if m else (
+            code_text if re.search(r"^\s*(import |from |def |class |function |const |let )",
+                                   code_text or "", re.M) else "")
         fname = re.search(r"\b([\w\-]+\.[A-Za-z]{1,6})\b", user_text)
-        if m and fname:
+        if code_body and fname:
             from pathlib import Path as _P
 
             low = user_text.lower()
@@ -315,7 +323,7 @@ class AilaEngine:
                 folder = user_folder(
                     "desktop" if ("desktop" in low or "trabalho" in low)
                     else "downloads" if "download" in low else "documents")
-            args = {"path": str(folder / fname.group(1)), "content": m.group(1).strip() + "\n"}
+            args = {"path": str(folder / fname.group(1)), "content": code_body.strip() + "\n"}
             await emit("agent.invoked", {"tool": "file.write", "args": args})
             res = await self.agents.registry.execute("file.write", args)
             await emit("agent.result", {"tool": "file.write", "ok": res.ok, "content": res.content[:2000]})
@@ -587,6 +595,8 @@ class AilaEngine:
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
+        wrote_ok = False             # alguma escrita REALMENTE deu certo neste turno
+        generated_code = ""          # código produzido por code.generate (p/ salvar se preciso)
         # Model Router: cadeia de provedores (o 1º; os demais são fallback).
         chain = self.router.chain(task)
         backend = chain[0]
@@ -748,6 +758,8 @@ class AilaEngine:
                     name, result = res
                     await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                     self.context.add_tool(name, _safe_tool_context(name, result.content))
+                    if result.ok and name == "code.generate":   # guarda o código gerado
+                        generated_code = result.content
 
             # Executa escritas em série
             for name, args, _ in serial_batch:
@@ -755,6 +767,8 @@ class AilaEngine:
                 result = await self.agents.registry.execute(name, args)
                 await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                 self.context.add_tool(name, _safe_tool_context(name, result.content))
+                if result.ok and name in _WRITE_OK_TOOLS:   # escrita que REALMENTE deu certo
+                    wrote_ok = True
                 # Auto-verificação (o "verifica" do loop, garantido): sintaxe + lint
                 # do arquivo recém-escrito → realimenta o erro no contexto p/ o modelo
                 # se auto-corrigir na próxima iteração, mesmo que esqueça de verificar.
@@ -778,13 +792,12 @@ class AilaEngine:
         if _looks_like_json_toolcall(final_text) or _FORMAT_ECHO_RX.search(final_text or ""):
             final_text = await self._finalize_without_tools(backend, mem_block, opts, emit)
 
-        # Rede de segurança: pediu p/ SALVAR arquivo, o modelo gerou o código no chat
-        # mas NÃO chamou nenhuma ferramenta de escrita → força a gravação de fato.
-        wrote = any(t in _VERIFY_WRITE_TOOLS or t in ("file.copy", "file.move")
-                    for t in tools_used)
-        if (use_tools and _CODE_ACTION_RX.search(user_text) and not wrote
-                and "```" in final_text):
-            forced = await self._force_save(user_text, final_text, backend, opts, emit, mem_block)
+        # Rede de segurança: pediu p/ SALVAR arquivo e NENHUMA escrita deu certo
+        # (o modelo só explicou, OU tentou e todas falharam) → grava de fato. Usa o
+        # código do chat ou, se não houver, o que veio de code.generate.
+        code_src = final_text if "```" in (final_text or "") else generated_code
+        if use_tools and _CODE_ACTION_RX.search(user_text) and not wrote_ok and code_src:
+            forced = await self._force_save(user_text, code_src, backend, opts, emit, mem_block)
             if forced:
                 final_text = forced
 
@@ -1107,6 +1120,9 @@ def _fit_context_window(
 
 # Ferramentas de ESCRITA cujo resultado deve ser auto-verificado (sintaxe).
 _VERIFY_WRITE_TOOLS = {"file.write", "file.edit", "code.write_file"}
+# Ferramentas que, quando dão OK, significam "o arquivo foi mesmo gravado/movido"
+# (usado p/ decidir se a rede de segurança precisa salvar por conta própria).
+_WRITE_OK_TOOLS = _VERIFY_WRITE_TOOLS | {"file.copy", "file.move", "file.mkdir"}
 
 
 def _verr(lang: str, name: str, detail: str) -> str:
