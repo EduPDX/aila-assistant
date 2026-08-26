@@ -154,8 +154,11 @@ class AilaEngine:
             "ABSOLUTO (o nome real da pasta é em inglês). Pastas do usuário:\n"
             f"  Documentos → {docs}\n  Área de Trabalho → {desk}\n  Downloads → {dl}\n"
             "Ex.: salvar em Documentos = file.write com path "
-            f"\"{docs / 'arquivo.py'}\". NÃO use code.write_file p/ isso — ela é só "
-            "para o PRÓPRIO código da Aila (o repositório).\n\n"
+            f"\"{docs / 'arquivo.py'}\".\n"
+            "REGRA: se o usuário pedir para SALVAR/CRIAR/ESCREVER um arquivo, você DEVE "
+            "chamar file.write AGORA (com o conteúdo inteiro). É PROIBIDO escrever o "
+            "código no chat e pedir para o usuário salvar/colar manualmente — AJA, não "
+            "instrua. Depois confirme o caminho onde salvou.\n\n"
             "=== IDIOMA (OBRIGATÓRIO) ===\n"
             "Responda SEMPRE em português do Brasil (pt-BR), mesmo que os arquivos, "
             "o código, os comentários ou os resultados de ferramentas estejam em "
@@ -241,6 +244,74 @@ class AilaEngine:
         except Exception as exc:  # noqa: BLE001 - finalização best-effort
             log.warning(f"finalização sem ferramentas falhou: {exc!r}")
         return "".join(parts).strip() or "Acho que me enrolei aqui. Pode reformular o pedido?"
+
+    async def _force_save(self, user_text: str, code_text: str, backend,  # noqa: ANN001
+                          opts: dict, emit: Emit, mem_block: str | None) -> str | None:
+        """Rede de segurança: o usuário pediu p/ SALVAR um arquivo, o modelo gerou o
+        código mas NÃO chamou file.write (só explicou). Força UMA gravação: pede a
+        tool-call, executa a escrita e confirma. Devolve a confirmação, ou None se
+        não conseguiu (aí mantém a resposta original)."""
+        from pathlib import Path as _P
+
+        home = _P.home()
+        instr = (
+            "Você gerou o código mas NÃO salvou. AJA AGORA: responda com UM único JSON "
+            '{"tool": "file.write", "args": {"path": "<absoluto>", "content": "<o código>"}} '
+            "— nada de texto em volta, nada de pedir pro usuário salvar. Pastas: "
+            f"Documentos={home / 'Documents'}, Desktop={home / 'Desktop'}, "
+            f"Downloads={home / 'Downloads'}.")
+        msgs = to_provider_messages(
+            self._messages_with_memory(mem_block), backend.capabilities().local)
+        msgs.append({"role": "system", "content": instr})
+        tools = self.agents.registry.schemas()
+        for _ in range(2):
+            collected: list[str] = []
+            tcs: list[dict] = []
+            async for chunk in backend.chat(msgs, stream=True, tools=tools, options=opts):
+                if chunk.content:
+                    collected.append(chunk.content)
+                if chunk.tool_calls:
+                    tcs = chunk.tool_calls
+            if not tcs:
+                tcs = extract_text_tool_calls("".join(collected), self.agents.registry)
+            writes = [c for c in tcs if c.get("function", {}).get("name", "")
+                      in _VERIFY_WRITE_TOOLS]
+            if not writes:
+                return None
+            msgs.append({"role": "assistant", "content": "",
+                         "tool_calls": _normalize_tool_args(tcs)})
+            for c in writes:
+                name = c["function"]["name"]
+                args = c["function"].get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {}
+                await emit("agent.invoked", {"tool": name, "args": args})
+                res = await self.agents.registry.execute(name, args)
+                await emit("agent.result", {"tool": name, "ok": res.ok, "content": res.content[:2000]})
+                msgs.append({"role": "tool", "name": name, "content": res.content})
+                if res.ok:
+                    where = (res.data or {}).get("path") or args.get("path")
+                    return f"Pronto! Salvei em: {where}"
+
+        # Fallback DETERMINÍSTICO: o modelo não chamou a tool → extraio o código do
+        # bloco ``` e o nome do arquivo do pedido, e salvo eu mesmo (garantido).
+        m = re.search(r"```(?:python|py|js|javascript|ts)?\s*\n(.*?)```", code_text, re.DOTALL)
+        fname = re.search(r"\b([\w\-]+\.[A-Za-z]{1,6})\b", user_text)
+        if m and fname:
+            low = user_text.lower()
+            folder = (home / "Desktop" if ("desktop" in low or "trabalho" in low)
+                      else home / "Downloads" if "download" in low
+                      else home / "Documents")
+            args = {"path": str(folder / fname.group(1)), "content": m.group(1).strip() + "\n"}
+            await emit("agent.invoked", {"tool": "file.write", "args": args})
+            res = await self.agents.registry.execute("file.write", args)
+            await emit("agent.result", {"tool": "file.write", "ok": res.ok, "content": res.content[:2000]})
+            if res.ok:
+                return f"Pronto! Salvei em: {(res.data or {}).get('path') or args['path']}"
+        return None
 
     # ------------------------ sessões / persistência ------------------- #
     def ensure_session(self, title: str = "Nova conversa") -> int:
@@ -661,6 +732,16 @@ class AilaEngine:
         # resposta. Se a saída final for isso, fecha o turno com resposta natural.
         if _looks_like_json_toolcall(final_text) or _FORMAT_ECHO_RX.search(final_text or ""):
             final_text = await self._finalize_without_tools(backend, mem_block, opts, emit)
+
+        # Rede de segurança: pediu p/ SALVAR arquivo, o modelo gerou o código no chat
+        # mas NÃO chamou nenhuma ferramenta de escrita → força a gravação de fato.
+        wrote = any(t in _VERIFY_WRITE_TOOLS or t in ("file.copy", "file.move")
+                    for t in tools_used)
+        if (use_tools and _CODE_ACTION_RX.search(user_text) and not wrote
+                and "```" in final_text):
+            forced = await self._force_save(user_text, final_text, backend, opts, emit, mem_block)
+            if forced:
+                final_text = forced
 
         # Guardrail de SAÍDA: redige segredos ANTES de gravar no contexto/memória
         # e antes do TTS (a resposta falada e persistida já sai limpa).
