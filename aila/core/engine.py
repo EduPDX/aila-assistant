@@ -140,12 +140,11 @@ class AilaEngine:
 
     # ------------------------------------------------------------------ #
     def _system_prompt(self) -> str:
-        from pathlib import Path
+        from aila.security.sandbox import user_folder
 
         base = self.settings.app.persona.strip()
         caps = self.agents.describe_capabilities()
-        home = Path.home()
-        docs, desk, dl = home / "Documents", home / "Desktop", home / "Downloads"
+        docs, desk, dl = user_folder("documents"), user_folder("desktop"), user_folder("downloads")
         return (
             f"{base}\n\n{caps}\n\n"
             "=== ARQUIVOS DO USUÁRIO ===\n"
@@ -251,15 +250,14 @@ class AilaEngine:
         código mas NÃO chamou file.write (só explicou). Força UMA gravação: pede a
         tool-call, executa a escrita e confirma. Devolve a confirmação, ou None se
         não conseguiu (aí mantém a resposta original)."""
-        from pathlib import Path as _P
+        from aila.security.sandbox import user_folder
 
-        home = _P.home()
         instr = (
             "Você gerou o código mas NÃO salvou. AJA AGORA: responda com UM único JSON "
             '{"tool": "file.write", "args": {"path": "<absoluto>", "content": "<o código>"}} '
             "— nada de texto em volta, nada de pedir pro usuário salvar. Pastas: "
-            f"Documentos={home / 'Documents'}, Desktop={home / 'Desktop'}, "
-            f"Downloads={home / 'Downloads'}.")
+            f"Documentos={user_folder('documents')}, Desktop={user_folder('desktop')}, "
+            f"Downloads={user_folder('downloads')}.")
         msgs = to_provider_messages(
             self._messages_with_memory(mem_block), backend.capabilities().local)
         msgs.append({"role": "system", "content": instr})
@@ -301,10 +299,17 @@ class AilaEngine:
         m = re.search(r"```(?:python|py|js|javascript|ts)?\s*\n(.*?)```", code_text, re.DOTALL)
         fname = re.search(r"\b([\w\-]+\.[A-Za-z]{1,6})\b", user_text)
         if m and fname:
+            from pathlib import Path as _P
+
             low = user_text.lower()
-            folder = (home / "Desktop" if ("desktop" in low or "trabalho" in low)
-                      else home / "Downloads" if "download" in low
-                      else home / "Documents")
+            # 1) pasta EXPLÍCITA no pedido (ex.: C:\Users\...\Python)? usa ela.
+            expl = re.search(r"([A-Za-z]:\\[^\"'\n]+?|~[\\/][^\"'\n]+?)(?=[\s\"']|$)", user_text)
+            if expl:
+                folder = _P(expl.group(1).strip().rstrip("\\/"))
+            else:  # 2) senão, pasta real (OneDrive-aware) pelo apelido citado
+                folder = user_folder(
+                    "desktop" if ("desktop" in low or "trabalho" in low)
+                    else "downloads" if "download" in low else "documents")
             args = {"path": str(folder / fname.group(1)), "content": m.group(1).strip() + "\n"}
             await emit("agent.invoked", {"tool": "file.write", "args": args})
             res = await self.agents.registry.execute("file.write", args)

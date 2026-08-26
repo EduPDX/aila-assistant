@@ -12,6 +12,23 @@ class SandboxViolation(Exception):
     """Levantada quando um caminho tenta escapar da raiz do sandbox."""
 
 
+def user_folder(kind: str) -> Path:
+    """Pasta REAL do usuário (Documents/Desktop/Downloads), ciente do OneDrive.
+    No Windows a pasta pode estar redirecionada p/ ~/OneDrive/Documentos etc."""
+    home = Path.home()
+    candidates = {
+        "documents": [home / "OneDrive" / "Documentos", home / "OneDrive" / "Documents",
+                      home / "Documents", home / "Documentos"],
+        "desktop": [home / "OneDrive" / "Área de Trabalho", home / "OneDrive" / "Desktop",
+                    home / "Desktop"],
+        "downloads": [home / "OneDrive" / "Downloads", home / "Downloads"],
+    }.get(kind, [])
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[-1] if candidates else home
+
+
 def _default_protected() -> list[Path]:
     """Caminhos SEMPRE protegidos contra ESCRITA/EXCLUSÃO — mesmo com acesso amplo.
     Sistema operacional + credenciais/segredos. Impede que um erro do modelo
@@ -85,22 +102,21 @@ class PathSandbox:
 
     @staticmethod
     def _apply_alias(path_str: str) -> str:
-        """Mapeia apelidos no INÍCIO de um caminho relativo p/ a pasta real do
-        usuário (Documents/Documentos/Desktop/Downloads). Ajuda o modelo 7B, que
-        erra o caminho absoluto e escreve 'Documentos/x.py' (nome nem existe: é
-        'Documents'). Sem apelido, devolve o caminho como veio."""
+        """Mapeia apelidos no INÍCIO de um caminho relativo p/ a pasta REAL do
+        usuário (Documents/Documentos/Desktop/Downloads) — ciente de redirecionamento
+        p/ o OneDrive. Ajuda o modelo 7B, que erra o caminho absoluto. Sem apelido,
+        devolve como veio."""
         parts = Path(path_str).parts
         if not parts:
             return path_str
-        home = Path.home()
-        aliases = {
-            "documents": home / "Documents", "documentos": home / "Documents",
-            "documento": home / "Documents",
-            "desktop": home / "Desktop", "downloads": home / "Downloads",
-            "download": home / "Downloads",
-        }
-        target = aliases.get(parts[0].lower().strip())
-        return str(target.joinpath(*parts[1:])) if target else path_str
+        first = parts[0].lower().strip()
+        kind = ("documents" if first in ("documents", "documentos", "documento")
+                else "desktop" if first in ("desktop", "área de trabalho", "area de trabalho")
+                else "downloads" if first in ("downloads", "download")
+                else None)
+        if kind is None:
+            return path_str
+        return str(user_folder(kind).joinpath(*parts[1:]))
 
     def resolve(self, path: str | Path, *, read: bool = False) -> Path:
         """Resolve ``path`` e valida o confinamento. Escrita (``read=False``) no

@@ -2008,14 +2008,15 @@ def test_registry_tool_timeout():
 def test_sandbox_folder_aliases(tmp_path: Path):
     """Apelidos de pasta (Documents/Documentos/Desktop/Downloads) no início de um
     caminho relativo → pasta REAL do usuário (o 7B erra o caminho absoluto)."""
-    from aila.security.sandbox import PathSandbox
+    from aila.security.sandbox import PathSandbox, user_folder
 
     home = Path.home()
     sb = PathSandbox(tmp_path / "ws")
     sb.add_write_root(str(home))                       # como o default amplo
-    assert sb.resolve("Documentos/jogo.py") == home / "Documents" / "jogo.py"
-    assert sb.resolve("Documents/jogo.py") == home / "Documents" / "jogo.py"
-    assert sb.resolve("Desktop/a.txt") == home / "Desktop" / "a.txt"
+    # apelidos → pasta REAL (ciente de OneDrive, via user_folder)
+    assert sb.resolve("Documentos/jogo.py") == user_folder("documents") / "jogo.py"
+    assert sb.resolve("Documents/jogo.py") == user_folder("documents") / "jogo.py"
+    assert sb.resolve("Desktop/a.txt") == user_folder("desktop") / "a.txt"
     # nome comum NÃO é apelido → relativo ao workspace
     assert sb.resolve("src/x.py") == (tmp_path / "ws" / "src" / "x.py")
 

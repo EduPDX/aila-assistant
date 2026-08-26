@@ -80,11 +80,17 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     engine.permissions.set_confirm_handler(session.confirm)
     await session.emit("system.status", {"message": "conectado"})
 
-    # Conversa única: ao conectar, retoma a última conversa em vez de vazio.
-    resumed = engine.resume_last()
-    if resumed["id"] is not None:
-        await session.emit("session.loaded",
-                           {"id": resumed["id"], "messages": resumed["messages"], "resumed": True})
+    # Ao conectar: começar VAZIO (padrão) evita contaminar o modelo com um
+    # histórico antigo/confuso; ou retomar a última conversa se configurado.
+    # O histórico anterior continua salvo e acessível pela barra lateral.
+    if getattr(engine.settings.app, "fresh_chat_on_start", True):
+        engine.new_session()
+        await session.emit("session.changed", {"id": engine.session_id})
+    else:
+        resumed = engine.resume_last()
+        if resumed["id"] is not None:
+            await session.emit("session.loaded",
+                               {"id": resumed["id"], "messages": resumed["messages"], "resumed": True})
 
     # Ponte bus→WS: eventos cognitivos de BACKGROUND (consolidação/grafo/skill)
     # rodam fora do turno (só no event bus) → encaminha p/ a tela em tempo real.
