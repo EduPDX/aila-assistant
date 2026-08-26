@@ -1204,6 +1204,12 @@ _CODE_RX = re.compile(
     re.IGNORECASE)
 
 
+_CODE_ACTION_RX = re.compile(
+    r"\b(salv\w*|salve|crie|criar|gere|gera|rod\w*|execut\w*|edit\w*|corrij\w*|"
+    r"conserta|arruma|testa|teste[s]?\b|na pasta|no arquivo|no diret[óo]rio|"
+    r"documentos?|desktop|downloads?)\b", re.IGNORECASE)
+
+
 def _is_code_request(t: str) -> bool:
     return bool(_CODE_RX.search(t or ""))
 
@@ -1228,8 +1234,13 @@ def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
     if _is_casual(user_text):
         # básico/casual → LOCAL (prefer_local filtra p/ só local), sem ferramentas
         return RouteTask(kind="basic", needs_tools=False, prefer_local=True), False
-    kind = "code" if _is_code_request(user_text) else "chat"
-    return RouteTask(kind=kind, needs_tools=True), True
+    if _is_code_request(user_text):
+        # código AGÊNTICO (salvar/rodar/editar arquivo) → LOCAL: executa ferramentas
+        # rápido e confiável (modelos de nuvem gigantes travam com tool-calling).
+        # Geração PURA de código (sem ação em arquivo) → cadeia 'code' (ex.: Gemini).
+        agentic = bool(_CODE_ACTION_RX.search(user_text))
+        return RouteTask(kind="code", needs_tools=True, prefer_local=agentic), True
+    return RouteTask(kind="chat", needs_tools=True), True
 
 
 def _tool_status(tool_name: str) -> str:
@@ -1257,6 +1268,11 @@ def build_engine(
     audit = AuditLog(_resolve(settings.security.audit_log))
     permissions = PermissionManager(settings.security, audit)
     sandbox = PathSandbox(settings.sandbox_path())
+    for _wr in settings.security.write_roots:          # pastas extras de ESCRITA (opt-in)
+        try:
+            sandbox.add_write_root(_wr)
+        except (OSError, ValueError) as exc:
+            log.warning(f"write_root inválido '{_wr}': {exc!r}")
     network = network or NetworkPolicy(settings.network.mode)
     # Provedores externos habilitados (OpenAI/Gemini/Grok/DeepSeek) → router.
     from aila.llm.openai_compat import build_external_providers

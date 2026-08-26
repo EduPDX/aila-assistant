@@ -2005,6 +2005,31 @@ def test_registry_tool_timeout():
     asyncio.run(go())
 
 
+def test_sandbox_write_roots(tmp_path: Path):
+    """Escrita fora do workspace só é permitida em write_roots (opt-in); demais
+    pastas seguem bloqueadas. Código agêntico (salvar/editar) roteia p/ local."""
+    from aila.security.sandbox import PathSandbox, SandboxViolation
+
+    ws = tmp_path / "ws"
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    other = tmp_path / "other"
+    other.mkdir()
+    sb = PathSandbox(ws)
+    with pytest.raises(SandboxViolation):
+        sb.resolve(str(docs / "x.py"))                 # antes: bloqueado
+    sb.add_write_root(docs)
+    assert sb.resolve(str(docs / "x.py")).name == "x.py"   # agora: permitido
+    with pytest.raises(SandboxViolation):
+        sb.resolve(str(other / "y.py"))                # outras pastas seguem bloqueadas
+
+    from aila.core.engine import _classify_task
+    t, _ = _classify_task("faça um jogo e salve como jogo.py", "auto")
+    assert t.kind == "code" and t.prefer_local          # agêntico → local (tools confiáveis)
+    t2, _ = _classify_task("escreva uma função de soma", "auto")
+    assert t2.kind == "code" and not t2.prefer_local     # geração pura → cadeia code (nuvem)
+
+
 def test_classify_task_routing():
     """Classificação p/ roteamento: casual → local sem tools; código → kind=code;
     conversa → kind=chat. Evita o 'bounce' favorito→local e o tool-spam no cumprimento."""

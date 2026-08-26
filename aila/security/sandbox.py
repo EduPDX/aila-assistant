@@ -16,14 +16,25 @@ class PathSandbox:
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         # raízes de LEITURA extras: pastas que o USUÁRIO anexou explicitamente
-        # (autorização direta). Escrita continua SÓ no workspace (self.root).
+        # (autorização direta). Escrita: workspace + write_roots (config opt-in).
         self.read_roots: list[Path] = []
+        # raízes de ESCRITA extras (ex.: Documentos/Desktop) — só as que o usuário
+        # habilitou em security.write_roots. Vazio = escrita SÓ no workspace.
+        self.write_roots: list[Path] = []
 
     def add_read_root(self, path: str | Path) -> Path:
         """Autoriza LEITURA de uma pasta anexada pelo usuário (não escrita)."""
         p = Path(path).expanduser().resolve()
         if p not in self.read_roots:
             self.read_roots.append(p)
+        return p
+
+    def add_write_root(self, path: str | Path) -> Path:
+        """Autoriza ESCRITA numa pasta extra (ex.: ~/Documents). Opt-in do usuário
+        via config; a escrita ainda passa pelo gate de permissão (confirmação)."""
+        p = Path(path).expanduser().resolve()
+        if p not in self.write_roots:
+            self.write_roots.append(p)
         return p
 
     def remove_read_root(self, path: str | Path) -> bool:
@@ -36,8 +47,12 @@ class PathSandbox:
             return False
 
     def read_bases(self) -> list[Path]:
-        """Raízes onde a LEITURA é permitida (workspace + pastas anexadas)."""
-        return [self.root, *self.read_roots]
+        """Raízes onde a LEITURA é permitida (workspace + anexadas + escrita)."""
+        return [self.root, *self.read_roots, *self.write_roots]
+
+    def write_bases(self) -> list[Path]:
+        """Raízes onde a ESCRITA é permitida (workspace + write_roots opt-in)."""
+        return [self.root, *self.write_roots]
 
     @staticmethod
     def _within(resolved: Path, base: Path) -> bool:
@@ -53,7 +68,7 @@ class PathSandbox:
             candidate = self.root / candidate
         resolved = candidate.resolve()
 
-        bases = self.read_bases() if read else [self.root]
+        bases = self.read_bases() if read else self.write_bases()
         if not any(self._within(resolved, b) for b in bases):
             raise SandboxViolation(
                 f"Caminho fora do sandbox: {resolved} (raiz: {self.root})"

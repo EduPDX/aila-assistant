@@ -102,6 +102,9 @@ class SecurityConfig(BaseModel):
     confirm_destructive: bool = True    # ações DANGER pedem confirmação
     confirm_review: bool = False        # ações REVIEW pedem confirmação (default: não)
     sandbox_root: str = "./workspace"
+    # pastas EXTRA onde a Aila pode ESCREVER além do workspace (ex.: "~/Documents").
+    # Vazio = escrita só no workspace (padrão seguro). Aceita ~ e caminhos absolutos.
+    write_roots: list[str] = Field(default_factory=list)
     destructive_actions: list[str] = Field(default_factory=list)  # → nível DANGER
     audit_log: str = "./logs/audit.jsonl"
     # ----- Fase 6: níveis de permissão + autonomia -----
