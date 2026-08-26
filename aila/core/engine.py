@@ -140,10 +140,22 @@ class AilaEngine:
 
     # ------------------------------------------------------------------ #
     def _system_prompt(self) -> str:
+        from pathlib import Path
+
         base = self.settings.app.persona.strip()
         caps = self.agents.describe_capabilities()
+        home = Path.home()
+        docs, desk, dl = home / "Documents", home / "Desktop", home / "Downloads"
         return (
             f"{base}\n\n{caps}\n\n"
+            "=== ARQUIVOS DO USUÁRIO ===\n"
+            "Para CRIAR/EDITAR/COPIAR/MOVER/APAGAR arquivos DO USUÁRIO, use file.write / "
+            "file.edit / file.copy / file.move / file.mkdir / file.delete com caminho "
+            "ABSOLUTO (o nome real da pasta é em inglês). Pastas do usuário:\n"
+            f"  Documentos → {docs}\n  Área de Trabalho → {desk}\n  Downloads → {dl}\n"
+            "Ex.: salvar em Documentos = file.write com path "
+            f"\"{docs / 'arquivo.py'}\". NÃO use code.write_file p/ isso — ela é só "
+            "para o PRÓPRIO código da Aila (o repositório).\n\n"
             "=== IDIOMA (OBRIGATÓRIO) ===\n"
             "Responda SEMPRE em português do Brasil (pt-BR), mesmo que os arquivos, "
             "o código, os comentários ou os resultados de ferramentas estejam em "
@@ -643,6 +655,12 @@ class AilaEngine:
                 break
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
+
+        # Blindagem: NUNCA mostrar tool-call JSON crua como resposta. Se a saída
+        # final ficou sendo o JSON (o modelo emitiu e não virou tool), fecha o turno
+        # com uma resposta natural sem ferramentas.
+        if _looks_like_json_toolcall(final_text):
+            final_text = await self._finalize_without_tools(backend, mem_block, opts, emit)
 
         # Guardrail de SAÍDA: redige segredos ANTES de gravar no contexto/memória
         # e antes do TTS (a resposta falada e persistida já sai limpa).
@@ -1163,6 +1181,23 @@ def strip_tool_call_text(text: str) -> str:
     """Remove blocos de código cercados (onde o JSON da tool-call costuma vir),
     deixando só a prosa que o modelo escreveu antes/depois."""
     return re.sub(r"```[\s\S]*?```", "", text).strip()
+
+
+def _looks_like_json_toolcall(text: str) -> bool:
+    """True se o texto é (essencialmente) uma tool-call em JSON crua — p/ NUNCA
+    mostrar isso ao usuário como se fosse resposta. Reconhece {...} de topo com
+    chaves de ferramenta (name/tool + arguments/args), com ou sem cerca ```."""
+    t = re.sub(r"^```(?:json)?|```$", "", (text or "").strip(), flags=re.MULTILINE).strip()
+    if not t.startswith(("{", "[")):
+        return False
+    has_keys = ('"name"' in t or '"tool"' in t) and ('"arguments"' in t or '"args"' in t)
+    if has_keys:
+        return True
+    for obj in _iter_json_objects(t):            # parseou como objeto de tool-call?
+        if (obj.get("name") or obj.get("tool")) and (
+                "arguments" in obj or "args" in obj or "parameters" in obj):
+            return True
+    return False
 
 
 _INTENT_RX = re.compile(
