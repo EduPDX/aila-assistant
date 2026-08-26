@@ -187,7 +187,12 @@ class AilaEngine:
             "nenhuma. NÃO revise o projeto, NÃO rode git/lint/testes, NÃO pesquise na "
             "web por conta própria — só faça isso quando o usuário PEDIR claramente uma "
             "tarefa. Se emitir uma tool-call, emita UM único JSON e PARE (não repita a "
-            "mesma ferramenta várias vezes; se falhar, mude de abordagem ou responda).\n\n"
+            "mesma ferramenta várias vezes; se falhar, mude de abordagem ou responda).\n"
+            "ENTENDA ANTES DE AGIR: se o pedido for vago ou couber mais de uma "
+            "interpretação (ex.: 'vamos fazer um jogo?' — jogar com você? programar um? "
+            "qual jogo? onde salvar?), FAÇA UMA PERGUNTA curta e espere a resposta. NÃO "
+            "chute, NÃO despeje código por precaução. Só aja quando o pedido estiver "
+            "claro; se estiver claro, aja sem enrolar.\n\n"
             "=== PROCESSO (tarefas de código/arquivos) ===\n"
             "Trabalhe como um engenheiro cuidadoso, em passos pequenos e VERIFICADOS:\n"
             "1) EXPLORE antes de mexer: use file.grep / file.glob / code.read_file / "
@@ -519,8 +524,26 @@ class AilaEngine:
         rep["backfilled"] = len(rows)
         return rep
 
-    def _messages_with_memory(self, mem_block: str | None) -> list[dict]:
+    def _casual_prompt(self) -> str:
+        """Prompt CURTO p/ conversa casual. O modelo local é um *coder* — inundá-lo
+        com instruções de ferramentas/código faz ele responder código até p/ 'oi'.
+        Num papo, ele recebe só a persona e como conversar."""
+        return (
+            f"{self.settings.app.persona.strip()}\n\n"
+            "Você está CONVERSANDO com o usuário. Responda em português do Brasil, "
+            "de forma curta (1–3 frases), natural e simpática.\n"
+            "NÃO escreva código, NÃO faça listas de passos, NÃO proponha planos e NÃO "
+            "use ferramentas — isto é só um papo.\n"
+            "Se o pedido for vago ou tiver mais de uma interpretação (ex.: 'vamos fazer "
+            "um jogo?'), PERGUNTE o que a pessoa quer antes de agir. Entender primeiro, "
+            "agir depois."
+        )
+
+    def _messages_with_memory(self, mem_block: str | None,
+                              system_override: str | None = None) -> list[dict]:
         msgs = self.context.build()
+        if system_override and msgs and msgs[0].get("role") == "system":
+            msgs[0] = {"role": "system", "content": system_override}
         if mem_block:
             # insere logo após o prompt de sistema principal
             msgs.insert(1, {"role": "system", "content": mem_block})
@@ -587,9 +610,15 @@ class AilaEngine:
             collected: list[str] = []
             tool_calls: list[dict] = []
             suppress_stream = False   # a resposta virou uma tool-call em JSON? não streama
-            # adapta o histórico ao provedor (externo: tool-history vira texto)
+            # adapta o histórico ao provedor (externo: tool-history vira texto).
+            # Conversa casual → prompt CURTO (o coder-model responde código se
+            # receber o manual de ferramentas junto de um simples "oi").
             msgs = to_provider_messages(
-                self._messages_with_memory(mem_block), backend.capabilities().local
+                self._messages_with_memory(
+                    mem_block,
+                    self._casual_prompt() if task.kind == "basic" else None,
+                ),
+                backend.capabilities().local,
             )
             try:
                 async for chunk in backend.chat(
