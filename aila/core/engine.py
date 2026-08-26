@@ -716,8 +716,6 @@ class AilaEngine:
             # Agrupa tools que não têm dependências e executa em concorrência.
             # Tools de ESCRITA (file.write, file.edit, file.delete) ficam serializadas
             # por segurança (evitar race conditions em arquivos compartilhados).
-            _WRITE_TOOLS = {"file.write", "file.edit", "file.delete", "file.move",
-                            "code.write_file", "code.execute", "memory.save"}
             serial_batch = []   # tools de escrita (serializadas)
             parallel_batch = []  # tools de leitura (paralelas)
 
@@ -1120,6 +1118,13 @@ def _fit_context_window(
 
 # Ferramentas de ESCRITA cujo resultado deve ser auto-verificado (sintaxe).
 _VERIFY_WRITE_TOOLS = {"file.write", "file.edit", "code.write_file"}
+# Ferramentas que ALTERAM estado → executadas em SÉRIE (as de leitura vão em
+# paralelo). Faltavam file.copy/file.mkdir/project.add aqui: rodavam concorrentes,
+# com risco de corrida ao mexer nos mesmos arquivos.
+_WRITE_TOOLS = {
+    "file.write", "file.edit", "file.delete", "file.move", "file.copy", "file.mkdir",
+    "code.write_file", "code.execute", "code.run", "memory.save", "project.add",
+}
 # Ferramentas que, quando dão OK, significam "o arquivo foi mesmo gravado/movido"
 # (usado p/ decidir se a rede de segurança precisa salvar por conta própria).
 _WRITE_OK_TOOLS = _VERIFY_WRITE_TOOLS | {"file.copy", "file.move", "file.mkdir"}

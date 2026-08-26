@@ -781,8 +781,10 @@ def test_code_agent_graph_tools(tmp_path: Path, monkeypatch):
 
     # registro ISOLADO em tmp (sem projeto ativo) → não depende do data dir real
     reg = projmod.ProjectRegistry.__new__(projmod.ProjectRegistry)
-    reg.root = tmp_path / "reg"; reg.root.mkdir()
-    reg.index_path = reg.root / "index.json"; reg._stores = {}
+    reg.root = tmp_path / "reg"
+    reg.root.mkdir()
+    reg.index_path = reg.root / "index.json"
+    reg._stores = {}
     monkeypatch.setattr(projmod, "_registry", reg)
 
     s = get_settings()
@@ -1017,7 +1019,11 @@ def test_skill_runner_templating_and_chaining():
     """Fase 8: SkillRunner interpola args, encadeia via save_as, respeita optional,
     e a skill vira uma tool (skill.<nome>) — sem reimplementar o tool-loop."""
     from aila.cognition.skills import (
-        Skill, SkillInput, SkillRunner, SkillStep, skill_to_tool,
+        Skill,
+        SkillInput,
+        SkillRunner,
+        SkillStep,
+        skill_to_tool,
     )
     from aila.tools.registry import ToolRegistry
     from aila.tools.schema import Tool, ToolParam, ToolResult

@@ -89,7 +89,8 @@ class GraphStore:
     def _ensure_index(self) -> None:
         if self._loaded:
             return
-        self._out.clear(); self._in.clear()
+        self._out.clear()
+        self._in.clear()
         for r in self.conn.execute("SELECT source, target, relation, weight, id FROM kg_edge"):
             self._add_adj(r["source"], r["target"], r["relation"], r["weight"], r["id"])
         self._loaded = True
@@ -114,9 +115,15 @@ class GraphStore:
         existing = self.conn.execute("SELECT id FROM kg_node WHERE id = ?", (node_id,)).fetchone()
         if existing:
             sets, vals = ["label = ?", "type = ?", "updated_at = ?"], [label, type, now]
-            if attrs is not None: sets.append("attrs = ?"); vals.append(_dump(attrs))
-            if importance is not None: sets.append("importance = ?"); vals.append(importance)
-            if confidence is not None: sets.append("confidence = ?"); vals.append(confidence)
+            if attrs is not None:
+                sets.append("attrs = ?")
+                vals.append(_dump(attrs))
+            if importance is not None:
+                sets.append("importance = ?")
+                vals.append(importance)
+            if confidence is not None:
+                sets.append("confidence = ?")
+                vals.append(confidence)
             vals.append(node_id)
             self.conn.execute(f"UPDATE kg_node SET {', '.join(sets)} WHERE id = ?", vals)
         else:
@@ -147,7 +154,8 @@ class GraphStore:
         )
         self.conn.commit()
         if self._loaded:                      # mantém o índice incremental
-            self._out.setdefault(source, []); self._in.setdefault(target, [])
+            self._out.setdefault(source, [])
+            self._in.setdefault(target, [])
             if not any(e[3] == eid for e in self._out[source]):
                 self._add_adj(source, target, relation, weight, eid)
         return eid
@@ -173,7 +181,8 @@ class GraphStore:
                 for (m, _rel, _w, eid) in self._edges_of(n, direction):
                     edge_ids.add(eid)
                     if m not in visited:
-                        visited.add(m); nxt.add(m)
+                        visited.add(m)
+                        nxt.add(m)
             frontier = nxt
             if not frontier:
                 break
