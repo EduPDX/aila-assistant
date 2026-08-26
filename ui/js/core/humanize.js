@@ -93,7 +93,8 @@ export function humanizeEvent(m) {
     };
     case 'model.selected': return {
       icon: '◆',
-      text: m.fallback ? `Trocou para ${providerLabel(m.provider)} (fallback)` : `Usando ${providerLabel(m.provider)}`,
+      text: (m.fallback ? `Trocou para ${providerLabel(m.provider)} (fallback)` : `Usando ${providerLabel(m.provider)}`)
+            + (m.model ? ` · ${m.model}` : ''),
       tone: 'info',
     };
     case 'permission.request': return { icon: '🔒', text: `Pediu permissão: ${humanizeTool(m.action)}`, tone: 'warn' };

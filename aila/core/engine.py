@@ -562,8 +562,12 @@ class AilaEngine:
         # Model Router: cadeia de provedores (o 1º; os demais são fallback).
         chain = self.router.chain(task)
         backend = chain[0]
-        if backend is not self.llm:
-            await emit("model.selected", {"provider": backend.name})
+        # SEMPRE mostra qual modelo está atendendo (inclusive o local) — o usuário
+        # vê na lista de atividades se foi local/nvidia/gemini e qual modelo.
+        await emit("model.selected", {
+            "provider": backend.name,
+            "model": getattr(backend, "default_model", "") or "",
+        })
         final_text = ""
         failed: set = set()   # provedores que JÁ falharam neste turno (não voltar → sem ping-pong)
         # orçamento anti-loop do turno (total + repetição da mesma ferramenta).
