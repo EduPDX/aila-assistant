@@ -12,6 +12,8 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 let _sessions = [];
 
 export async function loadSessions() {
+  // o histórico saiu da barra lateral: sem a lista no DOM, não busca à toa
+  if (!byId('sessions')) return;
   try {
     const r = await (await fetch('/api/sessions')).json();
     if (r.current != null) State.set({ activeSession: r.current });

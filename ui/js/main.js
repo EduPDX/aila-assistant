@@ -97,7 +97,7 @@ function wireUI() {
   byId('btn-settings-close').onclick = closeSettings;
   byId('settings-nav').querySelectorAll('.snav').forEach((b) => b.onclick = () => settingsTab(b.dataset.p));
   byId('btn-new').onclick = () => { sidebar.newSession(); chat.clearChat(); showTab('chat'); };
-  byId('search').oninput = sidebar.renderSessions;
+  // histórico de conversas saiu da barra lateral → estes elementos podem não existir
   byId('btn-hamb').onclick = () => setDrawer(byId('drawer').classList.contains('collapsed'));
   byId('tab-avatar').onclick = () => showTab('avatar');
   byId('tab-chat').onclick = () => showTab('chat');
@@ -124,7 +124,6 @@ function wireUI() {
 
   // ---- responsividade: gaveta (sidebar) no mobile ----
   byId('scrim').onclick = () => setDrawer(false);                                    // toca no fundo -> fecha
-  byId('sessions').addEventListener('click', () => { if (isMobile()) setDrawer(false); });  // escolheu conversa -> fecha
   let wasMobile = null;
   const applyResponsive = () => { const m = isMobile(); if (m !== wasMobile) { setDrawer(!m); wasMobile = m; } };
   applyResponsive();

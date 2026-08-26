@@ -64,12 +64,5 @@ export function initCentral() {
   const dir = byId('btn-attachdir-side');
   if (dir) dir.onclick = () => { if (window.showTab) window.showTab('chat'); chat.attachFolder(); };
 
-  const convH = byId('cx-conv-h'), convBody = byId('cx-conv-body'), chev = byId('cx-conv-chev');
-  if (convH && convBody) {
-    convH.onclick = () => {
-      const open = convBody.classList.toggle('cx-collapsed');
-      if (chev) chev.textContent = open ? '▸' : '▾';
-    };
-  }
   loadCentral();
 }
