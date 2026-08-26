@@ -23,8 +23,11 @@ MAX_READ_BYTES = 200_000
 class FileAgent(BaseAgent):
     name = "file"
     description = (
-        "Manipula arquivos dentro do workspace: ler, escrever, listar, "
-        "pesquisar por nome/conteúdo, mover e apagar."
+        "Manipula arquivos do usuário: ler, escrever/sobrescrever, editar, criar "
+        "pasta, listar, pesquisar (nome/conteúdo/regex/glob), copiar, mover, "
+        "renomear e apagar. Aceita caminho ABSOLUTO (ex.: ~/Documents/x.py) ou "
+        "relativo ao workspace. Ações destrutivas pedem confirmação; caminhos de "
+        "sistema/credenciais são bloqueados."
     )
 
     def __init__(self, deps: AgentDeps) -> None:
@@ -36,7 +39,7 @@ class FileAgent(BaseAgent):
             Tool(
                 name="file.read",
                 description="Lê o conteúdo de um arquivo de texto.",
-                params=[ToolParam("path", "string", "Caminho relativo ao workspace")],
+                params=[ToolParam("path", "string", "Caminho (absoluto, ex.: ~/Documents/x.py, ou relativo ao workspace)")],
                 handler=self._read,
                 agent=self.name,
             ),
@@ -116,18 +119,35 @@ class FileAgent(BaseAgent):
             Tool(
                 name="file.delete",
                 description="Apaga um arquivo (ação destrutiva, exige confirmação).",
-                params=[ToolParam("path", "string", "Caminho relativo ao workspace")],
+                params=[ToolParam("path", "string", "Caminho (absoluto, ex.: ~/Documents/x.py, ou relativo ao workspace)")],
                 handler=self._delete,
                 agent=self.name,
             ),
             Tool(
                 name="file.move",
-                description="Move ou renomeia um arquivo/pasta.",
+                description="Move ou RENOMEIA um arquivo/pasta (src → dst).",
                 params=[
                     ToolParam("src", "string", "Origem"),
                     ToolParam("dst", "string", "Destino"),
                 ],
                 handler=self._move,
+                agent=self.name,
+            ),
+            Tool(
+                name="file.copy",
+                description="Copia um arquivo ou pasta (recursivo) de src para dst.",
+                params=[
+                    ToolParam("src", "string", "Origem"),
+                    ToolParam("dst", "string", "Destino"),
+                ],
+                handler=self._copy,
+                agent=self.name,
+            ),
+            Tool(
+                name="file.mkdir",
+                description="Cria uma pasta (e as intermediárias, se preciso).",
+                params=[ToolParam("path", "string", "Caminho da pasta a criar")],
+                handler=self._mkdir,
                 agent=self.name,
             ),
         ]
@@ -295,3 +315,23 @@ class FileAgent(BaseAgent):
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(src), str(dst))
         return ToolResult.success(f"Movido: {args['src']} -> {args['dst']}")
+
+    async def _copy(self, args: dict) -> ToolResult:
+        src = self.sandbox.resolve(args["src"], read=True)   # ler a origem
+        dst = self.sandbox.resolve(args["dst"])              # escrever no destino
+        action = "file.overwrite" if dst.exists() else "file.write"
+        await self.authorize(action, args)
+        if not src.exists():
+            return ToolResult.error(f"Origem não existe: {args['src']}")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.is_dir():
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, dst)
+        return ToolResult.success(f"Copiado: {args['src']} -> {args['dst']}")
+
+    async def _mkdir(self, args: dict) -> ToolResult:
+        path = self.sandbox.resolve(args["path"])
+        await self.authorize("file.write", args)
+        path.mkdir(parents=True, exist_ok=True)
+        return ToolResult.success(f"Pasta criada: {args['path']}")

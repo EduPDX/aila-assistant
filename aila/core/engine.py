@@ -1268,7 +1268,11 @@ def build_engine(
     audit = AuditLog(_resolve(settings.security.audit_log))
     permissions = PermissionManager(settings.security, audit)
     sandbox = PathSandbox(settings.sandbox_path())
-    for _wr in settings.security.write_roots:          # pastas extras de ESCRITA (opt-in)
+    # Acesso a arquivos: por PADRÃO a Aila pode escrever nas pastas do usuário
+    # (home + drives fixos) — "faça isso nessa pasta" funciona sem configurar.
+    # Caminhos de sistema/credenciais ficam SEMPRE protegidos (sandbox.protected)
+    # e ações destrutivas pedem confirmação. Restrinja em security.write_roots.
+    for _wr in (settings.security.write_roots or _default_writable_roots()):
         try:
             sandbox.add_write_root(_wr)
         except (OSError, ValueError) as exc:
@@ -1337,6 +1341,25 @@ def build_engine(
     engine.permissions = permissions  # type: ignore[attr-defined]
     engine.audit = audit  # type: ignore[attr-defined]
     return engine
+
+
+def _default_writable_roots() -> list[str]:
+    """Pastas graváveis por padrão: a home do usuário + a raiz de cada drive FIXO
+    (C:, D:, E:…). Cobre Documentos/Desktop/Downloads e projetos em outros discos.
+    A salvaguarda de caminhos protegidos (sandbox) bloqueia sistema/credenciais."""
+    from pathlib import Path
+
+    roots = [str(Path.home())]
+    try:
+        import psutil
+
+        for part in psutil.disk_partitions(all=False):
+            opts = (part.opts or "").lower()
+            if part.mountpoint and "cdrom" not in opts and "removable" not in opts:
+                roots.append(part.mountpoint)
+    except Exception as exc:  # noqa: BLE001 - psutil opcional; home já cobre o essencial
+        log.warning(f"não listou drives p/ write_roots ({exc!r}); usando só a home")
+    return roots
 
 
 def _resolve(path_str: str):

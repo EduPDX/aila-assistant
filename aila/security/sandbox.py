@@ -4,11 +4,33 @@ a uma raiz permitida, prevenindo path traversal (``..``) e acesso ao sistema.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
 class SandboxViolation(Exception):
     """Levantada quando um caminho tenta escapar da raiz do sandbox."""
+
+
+def _default_protected() -> list[Path]:
+    """Caminhos SEMPRE protegidos contra ESCRITA/EXCLUSÃO — mesmo com acesso amplo.
+    Sistema operacional + credenciais/segredos. Impede que um erro do modelo
+    (ou um pedido mal formulado) destrua o Windows ou vaze/apague chaves."""
+    raw: list[str] = []
+    for env in ("SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"):
+        v = os.environ.get(env)
+        if v:
+            raw.append(v)
+    home = Path.home()
+    for sub in ("AppData", ".ssh", ".aws", ".azure", ".gnupg", ".kube", ".config/gcloud"):
+        raw.append(str(home / sub))
+    out: list[Path] = []
+    for n in raw:
+        try:
+            out.append(Path(n).expanduser().resolve())
+        except (OSError, ValueError):
+            continue
+    return out
 
 
 class PathSandbox:
@@ -21,6 +43,9 @@ class PathSandbox:
         # raízes de ESCRITA extras (ex.: Documentos/Desktop) — só as que o usuário
         # habilitou em security.write_roots. Vazio = escrita SÓ no workspace.
         self.write_roots: list[Path] = []
+        # caminhos NUNCA graváveis (sistema/credenciais), mesmo dentro de uma raiz
+        # permitida — salvaguarda incondicional.
+        self.protected: list[Path] = _default_protected()
 
     def add_read_root(self, path: str | Path) -> Path:
         """Autoriza LEITURA de uma pasta anexada pelo usuário (não escrita)."""
@@ -73,6 +98,22 @@ class PathSandbox:
             raise SandboxViolation(
                 f"Caminho fora do sandbox: {resolved} (raiz: {self.root})"
             )
+        # ESCRITA em caminho PROTEGIDO (sistema/credenciais): bloqueado — a menos
+        # que o workspace ou um write_root EXPLÍCITO esteja DENTRO da área protegida
+        # (aí o usuário mirou ali de propósito; o acesso amplo default NÃO sobrepõe).
+        if not read:
+            for prot in self.protected:
+                if not self._within(resolved, prot):
+                    continue
+                targeted = any(
+                    self._within(resolved, w) and self._within(w, prot)
+                    for w in (self.root, *self.write_roots)
+                )
+                if not targeted:
+                    raise SandboxViolation(
+                        f"Caminho PROTEGIDO (sistema/credenciais), escrita bloqueada: {resolved}"
+                    )
+                break
         return resolved
 
     def is_inside(self, path: str | Path) -> bool:

@@ -2005,6 +2005,29 @@ def test_registry_tool_timeout():
     asyncio.run(go())
 
 
+def test_sandbox_protected_paths(tmp_path: Path):
+    """Com acesso amplo (home + drives), caminhos de sistema/credenciais seguem
+    BLOQUEADOS p/ escrita — a menos que um write_root explícito esteja lá dentro."""
+    from aila.security.sandbox import PathSandbox, SandboxViolation
+
+    sb = PathSandbox(tmp_path / "ws")
+    home = Path.home()
+    sb.add_write_root(str(home))                       # acesso amplo à home (default)
+    # sistema/credenciais → bloqueado mesmo com home liberada
+    for bad in ("AppData/Local/x/creds", ".ssh/id_rsa"):
+        with pytest.raises(SandboxViolation):
+            sb.resolve(str(home / bad))
+    import os as _os
+    win = _os.environ.get("SystemRoot")
+    if win:
+        with pytest.raises(SandboxViolation):
+            sb.resolve(str(Path(win) / "System32" / "evil.dll"))
+    # write_root EXPLÍCITO dentro de área protegida → o usuário mirou ali → permite
+    explicit = home / "AppData" / "Local" / "MinhaPastaAila"
+    sb.add_write_root(str(explicit))
+    assert sb.resolve(str(explicit / "ok.txt")).name == "ok.txt"
+
+
 def test_sandbox_write_roots(tmp_path: Path):
     """Escrita fora do workspace só é permitida em write_roots (opt-in); demais
     pastas seguem bloqueadas. Código agêntico (salvar/editar) roteia p/ local."""
