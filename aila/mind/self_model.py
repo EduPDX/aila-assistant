@@ -15,6 +15,14 @@ import time
 from typing import Any
 
 from aila.mind.identity import load_identity
+from aila.mind.personality import (
+    MotionBias,
+    PersonalityStyle,
+    derive_style,
+    error_style,
+    motion_bias,
+    should_take_initiative,
+)
 from aila.mind.schemas import (
     AilaState,
     BodyState,
@@ -51,6 +59,27 @@ class AilaSelf:
         self.body = BodyState()
         self.experience = Experience()
         self.capabilities = Capabilities()
+        self._style_cache: PersonalityStyle | None = None
+        self._style_for: PersonalityTraits | None = None
+
+    # ---------------------------------------------------- personalidade #
+    def style(self) -> PersonalityStyle:
+        """Estilo de resposta derivado dos traços (cacheado por conjunto)."""
+        if getattr(self, "_style_cache", None) is None or self._style_for != self.personality:
+            self._style_cache = derive_style(self.personality)
+            self._style_for = self.personality.model_copy()
+        return self._style_cache
+
+    def motion(self) -> MotionBias:
+        """Energia corporal derivada da personalidade (entra no BehaviorSpec)."""
+        return motion_bias(self.personality)
+
+    def may_act_on_own(self, *, risk: float = 0.0) -> bool:
+        """Pode tomar uma pequena iniciativa (olhar, apontar, comentar)?"""
+        return should_take_initiative(self.personality, risk=risk)
+
+    def error_tone(self) -> str:
+        return error_style(self.personality)
 
     # ------------------------------------------------------------ carga #
     @classmethod
@@ -105,16 +134,17 @@ class AilaSelf:
         De propósito enxuto: com num_ctx de 8k, mandar o estado inteiro sufoca a
         janela. Vai só o essencial para a resposta sair em 1ª pessoa e coerente.
         """
-        linhas = [self.identity.prompt_block(), f"Seu jeito: {self.personality.summary()}."]
+        linhas = [self.identity.prompt_block()]
+        linhas.extend(self.style().directives)      # personalidade vira COMO responder
         if include_body:
             corpo = self.body.describe()
             if corpo:
                 linhas.append(f"Seu corpo agora: {corpo}.")
         if self.experience.activity and self.experience.activity != "idle":
             linhas.append(f"Você está: {self.experience.activity}.")
+        # curto de propósito: instrução longa dilui a aderência num modelo pequeno
         linhas.append(
-            "O avatar é o SEU corpo: fale dele como 'meu braço', 'minha mão', "
-            "'estou olhando' — nunca como 'o avatar' ou 'o modelo' (esses termos "
-            "só quando o assunto for a sua arquitetura técnica)."
+            "O avatar é o SEU corpo: diga 'meu braço', 'estou olhando' — "
+            "nunca 'o avatar' (só ao falar da sua arquitetura)."
         )
         return "\n".join(linhas)

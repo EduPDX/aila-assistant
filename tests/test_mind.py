@@ -105,3 +105,78 @@ def test_capacidades_vem_das_ferramentas_reais():
     assert not eu.capabilities.can("visao")            # não registrada -> não promete
     eu.bind_capabilities(None)                          # registry ausente não quebra
     assert eu.capabilities.items == {}
+
+
+# ------------------------------------------------------- Fase C: personalidade #
+
+def test_estilo_muda_com_os_tracos():
+    """Traços diferentes → estilo diferente. É isto que faz a personalidade
+    aparecer no comportamento em vez de virar assunto."""
+    from aila.mind import derive_style
+
+    informal = derive_style(PersonalityTraits(formality=0.2, verbosity=0.2, playfulness=0.8))
+    formal = derive_style(PersonalityTraits(formality=0.9, verbosity=0.9, playfulness=0.1))
+
+    assert informal.tone == "informal" and informal.length == "curta" and informal.humor
+    assert formal.tone == "formal" and formal.length == "explicativa" and not formal.humor
+    assert informal.directives and formal.directives
+    # a personalidade NUNCA manda falar sobre si mesma
+    for d in informal.directives + formal.directives:
+        assert "personalidade" not in d.lower()
+
+
+def test_estilo_pergunta_quando_vago():
+    from aila.mind import derive_style
+
+    curiosa = derive_style(PersonalityTraits(curiosity=0.9, patience=0.9))
+    seca = derive_style(PersonalityTraits(curiosity=0.2, patience=0.2))
+    assert curiosa.ask_when_vague and not seca.ask_when_vague
+    assert any("pergunta" in d.lower() for d in curiosa.directives)
+
+
+def test_confianca_controla_hedge():
+    from aila.mind import derive_style
+
+    assert derive_style(PersonalityTraits(confidence=0.3)).hedge
+    assert not derive_style(PersonalityTraits(confidence=0.9)).hedge
+
+
+def test_iniciativa_respeita_risco():
+    """Iniciativa alta age sozinha em coisa inofensiva, mas RISCO sempre barra —
+    ação arriscada é permissão, não personalidade."""
+    from aila.mind import should_take_initiative
+
+    ousada = PersonalityTraits(initiative=0.9)
+    timida = PersonalityTraits(initiative=0.1)
+    assert should_take_initiative(ousada, risk=0.0)        # olhar/comentar: ok
+    assert not should_take_initiative(timida, risk=0.0)
+    assert not should_take_initiative(ousada, risk=0.8)    # apagar arquivo: nunca
+
+
+def test_motion_bias_reflete_personalidade():
+    from aila.mind import motion_bias
+
+    brincalhona = motion_bias(PersonalityTraits(playfulness=0.95, seriousness=0.1))
+    seria = motion_bias(PersonalityTraits(playfulness=0.05, seriousness=0.95))
+    assert brincalhona.amplitude > seria.amplitude          # gesticula mais
+    for m in (brincalhona, seria):                          # dentro do razoável
+        assert 0.6 <= m.amplitude <= 1.35 and 0.7 <= m.speed <= 1.25
+
+
+def test_erro_tem_tom_de_acordo_com_a_personalidade():
+    from aila.mind import error_style
+
+    acolhedora = error_style(PersonalityTraits(empathy=0.9, patience=0.8))
+    objetiva = error_style(PersonalityTraits(empathy=0.2, patience=0.2, seriousness=0.9))
+    assert acolhedora != objetiva
+    assert "http" not in (acolhedora + objetiva).lower()     # erro técnico não vaza na fala
+
+
+def test_self_expoe_estilo_e_prompt_continua_curto():
+    eu = AilaSelf.load()
+    st = eu.style()
+    assert st.directives
+    assert eu.motion().amplitude > 0
+    bloco = eu.prompt_block()
+    assert any(d in bloco for d in st.directives)            # estilo entrou no prompt
+    assert len(bloco) < 700                                  # ainda cabe em num_ctx 8k

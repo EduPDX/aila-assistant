@@ -5,6 +5,14 @@ Separado de ``aila.cognition`` (memória/grafo/skills) de propósito: aqui mora
 """
 
 from aila.mind.identity import load_identity
+from aila.mind.personality import (
+    MotionBias,
+    PersonalityStyle,
+    derive_style,
+    error_style,
+    motion_bias,
+    should_take_initiative,
+)
 from aila.mind.schemas import (
     Action,
     AilaState,
@@ -20,5 +28,7 @@ from aila.mind.self_model import AilaSelf
 
 __all__ = [
     "Action", "AilaSelf", "AilaState", "BodyState", "Capabilities", "Decision",
-    "Experience", "Identity", "PersonalityTraits", "Speech", "load_identity",
+    "Experience", "Identity", "MotionBias", "PersonalityStyle", "PersonalityTraits",
+    "Speech", "derive_style", "error_style", "load_identity", "motion_bias",
+    "should_take_initiative",
 ]
