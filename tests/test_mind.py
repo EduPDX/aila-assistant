@@ -481,3 +481,52 @@ def test_decisao_traz_acao_e_deixa_a_fala_com_o_llm():
     assert d.actions[0].type == "raise_right"
     assert d.speech.text == ""                       # o texto continua sendo do modelo
     assert d.reason.startswith("user_request")
+
+
+# ------------------------------- Fase J/L: fala e ação separadas no BehaviorSpec #
+
+def test_acao_decidida_tem_precedencia_sobre_o_texto():
+    """A ação vem do PEDIDO; o texto da resposta não pode sobrescrevê-la."""
+    from aila.avatar.behavior_planner import BehaviorPlanner
+
+    p = BehaviorPlanner()
+    # texto que normalmente induziria outro gesto pela inferência
+    spec = p.plan("Claro! Vou pesquisar isso pra você.", actions=["raise_right"])
+    assert [g.type for g in spec.gestures] == ["raise_right"]
+    assert spec.gestures[0].at_time == 0.0        # no início da fala
+
+
+def test_sem_acao_decidida_o_comportamento_antigo_permanece():
+    """Compatibilidade: sem decisão, segue a inferência pelo texto (nada quebra)."""
+    from aila.avatar.behavior_planner import BehaviorPlanner
+
+    p = BehaviorPlanner()
+    antes = p.plan("Oi! Tudo bem com você?")
+    depois = p.plan("Oi! Tudo bem com você?", actions=[])
+    assert [g.type for g in antes.gestures] == [g.type for g in depois.gestures]
+
+
+def test_personalidade_modula_a_energia_do_movimento():
+    """Item 6: a personalidade influencia gestos — sem virar assunto."""
+    from aila.avatar.behavior_planner import BehaviorPlanner
+    from aila.mind import PersonalityTraits, motion_bias
+
+    p = BehaviorPlanner()
+    brincalhona = motion_bias(PersonalityTraits(playfulness=0.95, seriousness=0.1))
+    seria = motion_bias(PersonalityTraits(playfulness=0.05, seriousness=0.95))
+    a = p.plan("Pronto.", motion_bias=(brincalhona.amplitude, brincalhona.speed, brincalhona.breath))
+    b = p.plan("Pronto.", motion_bias=(seria.amplitude, seria.speed, seria.breath))
+    assert a.motion.amplitude > b.motion.amplitude
+    # o contrato com o frontend NÃO muda de formato
+    assert set(a.model_dump()) == set(p.plan("Pronto.").model_dump())
+
+
+def test_pedido_corporal_gera_gesto_de_ponta_a_ponta():
+    """Pedido → decisão → BehaviorSpec, sem passar pelo texto do modelo."""
+    from aila.avatar.behavior_planner import BehaviorPlanner
+    from aila.mind.decision_engine import decide
+
+    d = decide("levante as mãos", self_model=AilaSelf.load())
+    spec = BehaviorPlanner().plan("Assim?", actions=[a.type for a in d.actions])
+    assert [g.type for g in spec.gestures] == ["raise_both"]
+    assert spec.text == "Assim?"                   # fala preservada, separada da ação

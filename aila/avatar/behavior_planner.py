@@ -97,7 +97,23 @@ class BehaviorPlanner:
     def __init__(self, emotions: EmotionEngine | None = None) -> None:
         self.emotions = emotions or EmotionEngine()
 
-    def plan(self, text: str, *, tools_used: Iterable[str] = (), speaking: bool = True) -> BehaviorSpec:
+    def plan(
+        self,
+        text: str,
+        *,
+        tools_used: Iterable[str] = (),
+        speaking: bool = True,
+        actions: Iterable[str] = (),
+        motion_bias: tuple[float, float, float] | None = None,
+    ) -> BehaviorSpec:
+        """Monta o BehaviorSpec do turno.
+
+        ``actions``: gestos DECIDIDOS pelo Cognitive Core (Fase I). Quando vêm,
+        têm precedência sobre a inferência pelo texto — a ação foi decidida pelo
+        pedido do usuário, não adivinhada pelas palavras da resposta.
+        ``motion_bias``: energia (amplitude, velocidade, respiração) vinda da
+        personalidade (Fase C), multiplicando o estilo do intent.
+        """
         text = (text or "").strip()
         emo = self.emotions.from_text(text, speaking=speaking)
         emotion = str(emo.emotion)
@@ -105,6 +121,11 @@ class BehaviorPlanner:
         posture, gaze, amp, speed, breath = _STYLE.get(intent, _STYLE["conversation"])
         intensity = 0.85 if emotion in ("happy", "confident", "surprised") else 0.6
         est = round(max(1.0, len(text) / 15.0), 1)   # ~15 chars/s pt-BR
+
+        # AÇÃO DECIDIDA (Fase I/J) tem precedência sobre a inferida do texto:
+        # o usuário pediu o gesto, então ele acontece — no início da fala.
+        decididos = [GestureCue(type=a, at_time=0.0) for a in (actions or ()) if a]
+        mb = motion_bias or (1.0, 1.0, 1.0)
 
         # CognitiveUI: o backend DIRIGE a cena holográfica (Fase 6).
         # 'conversation' e 'greeting' não acendem a tela — a Aila encara o usuário.
@@ -123,8 +144,8 @@ class BehaviorPlanner:
             intent=intent,
             posture=posture,
             gaze=gaze,
-            motion=Motion(amplitude=amp, speed=speed, breath=breath),
-            gestures=self._gestures(text, est),
+            motion=Motion(amplitude=amp * mb[0], speed=speed * mb[1], breath=breath * mb[2]),
+            gestures=decididos or self._gestures(text, est),
             est_speech_seconds=est,
             text=text[:200],
             cognitive_ui=cognitive_ui,

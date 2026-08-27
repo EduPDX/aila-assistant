@@ -680,6 +680,7 @@ class AilaEngine:
         #   conversa           → cadeia 'chat' (ex.: Nvidia)
         task, use_tools = _classify_task(user_text, mode)
         tools = self.agents.registry.schemas() if use_tools else None
+        decided_actions: list[str] = []   # gestos decididos pelo pedido (Fase I)
 
         # DECISÃO (Fase I): pedido corporal inequívoco ("levante a mão direita")
         # aciona o gesto por REGRA, sem depender de o modelo lembrar de chamar a
@@ -689,6 +690,7 @@ class AilaEngine:
 
             _dec = _decide(user_text, self_model=self.self_model)
             if _dec and _dec.actions:
+                decided_actions = [a.type for a in _dec.actions]
                 self.pending_gesture = _dec.actions[0].type
                 self.self_model.update_experience(activity="gesturing")
                 log.info(f"[DECISION] {_dec.reason} → {_dec.actions[0].type}")
@@ -948,7 +950,14 @@ class AilaEngine:
         # Behavior Planner: decide o comportamento pelo SIGNIFICADO e emite ANTES
         # do assistant.message (que dispara o TTS) — o avatar já assume a
         # postura/emoção/gesto no início da fala, não reagindo só ao áudio.
-        spec = self.planner.plan(final_text, tools_used=tools_used)
+        # SPEECH x ACTION (Fase J/L): a fala é do LLM; a ação vem da decisão. A
+        # personalidade entra como energia do movimento (Fase C).
+        _mb = None
+        if getattr(self, "self_model", None) is not None:
+            m = self.self_model.motion()
+            _mb = (m.amplitude, m.speed, m.breath)
+        spec = self.planner.plan(final_text, tools_used=tools_used,
+                                 actions=decided_actions, motion_bias=_mb)
         await emit("avatar.behavior", spec.to_event_payload())
         self.last_avatar_state = self.emotions.from_text(final_text).to_event_payload()
         if self.avatar_sink is not None:            # compat: ponte OSC/estado
