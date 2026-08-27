@@ -1412,6 +1412,25 @@ _CODE_ACTION_RX = re.compile(
     r"documentos?|desktop|downloads?)\b", re.IGNORECASE)
 
 
+# Ordens ao avatar/corpo (gesto, pose, olhar) — curtas, mas são AÇÃO, não papo.
+_AVATAR_CMD_RX = re.compile(
+    r"\b(levant\w+|erga|abaix\w+|acen\w+|tchau|dance|dan[çc]\w+|sorri\w+|"
+    r"aponte|apont\w+|olhe|olha p|vire|gire|balan[çc]\w+|bata palma|palmas|"
+    r"pule|sente|senta|fique de p[ée]|gesto|pose|bra[çc]os?|m[ãa]os?|cabe[çc]a)\b",
+    re.IGNORECASE)
+# Verbos imperativos em geral (pedido de AÇÃO) — desqualifica "conversa casual"
+_COMMAND_RX = re.compile(
+    r"\b(fa[çc]a|faz|cri\w+|escrev\w+|salv\w+|apag\w+|delet\w+|mov\w+|copi\w+|"
+    r"renome\w+|abr\w+|fech\w+|mostr\w+|list\w+|busc\w+|procur\w+|pesquis\w+|"
+    r"rod\w+|execut\w+|test\w+|corrij\w+|conserta|arrum\w+|analis\w+|revis\w+|"
+    r"me diga|diga|fale|conte|explique|calcule|traduza|resum\w+)\b",
+    re.IGNORECASE)
+
+
+def _is_avatar_command(t: str) -> bool:
+    return bool(_AVATAR_CMD_RX.search(t or ""))
+
+
 def _is_code_request(t: str) -> bool:
     return bool(_CODE_RX.search(t or ""))
 
@@ -1422,10 +1441,14 @@ def _is_casual(t: str) -> bool:
     t = (t or "").strip()
     if not t:
         return False
+    # uma ORDEM ("levante os braços", "acene") é ação, mesmo sendo curta:
+    # tratá-la como papo tirava as ferramentas e a Aila dizia "não consigo".
+    if _is_avatar_command(t) or _COMMAND_RX.search(t) or _is_code_request(t):
+        return False
     words = t.split()
     if _CASUAL_RX.match(t) and len(words) <= 8:
         return True
-    return len(words) <= 3 and not _is_code_request(t)
+    return len(words) <= 3
 
 
 def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
@@ -1436,6 +1459,10 @@ def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
     if _is_casual(user_text):
         # básico/casual → LOCAL (prefer_local filtra p/ só local), sem ferramentas
         return RouteTask(kind="basic", needs_tools=False, prefer_local=True), False
+    if _is_avatar_command(user_text) and not _is_code_request(user_text):
+        # gesto/pose: precisa de FERRAMENTA (avatar.gesture) e de ser rápido →
+        # modelo local principal (tool-calling confiável), sem ida à nuvem.
+        return RouteTask(kind="chat", needs_tools=True, prefer_local=True), True
     if _is_code_request(user_text):
         # código → cadeia 'code' das rules (ex.: Gemini, melhor em código; local é
         # fallback). NÃO forçamos mais local: as travadas na nuvem vinham do parser

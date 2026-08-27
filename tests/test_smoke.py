@@ -2125,6 +2125,27 @@ def test_text_toolcall_multiline_code():
     assert len(extract_text_tool_calls(txt2, _Reg())) == 1
 
 
+def test_classify_command_vs_casual():
+    """REGRESSÃO: "levante os braços" é ORDEM, não papo. Tratá-la como casual
+    tirava as ferramentas e a Aila respondia "não consigo fazer tarefas físicas".
+    Comandos de avatar → local (rápido) COM ferramentas; cumprimento → sem."""
+    from aila.core.engine import _classify_task
+
+    for cmd in ("levante os braços", "acene para mim", "dance", "sorria",
+                "aponte para a tela", "olhe para mim"):
+        task, use_tools = _classify_task(cmd, "auto")
+        assert use_tools, cmd                      # precisa de avatar.gesture
+        assert task.prefer_local, cmd              # local = gesto sem atraso
+
+    for saud in ("oi", "olá, como vai?", "bom dia", "obrigado!", "tudo bem?"):
+        task, use_tools = _classify_task(saud, "auto")
+        assert task.kind == "basic" and not use_tools, saud
+
+    # pedido curto que é ação continua com ferramentas
+    _, ut = _classify_task("me diga as horas", "auto")
+    assert ut
+
+
 def test_call_budget_antiloop():
     """Anti-loop: teto por-NOME pega o modelo que varia args triviamente (placeholders)
     p/ escapar do teto por-assinatura; ferramentas de leitura ficam isentas; o teto
