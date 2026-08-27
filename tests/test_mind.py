@@ -323,3 +323,52 @@ def test_validator_nao_estraga_resposta_boa():
                 "O sistema operacional é o Windows 11."):
         r = validate(boa)
         assert r.text == boa and not r.changed, boa
+
+
+# ------------------------------------------- Fase E: experiência atual (o agora) #
+
+def test_atividade_vem_da_ferramenta_usada():
+    """A atividade é derivada do que ela REALMENTE executou — não de adivinhação
+    sobre o texto da resposta."""
+    from aila.mind.experience import activity_for_tool, activity_for_tools
+
+    assert activity_for_tool("web.search") == "searching"
+    assert activity_for_tool("code.test") == "testing"
+    assert activity_for_tool("code.write_file") == "coding"
+    assert activity_for_tool("file.read") == "reading"
+    assert activity_for_tool("ferramenta.inexistente") is None
+    # a ÚLTIMA reconhecida vence: é o que está acontecendo agora
+    assert activity_for_tools(["web.search", "web.fetch"]) == "reading"
+    assert activity_for_tools([]) == "idle"
+
+
+def test_experiencia_descreve_em_primeira_pessoa():
+    from aila.mind.experience import describe
+
+    assert describe("searching") == "estou pesquisando"
+    assert describe("analyzing", "o gráfico") == "estou analisando (o gráfico)"
+    assert describe("idle") == ""                      # nada a dizer não polui o prompt
+    assert "avatar" not in describe("coding").lower()
+
+
+def test_bloco_junta_atividade_e_corpo():
+    e = _engine_fake()
+    e.self_model.update_experience(activity="analyzing", attention="o gráfico")
+    e.self_model.update_body(gaze_target="o gráfico")
+    bloco = e._body_block()
+    assert "estou analisando" in bloco and "estou olhando para o gráfico" in bloco
+    assert "[VOCÊ AGORA]" in bloco
+
+
+def test_atividade_sobrevive_ao_corpo_expirado(monkeypatch):
+    """Corpo velho é descartado (postura passada seria mentira), mas a atividade
+    do turno continua válida — ela é sempre do agora."""
+    import time as _t
+    e = _engine_fake()
+    e.self_model.update_body(hands={"left": "rest", "right": "raised"})
+    e.self_model.update_experience(activity="searching")
+    agora = _t.time()
+    monkeypatch.setattr("aila.core.engine.time.time", lambda: agora + 999)
+    bloco = e._body_block()
+    assert "estou pesquisando" in bloco               # atividade permanece
+    assert "levantada" not in bloco                    # postura antiga não é afirmada

@@ -237,16 +237,23 @@ class AilaEngine:
 
         Só entra se for fresco: um corpo desatualizado faria a Aila afirmar algo
         falso ("estou apontando") — pior do que não saber. Vazio = nada a dizer."""
+        from aila.mind.schemas import BodyState
+
         sm = getattr(self, "self_model", None)
         if sm is None:
             return ""
         body = sm.body
+        # corpo velho não entra (afirmar postura passada seria mentir), mas a
+        # ATIVIDADE do turno continua valendo — ela é sempre do agora.
         if not body.updated_at or (time.time() - body.updated_at) > self.BODY_FRESH_S:
+            body = BodyState()
+        from aila.mind.experience import describe as _exp_desc
+
+        partes = [p for p in (_exp_desc(sm.experience.activity, sm.experience.attention),
+                              body.describe()) if p]
+        if not partes:
             return ""
-        desc = body.describe()
-        if not desc:
-            return ""
-        return (f"[SEU CORPO AGORA] {desc}. "
+        return (f"[VOCÊ AGORA] {'; '.join(partes)}. "
                 "Fale disso em primeira pessoa ('minha mão', 'estou olhando'); "
                 "nunca diga 'o avatar'.")
 
@@ -806,6 +813,12 @@ class AilaEngine:
                     self.context.add_tool(name, over)   # o modelo vê e deve concluir
                     continue
                 tools_used.append(name)
+                if getattr(self, "self_model", None) is not None:
+                    from aila.mind.experience import activity_for_tool
+
+                    _act = activity_for_tool(name)
+                    if _act:                       # o que ela está fazendo AGORA
+                        self.self_model.update_experience(activity=_act)
                 # Guarda o código que o modelo produziu, venha de onde vier: ele
                 # frequentemente manda o código p/ code.run (ou tenta escrever e
                 # falha) sem nunca pôr num bloco ``` — a rede de segurança usa isto
@@ -897,6 +910,14 @@ class AilaEngine:
                 self.audit.record("guardrail.output", "guardrails",
                                   {"kinds": guarded.findings}, "redacted", allowed=True)
             log.warning(f"guardrail: {len(guarded.findings)} segredo(s) redigido(s) na saída")
+
+        if getattr(self, "self_model", None) is not None:
+            # fim do turno: ela está falando, com a emoção que o EmotionEngine
+            # decidiu (não duplicamos a lógica de emoção — só refletimos aqui).
+            self.self_model.update_experience(
+                activity="talking",
+                emotion=str(self.emotions.from_text(final_text).emotion),
+            )
 
         self.context.add_assistant(final_text)
         self._persist("assistant", final_text)
