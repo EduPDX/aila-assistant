@@ -433,3 +433,51 @@ def test_identidade_igual_no_caminho_casual_e_no_normal():
     assert "Aila" in casual and "primeira pessoa" in casual.lower()
     # mesmas diretivas de estilo do self model (não um texto paralelo)
     assert any(d in casual for d in e.self_model.style().directives)
+
+
+# ------------------------------------------ Fase I: Decision Engine (ação decidida) #
+
+def test_decide_gesto_pelo_pedido_nao_pelo_texto():
+    """A ação passa a vir do PEDIDO (determinístico), não da inferência sobre a
+    resposta — assim o corpo se mexe mesmo se o modelo esquecer a ferramenta."""
+    from aila.mind.decision_engine import decide_gesture
+
+    assert decide_gesture("levante a mão direita") == "raise_right"
+    assert decide_gesture("levanta a mao esquerda") == "raise_left"
+    assert decide_gesture("levante as mãos") == "raise_both"      # plural = os dois
+    assert decide_gesture("levanta a mão") == "raise_right"       # sem lado = dominante
+    assert decide_gesture("acene para mim") == "wave"
+    assert decide_gesture("aponte para a tela") == "point"
+    assert decide_gesture("abaixe os braços") == "rest"
+
+
+def test_decide_so_age_no_inequivoco():
+    """Ambiguidade fica com o LLM: assumir o corpo por engano é pior que não agir."""
+    from aila.mind.decision_engine import decide, decide_gesture
+
+    for t in ("oi tudo bem?", "faça um jogo em python", "o que você acha de IA?",
+              "me explique como levantar um servidor", ""):
+        assert decide_gesture(t) is None, t
+        assert decide(t) is None, t
+
+
+def test_decisao_so_produz_gesto_que_o_avatar_conhece():
+    """Decidir um gesto inexistente faria o avatar ignorar em silêncio."""
+    from aila.agents.avatar_agent import GESTURES
+    from aila.mind.decision_engine import GESTOS_VALIDOS, decide_gesture
+
+    assert GESTOS_VALIDOS == set(GESTURES)          # listas não podem divergir
+    for pedido in ("levante a mão direita", "acene", "aponte para lá", "manda joinha"):
+        g = decide_gesture(pedido)
+        assert g in GESTURES, (pedido, g)
+
+
+def test_decisao_traz_acao_e_deixa_a_fala_com_o_llm():
+    from aila.mind.decision_engine import decide
+
+    eu = AilaSelf.load()
+    d = decide("levante a mão direita", self_model=eu)
+    assert d is not None
+    assert d.actions[0].type == "raise_right"
+    assert d.speech.text == ""                       # o texto continua sendo do modelo
+    assert d.reason.startswith("user_request")

@@ -681,6 +681,18 @@ class AilaEngine:
         task, use_tools = _classify_task(user_text, mode)
         tools = self.agents.registry.schemas() if use_tools else None
 
+        # DECISÃO (Fase I): pedido corporal inequívoco ("levante a mão direita")
+        # aciona o gesto por REGRA, sem depender de o modelo lembrar de chamar a
+        # ferramenta. O texto continua sendo do LLM; só a AÇÃO deixa de ser refém.
+        if getattr(self, "self_model", None) is not None:
+            from aila.mind.decision_engine import decide as _decide
+
+            _dec = _decide(user_text, self_model=self.self_model)
+            if _dec and _dec.actions:
+                self.pending_gesture = _dec.actions[0].type
+                self.self_model.update_experience(activity="gesturing")
+                log.info(f"[DECISION] {_dec.reason} → {_dec.actions[0].type}")
+
         opts = {"num_ctx": self.settings.llm.num_ctx}
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
         wrote_ok = False             # alguma escrita REALMENTE deu certo neste turno
