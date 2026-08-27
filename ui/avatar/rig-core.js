@@ -77,6 +77,33 @@ export class Rig {
     scene.add(this.gazeTarget);
     try { if (vrm.lookAt) vrm.lookAt.target = this.gazeTarget; } catch (e) { /* modelo sem lookAt */ }
     this._v = new THREE.Vector3();    // reuso p/ math (0 GC)
+    // sinal de rotação dos braços, MEDIDO no modelo (ver calibrateArms)
+    this.armZSign = 1;
+    try { this.calibrateArms(); } catch (e) { /* modelo atípico: mantém 1 */ }
+  }
+
+  /** Descobre EMPIRICAMENTE para que lado o braço desce.
+   *
+   *  A pose de descanso gira o upperArm no eixo Z, mas o sentido depende de como
+   *  o modelo foi montado (VRM0 é girado 180°, e há modelos com left/right
+   *  espelhados). Chutar o sinal deixa a avatar de braços LEVANTADOS.
+   *  Aqui giramos o braço esquerdo um pouco e medimos se a mão sobe ou desce:
+   *  o sinal que ABAIXA é o que a pose usa. Roda 1x, no load. */
+  calibrateArms() {
+    const up = this.bone('leftUpperArm'), lo = this.bone('leftLowerArm');
+    if (!up || !lo) return;
+    const keep = up.rotation.z;
+    const tipY = () => {
+      this.vrm.scene.updateMatrixWorld(true);
+      return lo.matrixWorld.elements[13];            // Y do cotovelo (mundo)
+    };
+    const A = 0.7;                                   // ~40°: sinal claro, sem exagero
+    up.rotation.z = keep - A; const yNeg = tipY();
+    up.rotation.z = keep + A; const yPos = tipY();
+    up.rotation.z = keep; this.vrm.scene.updateMatrixWorld(true);
+    // A pose usa Z NEGATIVO no braço esquerdo para abaixá-lo. Se neste modelo
+    // quem abaixa é o positivo, a pose precisa ser INVERTIDA (sign = -1).
+    this.armZSign = (yNeg <= yPos) ? 1 : -1;
   }
 
   bone(name) {

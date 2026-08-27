@@ -34,9 +34,13 @@ export function createPostureLayer() {
           else if (bone === 'leftUpperArm') dz = -aZ;
           else if (bone === 'rightLowerArm' || bone === 'leftLowerArm') dx += aX;
         }
+        // Z dos BRAÇOS: multiplicado pelo sinal medido no modelo (rig.calibrateArms).
+        // Sem isso, um VRM montado "ao contrário" fica de braços LEVANTADOS.
+        const sz = bone.endsWith('UpperArm') || bone.endsWith('LowerArm')
+          ? (rig.armZSign || 1) : 1;
         c[0] = damp(c[0], (t[0] + dx) * DEG, k, dt);
         c[1] = damp(c[1], (t[1] + dy) * DEG, k, dt);
-        c[2] = damp(c[2], (t[2] + dz) * DEG, k, dt);
+        c[2] = damp(c[2], (t[2] + dz) * DEG * sz, k, dt);
         buf.addRot(bone, c[0], c[1], c[2]);
       }
       // inclinação base da coluna pela emoção (postura aberta/caída)

@@ -41,12 +41,21 @@ export function createJointLimits() {
   return {
     name: 'joint-limits',
     solve(rig, buf) {
+      // Modelos montados "ao contrário" giram o braço no sentido oposto
+      // (rig.armZSign = -1). Os limites de Z dos BRAÇOS precisam espelhar junto,
+      // senão eles cortam a pose de descanso e a avatar fica de braços levantados.
+      const sz = rig && rig.armZSign === -1 ? -1 : 1;
       for (const [bone, lim] of Object.entries(LIMITS)) {
         const v = buf.rot.get(bone);
         if (!v) continue;
         if (lim.x) v[0] = clamp(v[0], lim.x[0], lim.x[1]);
         if (lim.y) v[1] = clamp(v[1], lim.y[0], lim.y[1]);
-        if (lim.z) v[2] = clamp(v[2], lim.z[0], lim.z[1]);
+        if (lim.z) {
+          const flip = sz === -1 && (bone.endsWith('UpperArm') || bone.endsWith('LowerArm'));
+          const lo = flip ? -lim.z[1] : lim.z[0];
+          const hi = flip ? -lim.z[0] : lim.z[1];
+          v[2] = clamp(v[2], lo, hi);
+        }
       }
     },
   };
