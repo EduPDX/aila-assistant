@@ -372,3 +372,64 @@ def test_atividade_sobrevive_ao_corpo_expirado(monkeypatch):
     bloco = e._body_block()
     assert "estou pesquisando" in bloco               # atividade permanece
     assert "levantada" not in bloco                    # postura antiga não é afirmada
+
+
+# --------------------------------------------- Fase G: Context Manager (orçamento) #
+
+def test_orcamento_escala_com_a_janela_e_o_provedor():
+    from aila.mind.context_manager import budget_for
+
+    pequeno = budget_for(8192, local=True)      # modelo local: janela apertada
+    grande = budget_for(128000, local=False)    # nuvem: cabe mais
+    assert 0 < pequeno < grande
+    assert budget_for(8192, local=False) > pequeno   # mesma janela, mais folga na nuvem
+    assert budget_for(0, local=True) > 0              # nunca zero (config torta)
+
+
+def test_estado_tem_prioridade_sobre_memoria():
+    """Quando aperta, o que sobrevive é o ESTADO (evita a 3ª pessoa); a memória
+    é a primeira a ser cortada."""
+    from aila.mind.context_manager import build_blocks
+
+    estado = "[VOCÊ AGORA] estou com a mão direita levantada."
+    memoria = "M" * 5000
+    blocos = build_blocks(state_block=estado, memory_block=memoria, budget_chars=len(estado) + 200)
+    assert blocos[0] == estado                        # estado intacto
+    assert len(blocos[1]) < len(memoria)              # memória cortada p/ caber
+
+
+def test_memoria_sai_inteira_quando_ha_espaco():
+    from aila.mind.context_manager import build_blocks
+
+    blocos = build_blocks(state_block="estado", memory_block="memoria", budget_chars=10_000)
+    assert blocos == ["estado", "memoria"]
+
+
+def test_memoria_e_descartada_se_nao_couber():
+    from aila.mind.context_manager import build_blocks
+
+    estado = "E" * 300
+    blocos = build_blocks(state_block=estado, memory_block="lembrança importante",
+                          budget_chars=310)
+    assert blocos == [estado]                          # nada de meia-memória inútil
+
+
+def test_blocos_vazios_nao_poluem():
+    from aila.mind.context_manager import build_blocks
+
+    assert build_blocks(state_block="", memory_block="", budget_chars=1000) == []
+    # memória SOZINHA é contexto legítimo (sem corpo, mas com lembrança útil)
+    assert build_blocks(state_block="  ", memory_block="x" * 90, budget_chars=1000) == ["x" * 90]
+
+
+def test_identidade_igual_no_caminho_casual_e_no_normal():
+    """Item 23: a Aila é a MESMA nos dois caminhos (papo x tarefa)."""
+    from aila.core.engine import AilaEngine
+
+    e = object.__new__(AilaEngine)
+    e.self_model = AilaSelf.load()
+    e.settings = type("S", (), {"app": type("A", (), {"persona": "fallback"})()})()
+    casual = e._casual_prompt()
+    assert "Aila" in casual and "primeira pessoa" in casual.lower()
+    # mesmas diretivas de estilo do self model (não um texto paralelo)
+    assert any(d in casual for d in e.self_model.style().directives)

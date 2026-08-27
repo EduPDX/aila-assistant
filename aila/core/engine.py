@@ -609,8 +609,12 @@ class AilaEngine:
         """Prompt CURTO p/ conversa casual. O modelo local é um *coder* — inundá-lo
         com instruções de ferramentas/código faz ele responder código até p/ 'oi'.
         Num papo, ele recebe só a persona e como conversar."""
+        sm = getattr(self, "self_model", None)
+        # identidade/estilo vêm do MESMO self model do caminho normal (item 23:
+        # a Aila é a mesma, não importa o caminho nem o modelo que respondeu).
+        base = sm.prompt_block(include_body=False) if sm else self.settings.app.persona.strip()
         return (
-            f"{self.settings.app.persona.strip()}\n\n"
+            f"{base}\n\n"
             "Você está CONVERSANDO com o usuário. Responda em português do Brasil, "
             "de forma curta (1–3 frases), natural e simpática.\n"
             "NÃO escreva código, NÃO faça listas de passos, NÃO proponha planos e NÃO "
@@ -625,15 +629,19 @@ class AilaEngine:
         msgs = self.context.build()
         if system_override and msgs and msgs[0].get("role") == "system":
             msgs[0] = {"role": "system", "content": system_override}
-        if mem_block:
-            # insere logo após o prompt de sistema principal
-            msgs.insert(1, {"role": "system", "content": mem_block})
+        # (a memória entra pelo ContextManager, junto do estado)
         # CORPO (Fase D): o system prompt é montado UMA vez, mas o corpo muda a
         # cada turno — então entra aqui, curto, como bloco de sistema. Sem isto a
         # Aila não sabe o que o próprio corpo está fazendo e fala em 3ª pessoa.
-        corpo = self._body_block()
-        if corpo:
-            msgs.insert(1, {"role": "system", "content": corpo})
+        from aila.mind.context_manager import budget_for, build_blocks
+
+        for i, bloco in enumerate(build_blocks(
+            state_block=self._body_block(),
+            memory_block=mem_block or "",
+            budget_chars=budget_for(self.settings.llm.num_ctx,
+                                    local=getattr(self, "_last_local", True)),
+        )):
+            msgs.insert(1 + i, {"role": "system", "content": bloco})
 
         # Gestão de janela: compacta resultados de tool antigos p/ caber no num_ctx
         # (protege system/plano de ser truncado silenciosamente em turnos longos).
@@ -682,6 +690,7 @@ class AilaEngine:
         backend = chain[0]
         # SEMPRE mostra qual modelo está atendendo (inclusive o local) — o usuário
         # vê na lista de atividades se foi local/nvidia/gemini e qual modelo.
+        self._last_local = bool(backend.capabilities().local)
         _fast = (self.settings.llm.fast_model or "").strip()
         await emit("model.selected", {
             "provider": backend.name,
