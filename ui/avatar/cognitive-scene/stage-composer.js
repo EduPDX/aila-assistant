@@ -44,10 +44,13 @@ export class StageComposer {
       statusGroup.scale.setScalar(s);
     }
 
-    // balão de resumo (Jarvis): acima da Aila, encarando a câmera (some sozinho).
+    // balão de resumo (Jarvis): à DIREITA da Aila, na altura dos olhos — o lado
+    // livre (os dois monitores ficam à esquerda). Antes ficava acima da cabeça,
+    // apertado; aqui usa o espaço vazio e não tampa o rosto. Inclinação
+    // espelhada à dos monitores, p/ encarar quem olha.
     if (messageGroup) {
-      messageGroup.position.set(c.x + h * 0.05, eyeY + h * 0.32, c.z + h * 0.55);
-      messageGroup.rotation.set(0, -0.06, 0);
+      messageGroup.position.set(c.x + h * 1.02, eyeY + h * 0.02, c.z + h * 0.30);
+      messageGroup.rotation.set(0, -0.26, 0);
       messageGroup.scale.setScalar(s * 0.92);
     }
 
