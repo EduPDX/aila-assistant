@@ -58,6 +58,18 @@ export const CTRL_BONES = [
 //  por IK (ui/avatar/gestures.js). A postura cai em `rest` p/ esses, e o IK
 //  posiciona o braço. Os demais (hand_explain/shrug/cheer/raise_*) seguem FK
 //  até serem migrados (hand_explain espera o braço esquerdo — regra 7).
+// Elevação dos BRAÇOS por gesto: -1 = abaixado, 0 = horizontal (T), +1 = erguido.
+//  Independente de modelo: o rig mede quais GRAUS produzem cada extremo neste VRM
+//  (rig.calibrateArms) e converte em rig.armAngle(). Ângulo fixo em POSES fazia a
+//  mão atravessar para o outro lado do corpo em modelos com convenção diferente.
+export const ARM_ELEVATION = {
+  rest:        { left: -0.80, right: -0.80 },
+  shrug:       { left: -0.30, right: -0.30 },
+  cheer:       { left:  0.95, right:  0.95 },
+  raise_right: { right: 0.95 },
+  raise_left:  { left:  0.95 },
+};
+
 export const POSES = {
   rest:        { leftUpperArm: [0, 0, -72], rightUpperArm: [0, 0, 72], leftLowerArm: [0, 4, -10], rightLowerArm: [0, -4, 10] },
   shrug:       { leftUpperArm: [0, 0, -110], rightUpperArm: [0, 0, 110], leftLowerArm: [0, 40, -80], rightLowerArm: [0, -40, 80] },

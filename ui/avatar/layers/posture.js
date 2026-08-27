@@ -3,7 +3,7 @@
 //  + inclinação de tronco/cabeça vinda da emoção. As demais camadas só somam
 //  offsets por cima disto.
 import { DEG, damp } from '../rig-core.js';
-import { CTRL_BONES, POSES, GESTURE_ALIASES } from '../profiles.js';
+import { ARM_ELEVATION, CTRL_BONES, POSES, GESTURE_ALIASES } from '../profiles.js';
 
 export function createPostureLayer() {
   const cur = {};                     // rotação atual (rad) por osso, p/ suavizar
@@ -34,13 +34,25 @@ export function createPostureLayer() {
           else if (bone === 'leftUpperArm') dz = -aZ;
           else if (bone === 'rightLowerArm' || bone === 'leftLowerArm') dx += aX;
         }
-        // Z dos BRAÇOS: multiplicado pelo sinal medido no modelo (rig.calibrateArms).
-        // Sem isso, um VRM montado "ao contrário" fica de braços LEVANTADOS.
-        const sz = bone.endsWith('UpperArm') || bone.endsWith('LowerArm')
-          ? (rig.armZSign || 1) : 1;
+        // BRAÇO (upperArm): o alvo vem da ELEVAÇÃO do gesto convertida para os
+        // graus DESTE modelo — assim a mão nunca cruza para o lado errado.
+        // Demais ossos (antebraço etc.): ângulo direto, só com o sinal medido.
+        let alvoZ;
+        if (bone.endsWith('UpperArm')) {
+          const lado = bone.startsWith('left') ? 'left' : 'right';
+          const elevGesto = ARM_ELEVATION[gname] || {};
+          const elev = elevGesto[lado] !== undefined
+            ? elevGesto[lado]
+            : (ARM_ELEVATION.rest[lado] ?? -0.8);
+          alvoZ = (rig.armAngle ? rig.armAngle(lado, elev) : t[2]) * DEG
+                + dz * DEG * (lado === 'left' ? -1 : 1);
+        } else {
+          const sz = bone.endsWith('LowerArm') ? (rig.armZSign || 1) : 1;
+          alvoZ = (t[2] + dz) * DEG * sz;
+        }
         c[0] = damp(c[0], (t[0] + dx) * DEG, k, dt);
         c[1] = damp(c[1], (t[1] + dy) * DEG, k, dt);
-        c[2] = damp(c[2], (t[2] + dz) * DEG * sz, k, dt);
+        c[2] = damp(c[2], alvoZ, k, dt);
         buf.addRot(bone, c[0], c[1], c[2]);
       }
       // inclinação base da coluna pela emoção (postura aberta/caída)

@@ -82,28 +82,49 @@ export class Rig {
     try { this.calibrateArms(); } catch (e) { /* modelo atípico: mantém 1 */ }
   }
 
-  /** Descobre EMPIRICAMENTE para que lado o braço desce.
+  /** Calibra os braços MEDINDO o modelo (roda 1x, no load).
    *
-   *  A pose de descanso gira o upperArm no eixo Z, mas o sentido depende de como
-   *  o modelo foi montado (VRM0 é girado 180°, e há modelos com left/right
-   *  espelhados). Chutar o sinal deixa a avatar de braços LEVANTADOS.
-   *  Aqui giramos o braço esquerdo um pouco e medimos se a mão sobe ou desce:
-   *  o sinal que ABAIXA é o que a pose usa. Roda 1x, no load. */
+   *  As poses não podem ser ângulos fixos: cada VRM tem sua convenção. Aqui
+   *  varremos o ângulo Z de cada braço e anotamos qual valor deixa a mão mais
+   *  ALTA e qual a deixa mais BAIXA — descartando os que cruzam o corpo (foi
+   *  isso que fazia a mão direita ir para o lado esquerdo).
+   *
+   *  Resultado: ``rig.armZ[side] = {up, down}`` em graus, e ``armZSign`` (compat
+   *  para os ossos menores). Poses passam a ser ELEVAÇÃO (-1 abaixado .. +1
+   *  erguido) e viram graus por :meth:`armAngle`. */
   calibrateArms() {
-    const up = this.bone('leftUpperArm'), lo = this.bone('leftLowerArm');
-    if (!up || !lo) return;
-    const keep = up.rotation.z;
-    const tipY = () => {
+    const out = {};
+    for (const side of ['left', 'right']) {
+      const up = this.bone(side + 'UpperArm'), hand = this.bone(side + 'Hand');
+      if (!up || !hand) continue;
+      const keep = up.rotation.z;
       this.vrm.scene.updateMatrixWorld(true);
-      return lo.matrixWorld.elements[13];            // Y do cotovelo (mundo)
-    };
-    const A = 0.7;                                   // ~40°: sinal claro, sem exagero
-    up.rotation.z = keep - A; const yNeg = tipY();
-    up.rotation.z = keep + A; const yPos = tipY();
-    up.rotation.z = keep; this.vrm.scene.updateMatrixWorld(true);
-    // A pose usa Z NEGATIVO no braço esquerdo para abaixá-lo. Se neste modelo
-    // quem abaixa é o positivo, a pose precisa ser INVERTIDA (sign = -1).
-    this.armZSign = (yNeg <= yPos) ? 1 : -1;
+      const ladoDoOmbro = Math.sign(up.matrixWorld.elements[12]) || 1;
+      let upZ = 0, upY = -1e9, downZ = 0, downY = 1e9;
+      for (let d = -120; d <= 120; d += 6) {
+        up.rotation.z = d * DEG;
+        this.vrm.scene.updateMatrixWorld(true);
+        const hx = hand.matrixWorld.elements[12], hy = hand.matrixWorld.elements[13];
+        // descarta ângulos em que a mão atravessa para o outro lado do corpo
+        if (Math.abs(hx) > 0.03 && Math.sign(hx) !== ladoDoOmbro) continue;
+        if (hy > upY) { upY = hy; upZ = d; }
+        if (hy < downY) { downY = hy; downZ = d; }
+      }
+      up.rotation.z = keep;
+      out[side] = { up: upZ, down: downZ };
+    }
+    this.vrm.scene.updateMatrixWorld(true);
+    this.armZ = out;
+    // compat (ossos menores, ex.: antebraço): sinal de "para baixo" no braço esq.
+    this.armZSign = (out.left && out.left.down > 0) ? -1 : 1;
+  }
+
+  /** Elevação (-1 abaixado .. 0 na horizontal .. +1 erguido) → graus deste modelo. */
+  armAngle(side, elev) {
+    const c = this.armZ && this.armZ[side];
+    if (!c) return 0;
+    const e = elev < -1 ? -1 : elev > 1 ? 1 : elev;
+    return e >= 0 ? c.up * e : c.down * (-e);
   }
 
   bone(name) {

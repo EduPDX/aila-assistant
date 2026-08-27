@@ -51,7 +51,11 @@ export function createJointLimits() {
         if (lim.x) v[0] = clamp(v[0], lim.x[0], lim.x[1]);
         if (lim.y) v[1] = clamp(v[1], lim.y[0], lim.y[1]);
         if (lim.z) {
-          const flip = sz === -1 && (bone.endsWith('UpperArm') || bone.endsWith('LowerArm'));
+          // O braço já vem de uma faixa MEDIDA no modelo (rig.armAngle), que por
+          // construção não cruza o corpo — clampá-lo com limites de outra
+          // convenção só quebraria a pose. Os demais ossos seguem limitados.
+          if (bone.endsWith('UpperArm') && rig && rig.armZ) continue;
+          const flip = sz === -1 && bone.endsWith('LowerArm');
           const lo = flip ? -lim.z[1] : lim.z[0];
           const hi = flip ? -lim.z[0] : lim.z[1];
           v[2] = clamp(v[2], lo, hi);
