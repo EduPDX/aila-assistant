@@ -2089,8 +2089,10 @@ def test_classify_task_routing():
         task, use_tools = _classify_task(msg, "auto")
         assert task.kind == "code" and use_tools
 
+    # opinião/conhecimento: chat SEM ferramentas (o modelo responde do que sabe;
+    # oferecer ferramenta aqui só gera tentativa inútil e atraso)
     task, use_tools = _classify_task("o que você acha sobre IA?", "auto")
-    assert task.kind == "chat" and use_tools
+    assert task.kind == "chat" and not use_tools
     # mode chat: nunca ferramentas
     assert _classify_task("corrija o bug", "chat") == (_classify_task("corrija o bug", "chat"))
     _, ut = _classify_task("qualquer coisa", "chat")

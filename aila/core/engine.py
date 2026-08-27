@@ -1573,10 +1573,26 @@ def _is_casual(t: str) -> bool:
     # tratá-la como papo tirava as ferramentas e a Aila dizia "não consigo".
     if _is_avatar_command(t) or _COMMAND_RX.search(t) or _is_code_request(t):
         return False
+    # se depende do mundo real (hora, arquivo, web...), não é papo — mesmo curto
+    if _needs_tools(t):
+        return False
     words = t.split()
     if _CASUAL_RX.match(t) and len(words) <= 8:
         return True
     return len(words) <= 3
+
+
+#: sinais de que a resposta depende de algo FORA do modelo (arquivo, web, anexo,
+#: memória, PC). Sem nenhum deles, a pergunta é conhecimento puro — oferecer
+#: ferramentas só faz o modelo pequeno tatear (docs.read, web.fetch…) e ATRASAR.
+_PRECISA_FERRAMENTA_RX = re.compile(
+    r"\bpesquis\w+|\bbusc\w+|\bprocur\w+|\bgoogl\w+|na (web|internet)|\barquivo|\bpasta|\bdiret[óo]rio|\bdocumento|\bplanilha|\banexo|\bimagem|\bprint\b|\btela\b|\blembr\w+|\bguard\w+|\bsalv\w+|\banot\w+|\bhoje\b|\bhoras?\b|\bque horas|\bdata\b|\bagora\b|\batual\w*|\b[úu]ltim\w+|\bnot[íi]cia\w*|https?://|[A-Za-z]:\\\\|\b\w+\.(py|js|ts|md|txt|json|csv|pdf|docx?|xlsx?)\b|\[Anexo|\[Pasta anexada",
+    re.IGNORECASE)
+
+
+def _needs_tools(t: str) -> bool:
+    """A mensagem depende de algo externo (arquivo/web/anexo/memória/PC)?"""
+    return bool(_PRECISA_FERRAMENTA_RX.search(t or ""))
 
 
 def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
@@ -1596,6 +1612,11 @@ def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
         # fallback). NÃO forçamos mais local: as travadas na nuvem vinham do parser
         # de tool-call, que rejeitava código multi-linha (corrigido com strict=False).
         return RouteTask(kind="code", needs_tools=True), True
+    if not _needs_tools(user_text):
+        # conhecimento puro ("por onde começo a estudar IA?"): o modelo responde
+        # do que sabe. Oferecer ferramentas aqui só gera tentativas inúteis
+        # (docs.read/web.fetch) que ATRASAM uma resposta simples.
+        return RouteTask(kind="chat", needs_tools=False), False
     return RouteTask(kind="chat", needs_tools=True), True
 
 

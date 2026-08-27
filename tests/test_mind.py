@@ -530,3 +530,35 @@ def test_pedido_corporal_gera_gesto_de_ponta_a_ponta():
     spec = BehaviorPlanner().plan("Assim?", actions=[a.type for a in d.actions])
     assert [g.type for g in spec.gestures] == ["raise_both"]
     assert spec.text == "Assim?"                   # fala preservada, separada da ação
+
+
+# ---------------------------- Ferramentas só quando a resposta depende delas #
+
+def test_pergunta_de_conhecimento_nao_oferece_ferramentas():
+    """Oferecer ferramentas numa pergunta de conhecimento fazia o 7B tatear
+    (docs.read/web.fetch) e ATRASAR uma resposta que ele já sabia dar."""
+    from aila.core.engine import _classify_task
+
+    for p in ("to pensando em estudar ia, por onde começo?",
+              "o que é um modelo LLM?",
+              "o que você acha do futuro da IA?",
+              "me explique como funciona uma rede neural",
+              "qual a capital do Brasil?"):
+        task, use_tools = _classify_task(p, "auto")
+        assert not use_tools, p
+        assert task.kind == "chat"
+
+
+def test_pedido_que_depende_de_algo_externo_mantem_ferramentas():
+    """O corte não pode tirar ferramenta de quem precisa: arquivo, web, anexo,
+    memória e ação continuam com acesso."""
+    from aila.core.engine import _classify_task
+
+    for p in ("pesquise as novidades de IA hoje",
+              "leia o arquivo relatorio.pdf",
+              "o que tem na pasta Documentos?",
+              "lembre que eu gosto de python",
+              "faça um jogo e salve como x.py",
+              "levante a mão direita"):
+        _, use_tools = _classify_task(p, "auto")
+        assert use_tools, p

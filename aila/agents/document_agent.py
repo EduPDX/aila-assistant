@@ -101,7 +101,9 @@ class DocumentAgent(BaseAgent):
                 name="docs.read",
                 description=(
                     "Extrai o TEXTO de um documento (pdf, docx, xlsx, pptx, csv, txt, "
-                    "md) para análise/resumo. Caminho relativo ao workspace."
+                    "md) para análise/resumo. Use SOMENTE quando houver um documento "
+                    "REAL para ler (anexo ou caminho informado). NÃO use para responder "
+                    "perguntas de conhecimento geral — nesses casos responda direto."
                 ),
                 params=[ToolParam("path", "string", "ex.: contrato.pdf")],
                 handler=self._read,
