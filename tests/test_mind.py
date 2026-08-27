@@ -245,3 +245,81 @@ def test_report_parcial_nao_quebra():
     e.self_model.update_body(hands=None, gesture=None, posture="thinking")
     assert e.self_model.body.posture == "thinking"
     assert e.self_model.body.hands == {"left": "rest", "right": "rest"}
+
+
+# ------------------------------------- Fase K: Response Validator (identidade) #
+
+def test_validator_corrige_terceira_pessoa():
+    """CASO OBRIGATÓRIO (item 31/24): body diz mão levantada e a resposta sai em
+    3ª pessoa → o validador corrige sozinho, sem LLM."""
+    from aila.mind.response_validator import validate
+
+    r = validate("O avatar está com a mão direita levantada.")
+    assert not r.ok and r.has("self_reference") and r.changed
+    assert r.text == "Estou com a mão direita levantada."
+    assert "avatar" not in r.text.lower()
+
+
+def test_validator_varios_sujeitos_e_verbos():
+    from aila.mind.response_validator import validate
+
+    assert validate("o modelo levantou o braço").text == "levantei o braço"
+    assert validate("A Aila está analisando o gráfico.").text == "Estou analisando o gráfico."
+    assert validate("o personagem apontou para a tela").text == "apontei para a tela"
+
+
+def test_validator_nao_arrisca_verbo_desconhecido():
+    """Reescrever errado ('eu cambaleou') é pior que a violação: se o verbo não
+    está na tabela, mantém o texto — mas ainda assim não inventa correção."""
+    from aila.mind.response_validator import validate
+
+    r = validate("o avatar cambaleou pela sala")
+    assert r.text == "o avatar cambaleou pela sala"
+    assert not r.changed
+
+
+def test_validator_pega_negacao_de_capacidade():
+    """O erro REAL: pediram 'levante os braços' e ela disse que não faz tarefas
+    físicas — tendo corpo e ferramenta de gesto."""
+    from aila.mind.response_validator import correction_hint, validate
+
+    class _T:
+        def __init__(self, n): self.name = n
+
+    class _Reg:
+        def all(self): return [_T("avatar.gesture")]
+
+    eu = AilaSelf.load()
+    eu.bind_capabilities(_Reg())
+    r = validate("Como assistente de IA baseado em texto, não consigo realizar tarefas físicas.",
+                 self_model=eu)
+    assert r.has("capability_denial")
+    assert "corpo" in correction_hint(r).lower()
+
+    # sem controle de corpo registrado, a negação é LEGÍTIMA (não é violação)
+    class _Vazio:
+        def all(self): return []
+    sem = AilaSelf.load()
+    sem.bind_capabilities(_Vazio())
+    assert not validate("não consigo realizar tarefas físicas", self_model=sem).has("capability_denial")
+
+
+def test_validator_narracao_do_sistema_depende_do_assunto():
+    from aila.mind.response_validator import validate
+
+    fala = "O Behavior Planner decidiu levantar o braço."
+    assert validate(fala).has("system_narration")           # conversa normal: violação
+    assert not validate(fala, allow_technical=True).has("system_narration")  # falando de arquitetura: ok
+
+
+def test_validator_nao_estraga_resposta_boa():
+    """Falso positivo é o pior defeito de um validador: não pode mexer no que
+    já está certo."""
+    from aila.mind.response_validator import validate
+
+    for boa in ("Assim? Levantei a mão direita.",
+                "Estou olhando para o gráfico agora.",
+                "Pronto! Salvei em Documentos.",
+                "O sistema operacional é o Windows 11."):
+        r = validate(boa)
+        assert r.text == boa and not r.changed, boa

@@ -121,6 +121,7 @@ class Capabilities(BaseModel):
     a Aila não prometer o que não tem nem negar o que tem."""
 
     items: dict[str, bool] = Field(default_factory=dict)
+    bound: bool = False        # já foi derivado do ToolRegistry? (vazio ≠ desconhecido)
 
     def can(self, name: str) -> bool:
         return bool(self.items.get(name, False))

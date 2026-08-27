@@ -250,6 +250,43 @@ class AilaEngine:
                 "Fale disso em primeira pessoa ('minha mão', 'estou olhando'); "
                 "nunca diga 'o avatar'.")
 
+    #: assuntos em que citar a própria engenharia é legítimo
+    _TECH_TALK = re.compile(
+        r"\b(arquitetura|c[óo]digo|engine|m[óo]dulo|classe|fun[çc][ãa]o|backend|"
+        r"frontend|behavior\s*planner|animation\s*controller|como\s+voc[êe]\s+funciona)\b",
+        re.IGNORECASE)
+
+    async def _validate_identity(self, text: str, user_text: str, backend,  # noqa: ANN001
+                                 opts: dict, emit: Emit) -> str:
+        """Aplica o Response Validator na resposta final."""
+        sm = getattr(self, "self_model", None)
+        if sm is None or not (text or "").strip():
+            return text
+        from aila.mind.response_validator import correction_hint, validate
+
+        tecnico = bool(self._TECH_TALK.search(user_text or ""))
+        res = validate(text, self_model=sm, allow_technical=tecnico)
+        if res.violations:
+            log.info("[VALIDATOR] " + "; ".join(f"{v.kind}: {v.detail}" for v in res.violations))
+        # negar capacidade que possui é grave e não dá p/ reescrever por regra:
+        # pede UMA regeneração (nunca mais de uma → sem risco de laço).
+        if res.has("capability_denial"):
+            try:
+                msgs = to_provider_messages(
+                    self._messages_with_memory(None), backend.capabilities().local)
+                msgs.append({"role": "assistant", "content": text})
+                msgs.append({"role": "system", "content": correction_hint(res)})
+                partes: list[str] = []
+                async for chunk in backend.chat(msgs, stream=False, tools=None, options=opts):
+                    if chunk.content:
+                        partes.append(chunk.content)
+                novo = "".join(partes).strip()
+                if novo:
+                    return validate(novo, self_model=sm, allow_technical=tecnico).text
+            except Exception as exc:  # noqa: BLE001 - regeneração é best-effort
+                log.warning(f"regeneração por identidade falhou: {exc!r}")
+        return res.text
+
     async def _post_write_check(self, name: str, args: dict, result: Any) -> str | None:
         """Auto-verificação após uma ferramenta de ESCRITA (o "verifica" garantido
         do loop): 1) sintaxe (instantâneo); se ok, 2) lint pyflakes (ruff, rápido).
@@ -843,6 +880,12 @@ class AilaEngine:
             forced = await self._force_save(user_text, code_src, backend, opts, emit, mem_block)
             if forced:
                 final_text = forced
+
+        # VALIDAÇÃO DE IDENTIDADE (Fase K): a identidade não pode depender da
+        # sorte do LLM. Corrige 3ª pessoa automaticamente; se ela NEGAR uma
+        # capacidade que tem ("não faço tarefas físicas" tendo corpo), regenera
+        # UMA vez com instrução corretiva.
+        final_text = await self._validate_identity(final_text, user_text, backend, opts, emit)
 
         # Guardrail de SAÍDA: redige segredos ANTES de gravar no contexto/memória
         # e antes do TTS (a resposta falada e persistida já sai limpa).

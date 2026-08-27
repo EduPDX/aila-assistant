@@ -99,7 +99,7 @@ class AilaSelf:
             for prefixo, cap in _CAP_BY_PREFIX.items():
                 if n.startswith(prefixo):
                     items[cap] = True
-        self.capabilities = Capabilities(items=items)
+        self.capabilities = Capabilities(items=items, bound=True)
 
     # ----------------------------------------------------- estado atual #
     def update_body(self, **campos: Any) -> BodyState:
