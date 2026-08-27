@@ -99,19 +99,27 @@ function stripEmoji(t) {
  *  no chat; isto é o que a Aila fala e mostra no balão da aba Avatar. */
 function spokenSummary(text) {
   let t = String(text || '')
-    .replace(/```[\s\S]*?```/g, ' ')     // blocos de código
+    .replace(/```[\s\S]*?```/g, ' ')     // blocos de código: ela NÃO fala código
     .replace(/`[^`]*`/g, ' ')            // código inline
-    .replace(/https?:\/\/\S+/g, ' ')     // urls
+    .replace(/https?:\/\/\S+/g, ' ')     // urls (ilegíveis em voz)
+    // "1." / "2)" / "- " no início da linha viravam FIM DE FRASE e cortavam a
+    // fala no meio de uma lista — tira o marcador e mantém o conteúdo.
+    .replace(/^\s*\d+[.)]\s+/gm, '')
+    .replace(/^\s*[-*•]\s+/gm, '')
     .replace(/[#*_>`|]/g, ' ')           // marcação markdown
-    .replace(/\s+/g, ' ').trim();
-  if (!t) return 'Pronto — deixei os detalhes na conversa.';   // resposta só de código
-  const sentences = t.match(/[^.!?]+[.!?]+/g);
-  if (sentences && sentences.length) {
-    let out = '';
-    for (const s of sentences) { if (out && (out + s).length > 240) break; out += s; }
-    t = out.trim() || t;
-  }
-  return t.length > 260 ? t.slice(0, 257).trim() + '…' : t;
+    .replace(/([^\s.!?:;])\s*\n+/g, '$1. ')  // quebra sem pontuacao vira pausa
+    .replace(/\s*\n+\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\.\s*\./g, '.')
+    .trim();
+  if (!t) return 'Pronto — deixei os detalhes na conversa.';
+  // Fala a resposta INTEIRA (menos código). Só corta se for realmente enorme,
+  // e aí num fim de frase — nunca no meio de um item de lista.
+  const LIMITE = 1400;
+  if (t.length <= LIMITE) return t;
+  const corte = t.slice(0, LIMITE);
+  const fim = Math.max(corte.lastIndexOf('. '), corte.lastIndexOf('! '), corte.lastIndexOf('? '));
+  return (fim > LIMITE * 0.5 ? corte.slice(0, fim + 1) : corte).trim() + '…';
 }
 
 // ▶ Executar: manda o código pra Aila rodar (passa pelo fluxo de permissão do backend)
