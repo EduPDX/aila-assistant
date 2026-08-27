@@ -61,7 +61,9 @@ def _normalize_tool_args(tool_calls: list[dict] | None) -> list[dict]:
         fn = tc.get("function")
         if isinstance(fn, dict) and isinstance(fn.get("arguments"), str):
             try:
-                fn["arguments"] = json.loads(fn["arguments"])
+                # strict=False: o modelo emite código com QUEBRAS DE LINHA literais
+                # dentro da string JSON — o parser estrito rejeita e a tool-call se perde.
+                fn["arguments"] = json.loads(fn["arguments"], strict=False)
             except (ValueError, TypeError):
                 fn["arguments"] = {}
     return tool_calls or []
@@ -292,7 +294,7 @@ class AilaEngine:
                 args = c["function"].get("arguments", {})
                 if isinstance(args, str):
                     try:
-                        args = json.loads(args)
+                        args = json.loads(args, strict=False)
                     except json.JSONDecodeError:
                         args = {}
                 await emit("agent.invoked", {"tool": name, "args": args})
@@ -725,7 +727,7 @@ class AilaEngine:
                 args = fn.get("arguments", {})
                 if isinstance(args, str):
                     try:
-                        args = json.loads(args)
+                        args = json.loads(args, strict=False)
                     except json.JSONDecodeError:
                         args = {}
                 over = budget.check(name, args)   # anti-loop / orçamento do turno
@@ -940,7 +942,7 @@ class AilaEngine:
                 args = fn.get("arguments", {})
                 if isinstance(args, str):
                     try:
-                        args = json.loads(args)
+                        args = json.loads(args, strict=False)
                     except json.JSONDecodeError:
                         args = {}
                 over = budget.check(name, args)   # anti-loop / orçamento
@@ -1301,7 +1303,7 @@ def _iter_json_objects(text: str) -> list[dict]:
             depth -= 1
             if depth == 0 and start >= 0:
                 try:
-                    val = json.loads(text[start : i + 1])
+                    val = json.loads(text[start : i + 1], strict=False)
                     if isinstance(val, dict):
                         objs.append(val)
                 except json.JSONDecodeError:
@@ -1326,7 +1328,7 @@ def extract_text_tool_calls(text: str, registry: Any) -> list[dict]:
             continue
         if isinstance(args, str):
             try:
-                args = json.loads(args)
+                args = json.loads(args, strict=False)
             except json.JSONDecodeError:
                 args = {}
         calls.append({"function": {"name": name, "arguments": args}})
@@ -1435,11 +1437,10 @@ def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
         # básico/casual → LOCAL (prefer_local filtra p/ só local), sem ferramentas
         return RouteTask(kind="basic", needs_tools=False, prefer_local=True), False
     if _is_code_request(user_text):
-        # código AGÊNTICO (salvar/rodar/editar arquivo) → LOCAL: executa ferramentas
-        # rápido e confiável (modelos de nuvem gigantes travam com tool-calling).
-        # Geração PURA de código (sem ação em arquivo) → cadeia 'code' (ex.: Gemini).
-        agentic = bool(_CODE_ACTION_RX.search(user_text))
-        return RouteTask(kind="code", needs_tools=True, prefer_local=agentic), True
+        # código → cadeia 'code' das rules (ex.: Gemini, melhor em código; local é
+        # fallback). NÃO forçamos mais local: as travadas na nuvem vinham do parser
+        # de tool-call, que rejeitava código multi-linha (corrigido com strict=False).
+        return RouteTask(kind="code", needs_tools=True), True
     return RouteTask(kind="chat", needs_tools=True), True
 
 

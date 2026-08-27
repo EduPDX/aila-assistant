@@ -2068,11 +2068,12 @@ def test_sandbox_write_roots(tmp_path: Path):
     with pytest.raises(SandboxViolation):
         sb.resolve(str(other / "y.py"))                # outras pastas seguem bloqueadas
 
+    # pedido de código (com ou sem ação em arquivo) → kind=code, sem forçar local:
+    # quem escolhe o provedor são as rules (code: [gemini, local]).
     from aila.core.engine import _classify_task
-    t, _ = _classify_task("faça um jogo e salve como jogo.py", "auto")
-    assert t.kind == "code" and t.prefer_local          # agêntico → local (tools confiáveis)
-    t2, _ = _classify_task("escreva uma função de soma", "auto")
-    assert t2.kind == "code" and not t2.prefer_local     # geração pura → cadeia code (nuvem)
+    for msg in ("faça um jogo e salve como jogo.py", "escreva uma função de soma"):
+        t, use_tools = _classify_task(msg, "auto")
+        assert t.kind == "code" and use_tools and not t.prefer_local
 
 
 def test_classify_task_routing():
@@ -2094,6 +2095,34 @@ def test_classify_task_routing():
     assert _classify_task("corrija o bug", "chat") == (_classify_task("corrija o bug", "chat"))
     _, ut = _classify_task("qualquer coisa", "chat")
     assert ut is False
+
+
+def test_text_toolcall_multiline_code():
+    """REGRESSÃO: o modelo emite a tool-call como texto com o código em VÁRIAS
+    linhas — quebras literais dentro da string JSON. Com json.loads estrito isso
+    era rejeitado em silêncio e o arquivo NUNCA era criado. Exige strict=False."""
+    from aila.core.engine import extract_text_tool_calls
+
+    class _T:
+        def __init__(self, n): self.name = n
+
+    class _Reg:
+        _n = {"file.write", "code.run"}
+        def get(self, n): return _T(n) if n in self._n else None
+        def all(self): return [_T(n) for n in self._n]
+
+    txt = ('Vamos criar!\n{"tool": "file.write", "args": {"path": "C:/x/jogo.py", '
+           '"content": "import turtle\n\ndef move():\n    pass\n"}}')
+    calls = extract_text_tool_calls(txt, _Reg())
+    assert len(calls) == 1
+    args = calls[0]["function"]["arguments"]
+    assert args["path"] == "C:/x/jogo.py"
+    assert args["content"].count("\n") >= 3        # o código multi-linha sobreviveu
+
+    # e com um bloco de código (chaves) antes da tool-call
+    txt2 = ('```python\nd = {\n "a": 1\n}\n```\n'
+            '{"name": "file.write", "arguments": {"path": "a.py", "content": "x = 1\nprint(x)\n"}}')
+    assert len(extract_text_tool_calls(txt2, _Reg())) == 1
 
 
 def test_call_budget_antiloop():
