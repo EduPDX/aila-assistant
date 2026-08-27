@@ -134,6 +134,26 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 tasks.add(task)
                 task.add_done_callback(tasks.discard)
 
+            elif mtype == "body.report":
+                # Ciclo corpo→mente (Fase D): o avatar relata o estado REAL do
+                # corpo; a Aila passa a saber o que está fazendo. Nunca deixa a
+                # conexão cair por um relato torto.
+                try:
+                    body = data.get("body") or {}
+                    if isinstance(body, dict) and engine.self_model is not None:
+                        engine.self_model.update_body(
+                            posture=body.get("posture"),
+                            gesture=body.get("gesture"),
+                            hands=body.get("hands"),
+                            gaze_target=body.get("gaze_target"),
+                            interaction_target=body.get("interaction_target"),
+                            interaction_action=body.get("interaction_action"),
+                        )
+                        await session.emit("aila.state",
+                                           engine.self_model.state().to_event_payload())
+                except Exception as exc:  # noqa: BLE001 - relato é informativo
+                    log.warning(f"body.report inválido: {exc!r}")
+
             elif mtype == "permission.response":
                 session.resolve_permission(data.get("id", ""), bool(data.get("approved")))
 

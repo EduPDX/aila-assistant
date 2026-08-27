@@ -309,6 +309,54 @@ function animate() {
   debug.update();                                 // helpers só quando ligado
   controls.update();
   renderer.render(scene, camera);
+  reportBody();                                   // corpo -> backend (Fase D)
+}
+
+// ---------------- Body report (Cognitive Core, Fase D) ----------------
+//  A Aila precisa SABER o que o corpo dela está fazendo — senão fala em 3ª
+//  pessoa ("o avatar está com a mão levantada"). Aqui medimos o estado REAL
+//  (posição dos ossos, não a intenção) e mandamos p/ o backend quando MUDA.
+let _bodyLast = '', _bodyT = 0;
+function reportBody() {
+  if (!vrm || !controller) return;
+  const now = performance.now();
+  if (now - _bodyT < 500) return;                 // no máx. 2x/s (barato)
+  _bodyT = now;
+  let rep;
+  try { rep = readBodyState(); } catch (e) { return; }
+  const sig = JSON.stringify(rep);
+  if (sig === _bodyLast) return;                  // só quando MUDA
+  _bodyLast = sig;
+  try { parent.postMessage({ type: 'body.report', body: rep }, '*'); } catch (e) {}
+}
+
+function readBodyState() {
+  const h = vrm.humanoid, ctx = controller.ctx;
+  const wy = (bone) => {                          // altura de mundo de um osso
+    const n = h.getNormalizedBoneNode(bone);
+    if (!n) return null;
+    n.updateWorldMatrix(true, false);
+    return n.matrixWorld.elements[13];
+  };
+  const hands = {};
+  for (const side of ['left', 'right']) {
+    const hand = wy(side + 'Hand'), sh = wy(side + 'UpperArm');
+    // Mão na ALTURA do ombro (ou acima) = levantada. Medido no modelo real:
+    // em repouso a mão fica ~0.36 abaixo do ombro; com o braço erguido chega à
+    // altura dele. Exigir "acima do ombro" nunca disparava.
+    hands[side] = (hand != null && sh != null && hand > sh - 0.10)
+      ? 'raised'
+      : (ctx.handPose && ctx.handPose[side] === 'point' ? 'pointing' : 'rest');
+  }
+  const inter = sceneManager.lastInteraction || null;
+  return {
+    posture: ctx.status === 'THINKING' ? 'thinking' : 'standing',
+    gesture: ctx.gesture || 'rest',
+    hands,
+    gaze_target: ctx.gazeWorld ? (inter && inter.target ? inter.target : 'a tela') : '',
+    interaction_target: inter ? (inter.target || '') : '',
+    interaction_action: inter ? (inter.type || '') : '',
+  };
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) clock.getDelta(); });
 animate();

@@ -180,3 +180,68 @@ def test_self_expoe_estilo_e_prompt_continua_curto():
     bloco = eu.prompt_block()
     assert any(d in bloco for d in st.directives)            # estilo entrou no prompt
     assert len(bloco) < 700                                  # ainda cabe em num_ctx 8k
+
+
+# ------------------------------------ Fase D: ciclo corpo -> mente (body.report) #
+
+def _engine_fake():
+    """Engine mínimo p/ testar o bloco de corpo sem subir LLM/WS."""
+    from aila.core.engine import AilaEngine
+    e = object.__new__(AilaEngine)
+    e.self_model = AilaSelf.load()
+    return e
+
+
+def test_bloco_de_corpo_so_entra_quando_ha_relato():
+    e = _engine_fake()
+    assert e._body_block() == ""                       # sem relato → não inventa nada
+    e.self_model.update_body(hands={"left": "rest", "right": "raised"})
+    bloco = e._body_block()
+    assert "estou com a mão direita levantada" in bloco
+    assert "nunca diga 'o avatar'" in bloco
+
+
+def test_bloco_de_corpo_expira(monkeypatch):
+    """Corpo velho não pode virar afirmação falsa ('estou apontando' depois de
+    ter abaixado o braço) — melhor não saber do que mentir."""
+    import time as _t
+    e = _engine_fake()
+    e.self_model.update_body(hands={"left": "rest", "right": "raised"})
+    assert e._body_block() != ""
+    agora = _t.time()
+    monkeypatch.setattr("aila.core.engine.time.time", lambda: agora + 999)
+    assert e._body_block() == ""                       # expirou → silêncio
+
+
+def test_ciclo_completo_report_ate_o_prompt():
+    """CASO OBRIGATÓRIO: report do avatar -> BodyState -> texto em 1ª pessoa."""
+    e = _engine_fake()
+    # o que o frontend manda (ui/avatar3d.html: readBodyState)
+    report = {
+        "posture": "standing", "gesture": "raise_right",
+        "hands": {"left": "rest", "right": "raised"},
+        "gaze_target": "", "interaction_target": "", "interaction_action": "",
+    }
+    e.self_model.update_body(**report)
+    bloco = e._body_block()
+    assert "estou" in bloco.lower()
+    assert "o avatar está" not in bloco.lower()        # jamais 3ª pessoa
+    st = e.self_model.state()
+    assert st.body.hands["right"] == "raised" and st.body.gesture == "raise_right"
+
+
+def test_report_de_interacao_vira_primeira_pessoa():
+    e = _engine_fake()
+    e.self_model.update_body(gaze_target="o gráfico", interaction_target="o gráfico",
+                             interaction_action="apontando para")
+    bloco = e._body_block()
+    assert "estou olhando para o gráfico" in bloco
+    assert "estou apontando para o gráfico" in bloco
+
+
+def test_report_parcial_nao_quebra():
+    """O frontend pode mandar campos faltando/nulos — não pode derrubar nada."""
+    e = _engine_fake()
+    e.self_model.update_body(hands=None, gesture=None, posture="thinking")
+    assert e.self_model.body.posture == "thinking"
+    assert e.self_model.body.hands == {"left": "rest", "right": "rest"}

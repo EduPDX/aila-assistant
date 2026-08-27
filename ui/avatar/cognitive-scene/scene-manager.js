@@ -33,6 +33,7 @@ export class SceneManager {
     this.paused = false;
     this.vramState = 'green';
     this.intent = 'conversation';
+    this.lastInteraction = null;   // {type,target} p/ o body.report (Fase D)
     this.monitor = null;
     this.controller = null;      // AnimationController do avatar (p/ IK/pose) — avatar3d o injeta
     this._pointCooldown = 0;
@@ -178,12 +179,17 @@ export class SceneManager {
       const anchor = this._resolveAnchor(interaction.target);
       if (anchor && this.interactions.interact({ type: interaction.type, target: anchor })) {
         this._pointCooldown = 14;
+        // guarda p/ o body.report: é isto que vira "estou apontando para X"
+        this.lastInteraction = { type: interaction.type, target: interaction.target };
       }
     } else {
       // fallback: POINT_TARGET legado (backward compat)
       const target = POINT_TARGET[this.intent];
       if (target && this._pointCooldown <= 0) {
-        if (this.interactions.interact({ type: 'point', target })) this._pointCooldown = 14;
+        if (this.interactions.interact({ type: 'point', target })) {
+          this._pointCooldown = 14;
+          this.lastInteraction = { type: 'point', target: this.intent };
+        }
       }
     }
   }

@@ -20,3 +20,14 @@ export const avatarVramPressure = (state) => toAvatar({ type: 'aila:vram-pressur
 export const avatarMetrics = (payload) => toAvatar({ type: 'aila:metrics', payload });
 // Cognitive Scene: RESUMO curto que a Aila fala → balão holográfico (Jarvis)
 export const avatarSay = (text) => toAvatar({ type: 'aila:say', text });
+
+
+// Ponte de VOLTA (Cognitive Core, Fase D): o avatar relata o estado do corpo e
+// o app manda ao backend. É isto que permite a Aila dizer "estou com a mão
+// levantada" em vez de "o avatar está com a mão levantada".
+addEventListener('message', (e) => {
+  const m = e && e.data;
+  if (!m || m.type !== 'body.report') return;
+  import('./ws.js').then(({ wsSend }) => wsSend({ type: 'body.report', body: m.body }))
+    .catch(() => {});
+});
