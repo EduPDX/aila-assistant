@@ -592,8 +592,7 @@ def test_emocao_nao_e_duplicada():
     só TRADUZ a emoção em tom; a derivação continua no EmotionEngine."""
     import aila.mind.emotion as m
 
-    src = m.tone_hint.__doc__ or ""
-    # o módulo de tom não deve conter heurística de derivação (léxico/regex)
     import inspect
+    # o módulo de tom não deve conter heurística de derivação (léxico/regex)
     fonte = inspect.getsource(m)
     assert "re.compile" not in fonte and "LEXICON" not in fonte
