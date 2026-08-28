@@ -247,13 +247,16 @@ class AilaEngine:
         # ATIVIDADE do turno continua valendo — ela é sempre do agora.
         if not body.updated_at or (time.time() - body.updated_at) > self.BODY_FRESH_S:
             body = BodyState()
+        from aila.mind.emotion import tone_hint
         from aila.mind.experience import describe as _exp_desc
 
         partes = [p for p in (_exp_desc(sm.experience.activity, sm.experience.attention),
                               body.describe()) if p]
-        if not partes:
+        tom = tone_hint(sm.experience.emotion)
+        if not partes and not tom:
             return ""
-        return (f"[VOCÊ AGORA] {'; '.join(partes)}. "
+        estado = f"[VOCÊ AGORA] {'; '.join(partes)}. " if partes else ""
+        return (f"{estado}{tom}{' ' if tom else ''}"
                 "Fale disso em primeira pessoa ('minha mão', 'estou olhando'); "
                 "nunca diga 'o avatar'.")
 
@@ -669,6 +672,13 @@ class AilaEngine:
 
         # Recupera memórias relevantes ANTES de adicionar a mensagem ao contexto.
         mem_block = await self._recall(user_text, emit)
+
+        if getattr(self, "self_model", None) is not None:
+            # emoção do turno DERIVADA pelo EmotionEngine (não duplicamos a lógica):
+            # a mensagem do usuário dá o tom inicial, disponível já na montagem do
+            # prompt — assim a emoção influencia também o TEXTO, não só o gesto.
+            self.self_model.update_experience(
+                emotion=str(self.emotions.from_text(user_text, speaking=False).emotion))
 
         self.context.add_user(user_text)
         self._persist("user", user_text)

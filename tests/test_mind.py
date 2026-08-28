@@ -562,3 +562,38 @@ def test_pedido_que_depende_de_algo_externo_mantem_ferramentas():
               "levante a mão direita"):
         _, use_tools = _classify_task(p, "auto")
         assert use_tools, p
+
+
+# --------------------------------------------- Fase F: emoção → tom (sem duplicar) #
+
+def test_tom_por_emocao():
+    """A emoção vira uma diretiva CURTA de tom — é o que faltava para ela
+    influenciar o TEXTO (item 12), não só postura/gesto."""
+    from aila.mind.emotion import tone_hint
+
+    assert tone_hint("focused") and "objetiv" in tone_hint("focused").lower()
+    assert tone_hint("confused") and "certeza" in tone_hint("confused").lower()
+    assert tone_hint("happy")
+    assert tone_hint("neutral") == ""              # neutro não acrescenta nada
+    assert tone_hint("") == "" and tone_hint("inexistente") == ""
+
+
+def test_tom_entra_no_bloco_de_estado():
+    e = _engine_fake()
+    e.self_model.update_experience(emotion="focused")
+    bloco = e._body_block()
+    assert "objetiv" in bloco.lower()
+    # só emoção (sem corpo/atividade) ainda produz bloco útil
+    assert bloco.strip()
+
+
+def test_emocao_nao_e_duplicada():
+    """Item 12: integrar o EmotionEngine, não criar um sistema paralelo. O mind
+    só TRADUZ a emoção em tom; a derivação continua no EmotionEngine."""
+    import aila.mind.emotion as m
+
+    src = m.tone_hint.__doc__ or ""
+    # o módulo de tom não deve conter heurística de derivação (léxico/regex)
+    import inspect
+    fonte = inspect.getsource(m)
+    assert "re.compile" not in fonte and "LEXICON" not in fonte
