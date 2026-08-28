@@ -590,9 +590,9 @@ def test_tom_entra_no_bloco_de_estado():
 def test_emocao_nao_e_duplicada():
     """Item 12: integrar o EmotionEngine, não criar um sistema paralelo. O mind
     só TRADUZ a emoção em tom; a derivação continua no EmotionEngine."""
-    import aila.mind.emotion as m
-
     import inspect
+
+    import aila.mind.emotion as m
     # o módulo de tom não deve conter heurística de derivação (léxico/regex)
     fonte = inspect.getsource(m)
     assert "re.compile" not in fonte and "LEXICON" not in fonte
