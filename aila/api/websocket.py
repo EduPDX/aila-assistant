@@ -158,6 +158,11 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                         )
                         if alvo:                       # a cena vira o FOCO de atenção
                             engine.self_model.update_experience(attention=alvo)
+                        from aila.mind.observability import trace as _trace
+
+                        b = engine.self_model.body
+                        _trace("BODY", left=b.hands.get("left"), right=b.hands.get("right"),
+                               gaze=b.gaze_target, interaction=b.interaction_target)
                         await session.emit("aila.state",
                                            engine.self_model.state().to_event_payload())
                 except Exception as exc:  # noqa: BLE001 - relato é informativo

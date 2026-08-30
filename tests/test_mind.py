@@ -642,3 +642,32 @@ def test_cena_define_a_atencao_e_aparece_no_bloco():
     bloco = e._body_block()
     assert "o painel de memória" in bloco
     assert "panel" not in bloco.lower()
+
+
+# ------------------------------------------------- Fase N: observabilidade (log) #
+
+def test_trace_formata_no_padrao_do_item_32(capfd):
+    """[SECTION] k=v k=v — só no log, nunca ao usuário. Captura via loguru→stderr."""
+    from aila.core.logging import setup_logging
+    from aila.mind.observability import trace, trace_speech
+
+    setup_logging("DEBUG")
+    trace("COGNITIVE", intent="chat", tools=False, prefer_local=True, complexity=0.12)
+    trace("DECISION", action="raise_right", reason="user_request:body_action")
+    trace_speech("Assim?")
+    out = capfd.readouterr().err
+    assert "[COGNITIVE]" in out and "intent=chat" in out
+    assert "tools=false" in out                 # bool minúsculo
+    assert "complexity=0.12" in out             # float com 2 casas
+    assert "[DECISION] action=raise_right" in out
+    assert '[SPEECH] "Assim?"' in out
+
+
+def test_trace_omite_vazios_e_nunca_quebra():
+    from aila.mind.observability import trace, trace_speech
+
+    trace("SELF")                               # sem campos → não explode
+    trace("SELF", emotion="", activity=None)    # campos vazios → omitidos
+    trace_speech("")                            # fala vazia → nada
+    # valor "impossível" (objeto sem str amigável) não pode derrubar
+    trace("X", v=object())

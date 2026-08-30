@@ -277,7 +277,9 @@ class AilaEngine:
         tecnico = bool(self._TECH_TALK.search(user_text or ""))
         res = validate(text, self_model=sm, allow_technical=tecnico)
         if res.violations:
-            log.info("[VALIDATOR] " + "; ".join(f"{v.kind}: {v.detail}" for v in res.violations))
+            from aila.mind.observability import trace as _trace
+
+            _trace("VALIDATOR", violations=",".join(v.kind for v in res.violations))
         # negar capacidade que possui é grave e não dá p/ reescrever por regra:
         # pede UMA regeneração (nunca mais de uma → sem risco de laço).
         if res.has("capability_denial"):
@@ -689,6 +691,13 @@ class AilaEngine:
         #   código             → cadeia 'code' (ex.: Gemini)
         #   conversa           → cadeia 'chat' (ex.: Nvidia)
         task, use_tools = _classify_task(user_text, mode)
+        if getattr(self, "self_model", None) is not None:
+            from aila.mind.observability import trace as _trace
+
+            _trace("COGNITIVE", intent=task.kind, tools=use_tools, prefer_local=task.prefer_local)
+            _trace("SELF", identity=self.self_model.identity.name,
+                   emotion=self.self_model.experience.emotion,
+                   activity=self.self_model.experience.activity)
         tools = self.agents.registry.schemas() if use_tools else None
         decided_actions: list[str] = []   # gestos decididos pelo pedido (Fase I)
 
@@ -703,7 +712,9 @@ class AilaEngine:
                 decided_actions = [a.type for a in _dec.actions]
                 self.pending_gesture = _dec.actions[0].type
                 self.self_model.update_experience(activity="gesturing")
-                log.info(f"[DECISION] {_dec.reason} → {_dec.actions[0].type}")
+                from aila.mind.observability import trace as _trace
+
+                _trace("DECISION", action=_dec.actions[0].type, reason=_dec.reason)
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
@@ -715,6 +726,10 @@ class AilaEngine:
         # SEMPRE mostra qual modelo está atendendo (inclusive o local) — o usuário
         # vê na lista de atividades se foi local/nvidia/gemini e qual modelo.
         self._last_local = bool(backend.capabilities().local)
+        from aila.mind.observability import trace as _trace
+
+        _trace("MODEL", provider=backend.name,
+               model=getattr(backend, "default_model", ""), local=self._last_local)
         _fast = (self.settings.llm.fast_model or "").strip()
         await emit("model.selected", {
             "provider": backend.name,
@@ -977,6 +992,9 @@ class AilaEngine:
                 log.warning(f"avatar_sink falhou: {exc!r}")
 
         await emit("thinking.done", {})
+        from aila.mind.observability import trace_speech as _trace_speech
+
+        _trace_speech(final_text)
         await emit("assistant.message", {"text": final_text})
         # gesto explícito pedido pela IA (via AvatarAgent) tem prioridade
         if self.pending_gesture:
