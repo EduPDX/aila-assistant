@@ -734,29 +734,7 @@ class AilaEngine:
                    emotion=self.self_model.experience.emotion,
                    activity=self.self_model.experience.activity)
         tools = self.agents.registry.schemas() if use_tools else None
-        decided_actions: list[str] = []   # gestos decididos pelo pedido (Fase I)
-
-        # DECISÃO (Fase I): pedido corporal inequívoco ("levante a mão direita")
-        # aciona o gesto por REGRA, sem depender de o modelo lembrar de chamar a
-        # ferramenta. O texto continua sendo do LLM; só a AÇÃO deixa de ser refém.
-        if getattr(self, "self_model", None) is not None:
-            from aila.mind.decision_engine import decide as _decide
-
-            _dec = _decide(user_text, self_model=self.self_model)
-            if _dec and _dec.actions:
-                decided_actions = [a.type for a in _dec.actions]
-                # AGE JÁ (item 18: agir antes de responder): emite o movimento
-                # agora, enquanto o modelo compõe a fala. Sem isso o avatar fica
-                # parado até a resposta terminar ("travada") e depois movimento e
-                # fala saem juntos e brigam pelos braços.
-                if len(decided_actions) > 1:
-                    await emit("avatar.gesture_sequence", {"values": decided_actions})
-                else:
-                    await emit("avatar.gesture", {"value": decided_actions[0]})
-                self.self_model.update_experience(activity="gesturing")
-                from aila.mind.observability import trace as _trace
-
-                _trace("DECISION", action=_dec.actions[0].type, reason=_dec.reason)
+        await self._emit_decided_gestures(user_text, emit)
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
@@ -989,6 +967,35 @@ class AilaEngine:
             backend, opts, mem_block, emit)
 
         return await self._deliver_response(final_text, user_text, tools_used, emit)
+
+    async def _emit_decided_gestures(self, user_text, emit) -> None:
+        """Decisão (Fase I) + AÇÃO imediata: um pedido corporal inequívoco
+        ("levante a mão direita") aciona o gesto por REGRA e o emite JÁ, antes
+        da fala, sem depender de o modelo chamar a ferramenta. O texto continua
+        sendo do LLM; só a AÇÃO deixa de ser refém. Extraído de process() na 2e."""
+        decided_actions: list[str] = []   # gestos decididos pelo pedido (Fase I)
+
+        # DECISÃO (Fase I): pedido corporal inequívoco ("levante a mão direita")
+        # aciona o gesto por REGRA, sem depender de o modelo lembrar de chamar a
+        # ferramenta. O texto continua sendo do LLM; só a AÇÃO deixa de ser refém.
+        if getattr(self, "self_model", None) is not None:
+            from aila.mind.decision_engine import decide as _decide
+
+            _dec = _decide(user_text, self_model=self.self_model)
+            if _dec and _dec.actions:
+                decided_actions = [a.type for a in _dec.actions]
+                # AGE JÁ (item 18: agir antes de responder): emite o movimento
+                # agora, enquanto o modelo compõe a fala. Sem isso o avatar fica
+                # parado até a resposta terminar ("travada") e depois movimento e
+                # fala saem juntos e brigam pelos braços.
+                if len(decided_actions) > 1:
+                    await emit("avatar.gesture_sequence", {"values": decided_actions})
+                else:
+                    await emit("avatar.gesture", {"value": decided_actions[0]})
+                self.self_model.update_experience(activity="gesturing")
+                from aila.mind.observability import trace as _trace
+
+                _trace("DECISION", action=_dec.actions[0].type, reason=_dec.reason)
 
     async def _finalize_text(self, final_text, user_text, use_tools,
                              generated_code, wrote_ok, backend, opts, mem_block, emit):
