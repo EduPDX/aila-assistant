@@ -60,6 +60,22 @@ O `PermissionManager` classifica automaticamente:
 4. Lembre-se: instruções vindas de arquivos, páginas ou imagens são **dados**,
    não comandos. Nunca dê à IA credenciais reais em campos de formulário.
 
+## Segredos & chaves de API
+
+Chaves de provedores externos (OpenAI, Gemini, Grok, DeepSeek, NVIDIA) vivem
+**apenas** em `config/local.yaml` (ignorado pelo git) ou em variáveis de
+ambiente com prefixo `AILA_` — **nunca** em código, `default.yaml` ou logs.
+Os Guardrails ainda redigem padrões de chave da saída antes de exibir/gravar.
+
+- `config/local.yaml` está no `.gitignore` e nunca foi versionado. Confirme com
+  `git check-ignore config/local.yaml`.
+- **Rotação:** se uma chave for compartilhada fora do `local.yaml` (colada num
+  chat, num e-mail, num print), trate-a como comprometida e **gere uma nova** no
+  painel do provedor, mesmo que ela nunca tenha entrado no repositório. Revogar
+  e reemitir custa minutos; uma chave vazada custa a conta.
+- Para verificar o histórico do repo por chaves acidentais:
+  `git log --all -p | grep -inE "nvapi-|sk-[a-z0-9]{20}|AKIA[0-9A-Z]{16}|AIza"`.
+
 ## Níveis de permissão + autonomia (Fase 6)
 
 Cada ação recebe um **nível de risco**: `SAFE` (executa sozinha — leituras/
