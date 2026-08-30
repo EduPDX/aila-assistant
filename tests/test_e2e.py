@@ -1,12 +1,16 @@
 """Testes E2E do laço principal — user_text → engine.process() → resposta.
 
-Semente da rede de ponta a ponta (Master Plan, Fase 3): dirige o
-``AilaEngine`` real montado por ``build_engine`` com um ``FakeLLM`` determinístico
-(sem Ollama, sem rede), cobrindo os dois caminhos essenciais:
+Rede de ponta a ponta (Master Plan, Fase 3): dirige o ``AilaEngine`` real
+montado por ``build_engine`` com um ``FakeLLM`` determinístico (sem Ollama, sem
+rede), cobrindo os caminhos críticos do laço:
 
-  1. conversa feliz  — o modelo responde texto puro;
-  2. laço de ferramenta — o modelo pede UMA tool, que executa e realimenta a
-     resposta final.
+  1. conversa feliz          — o modelo responde texto puro;
+  2. laço de ferramenta      — o modelo pede UMA tool, que executa e realimenta;
+  3. timeout de ferramenta   — a tool estoura o tempo → erro, o turno se recupera;
+  4. negação de permissão    — ação DANGER sem handler → erro, o turno se recupera;
+  5. fallback de provedor    — o 1º provedor cai → o 2º da cadeia responde;
+  6. cancelamento            — cancelar o turno propaga CancelledError, sem travar;
+  7. memória save/recall     — a troca é gravada e recuperada no turno seguinte.
 
 Estes testes existem para PROTEGER o refactor do engine (Fase 2): qualquer
 extração de responsabilidade tem de manter o contrato observável abaixo
@@ -16,6 +20,11 @@ extração de responsabilidade tem de manter o contrato observável abaixo
 from __future__ import annotations
 
 import asyncio
+import shutil
+import tempfile
+from pathlib import Path
+
+import pytest
 
 from aila.core.config import get_settings
 from aila.core.engine import build_engine
@@ -163,3 +172,218 @@ def test_e2e_tool_loop():
         assert final_reply in out
 
     asyncio.run(go())
+
+
+# --------------------------------------------------------------------------- #
+class _ToolThenText(LLMBackend):
+    """Backend genérico: 1ª chamada pede ``tool_name``; depois responde ``final``."""
+    name = "ollama"
+    default_model = "fake"
+
+    def __init__(self, tool_name: str, args: dict, final: str) -> None:
+        self._turn = 0
+        self._tool = tool_name
+        self._args = args
+        self._final = final
+
+    def capabilities(self, model=None):
+        return ModelCapabilities(local=True, tools=True)
+
+    async def chat(self, messages, **k):
+        self._turn += 1
+        if self._turn == 1:
+            yield ChatChunk(content="", done=True, tool_calls=[
+                {"function": {"name": self._tool, "arguments": self._args}}])
+        else:
+            yield ChatChunk(content=self._final, done=True)
+
+    async def complete(self, messages, **k):
+        return self._final
+
+    async def list_models(self):
+        return ["fake"]
+
+    async def health(self):
+        return True
+
+
+def test_e2e_tool_timeout():
+    """A ferramenta estoura o tempo limite do registry → ToolResult de erro; o
+    turno NÃO trava e ainda entrega a resposta final."""
+    async def _slow(args: dict) -> ToolResult:
+        await asyncio.sleep(1.0)
+        return ToolResult.success("nunca chega aqui")
+
+    slow_tool = Tool(name="test.slow", description="dorme", params=[],
+                     handler=_slow, agent="test")
+    eng = build_engine(_base_settings(), _ToolThenText("test.slow", {}, "Ok, concluído."))
+    eng.agents.registry.register(slow_tool)
+    eng.agents.registry.timeout = 0.2   # backstop curto p/ o teste
+    events: list[tuple[str, dict]] = []
+
+    async def go():
+        out = await eng.process("use a ferramenta lenta", _collect_emit(events), mode="auto")
+        result = next(p for e, p in events if e == "agent.result")
+        assert result["ok"] is False and "tempo limite" in result["content"].lower()
+        assert "Ok, concluído." in out          # o turno se recuperou
+
+    asyncio.run(go())
+
+
+def test_e2e_tool_denied():
+    """Uma ação DANGER sem handler de confirmação → PermissionDenied vira erro de
+    tool (execute captura); o modelo vê o erro e finaliza sem travar."""
+    async def _danger(args: dict) -> ToolResult:
+        # file.delete é DANGER (destructive); sem confirm handler → PermissionDenied
+        await eng.permissions.check("file.delete", "test", {"path": "x"})
+        return ToolResult.success("apagado")   # não deve chegar aqui
+
+    tool = Tool(name="test.denyme", description="pede ação perigosa", params=[],
+                handler=_danger, agent="test")
+    s = _base_settings()
+    s.security.confirm_destructive = True       # DANGER exige confirmação
+    eng = build_engine(s, _ToolThenText("test.denyme", {}, "Não pude apagar, então parei."))
+    eng.agents.registry.register(tool)
+    events: list[tuple[str, dict]] = []
+
+    async def go():
+        out = await eng.process("apague o arquivo", _collect_emit(events), mode="auto")
+        result = next(p for e, p in events if e == "agent.result")
+        assert result["ok"] is False            # a ação foi negada
+        assert "Não pude apagar" in out         # e o turno terminou com resposta natural
+
+    asyncio.run(go())
+
+
+def test_e2e_provider_fallback():
+    """O 1º provedor da cadeia levanta exceção → o engine cai para o 2º provedor
+    (ambos locais) e entrega a resposta dele, emitindo model.selected fallback."""
+    reply = "Resposta do provedor reserva."
+
+    class Down(LLMBackend):
+        name = "ollama"          # é o 'local' (default) da cadeia
+        default_model = "fake"
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+        async def chat(self, messages, **k):
+            raise RuntimeError("provedor caiu")
+            yield  # torna a assinatura um async generator (inalcançável)
+        async def complete(self, messages, **k):
+            return ""
+        async def list_models(self):
+            return ["fake"]
+        async def health(self):
+            return True
+
+    class Backup(LLMBackend):
+        name = "local2"
+        default_model = "fake2"
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+        async def chat(self, messages, **k):
+            yield ChatChunk(content=reply, done=True)
+        async def complete(self, messages, **k):
+            return reply
+        async def list_models(self):
+            return ["fake2"]
+        async def health(self):
+            return True
+
+    s = _base_settings()
+    s.routing.enabled = True
+    s.routing.default = "local"
+    s.routing.rules = {"chat": ["local", "local2"]}   # cai do local p/ o local2
+    eng = build_engine(s, Down())
+    eng.router.providers["local2"] = Backup()         # registra o reserva na cadeia
+    events: list[tuple[str, dict]] = []
+
+    async def go():
+        out = await eng.process("olá", _collect_emit(events), mode="chat")
+        assert reply in out
+        assert any(p.get("fallback") for e, p in events if e == "model.selected")
+
+    asyncio.run(go())
+
+
+def test_e2e_cancellation():
+    """Cancelar o turno em andamento propaga CancelledError e não trava o loop."""
+    class Slow(LLMBackend):
+        name = "ollama"
+        default_model = "fake"
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+        async def chat(self, messages, **k):
+            await asyncio.sleep(5)      # o cancelamento chega aqui
+            yield ChatChunk(content="tarde demais", done=True)
+        async def complete(self, messages, **k):
+            return ""
+        async def list_models(self):
+            return ["fake"]
+        async def health(self):
+            return True
+
+    eng = build_engine(_base_settings(), Slow())
+
+    async def go():
+        task = asyncio.create_task(eng.process("oi", _collect_emit([]), mode="chat"))
+        await asyncio.sleep(0.1)        # deixa o turno começar
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(go())
+
+
+def test_e2e_memory_save_and_recall():
+    """Com memória ligada: a troca do 1º turno é gravada e RECUPERADA no 2º turno
+    (evento memory.recalled). Isolado num DB temporário — não toca dados reais."""
+    tmp = Path(tempfile.mkdtemp(prefix="aila_mem_"))
+    reply = "Seu projeto favorito é a Aila, um agente local."
+
+    class Mem(LLMBackend):
+        name = "ollama"
+        default_model = "fake"
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+        async def chat(self, messages, **k):
+            yield ChatChunk(content=reply, done=True)
+        async def complete(self, messages, **k):
+            return reply
+        async def embed(self, texts, model=None):
+            # vetor CONSTANTE → cosseno 1.0 entre tudo → recall garantido
+            return [[1.0, 0.0, 0.0] for _ in texts]
+        async def list_models(self):
+            return ["fake"]
+        async def health(self):
+            return True
+
+    s = get_settings()
+    s.memory.enabled = True
+    s.memory.store_conversations = True
+    s.memory.db_path = str(tmp / "mem.db")      # DB temporário isolado
+    s.routing.enabled = False
+    s.security.autonomy_level = 3
+
+    eng = build_engine(s, Mem())
+    # neutraliza efeitos colaterais que escreveriam em dados REAIS:
+    eng.store = None                             # sem persistir conversa no DB real
+    eng.kgraph = None                            # sem tocar o knowledge.db real
+    eng.consolidator = None
+    from aila.memory.manager import MemoryManager
+    eng.mem = MemoryManager(eng.memory, graph=None)   # recall clássico (episódico)
+
+    try:
+        async def go():
+            # 1º turno: fala um fato substantivo (>8 chars) → é gravado
+            await eng.process("meu projeto favorito é a Aila", _collect_emit([]), mode="chat")
+            assert eng.memory.count() >= 1        # gravou a troca
+
+            # 2º turno: pergunta relacionada → deve recuperar a memória
+            ev2: list[tuple[str, dict]] = []
+            await eng.process("qual meu projeto favorito?", _collect_emit(ev2), mode="chat")
+            assert any(e == "memory.recalled" for e, _ in ev2)
+
+        asyncio.run(go())
+    finally:
+        eng.memory.close()                       # solta o lock do sqlite
+        shutil.rmtree(tmp, ignore_errors=True)
