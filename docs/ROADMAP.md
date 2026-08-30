@@ -76,7 +76,9 @@ offload seguem responsabilidade do Ollama). Entregue em 12 fatias aditivas
 - ✅ **R9** `keep_alive` **adaptativo** por pressão de VRAM (antes fixo em `10m`).
 - ✅ **R10** Comportamento ciente de recurso — adia consolidação de fundo e modera a proatividade.
 - ✅ **R11** Painel **Recursos** no Inspector — tudo isso visível (`GET /api/resources`).
-- ✅ **R12** Benchmark da "escada" de modelos (`python -m aila.core.benchmark`) — medir do real.
+- ✅ **R12** Benchmark da "escada" de modelos — medir do real. Roda **no boot** (background +
+  cache semanal, pula sob pressão) ou sob demanda (`python -m aila.core.benchmark`); a escada
+  aparece na aba **Recursos**. Desligue com `llm.benchmark_on_boot: false`.
 
 **Regra inviolável:** privacidade > recurso — falta de VRAM **nunca** empurra a tarefa
 para a nuvem (respeita a `network_policy`).
