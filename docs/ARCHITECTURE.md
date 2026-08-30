@@ -70,6 +70,21 @@ por interfaces bem definidas e por um **barramento de eventos**.
 | Avatar | `avatar/*` | Protocolo `AvatarState` + Emotion Engine |
 | API | `api/*` | REST + WebSocket |
 
+### Os quatro "planners" (papéis distintos, nomes parecidos)
+
+Coexistem quatro componentes com "plan/planner" no nome. **Não são
+redundantes** — cada um resolve uma coisa diferente:
+
+| Componente | Arquivo | Responsabilidade |
+|------------|---------|------------------|
+| `BehaviorPlanner` | `avatar/behavior_planner.py` | Decide o COMPORTAMENTO do avatar (emoção/postura/olhar/ritmo/gestos) pelo significado da resposta, antes do TTS. |
+| `Planner` | `core/planner.py` | Quebra um objetivo em PASSOS via LLM (e replaneja em falha), para tarefas autônomas longas. |
+| `PlanManager` | `core/plan_manager.py` | Ciclo de vida de um PLANO no modo `plan` — propor → aprovar/rejeitar → executar passo a passo. |
+| `TaskManager` | `core/tasks.py` | Estado/progresso/cancelamento das TAREFAS em execução (não planeja; acompanha). |
+
+Regra mental: `Planner` = *o que fazer*, `PlanManager` = *aprovar e conduzir*,
+`TaskManager` = *acompanhar a execução*, `BehaviorPlanner` = *como o corpo reage*.
+
 ## Por que essas escolhas
 
 - **Ollama como backend inicial**: abstrai o carregamento de GGUF, o offload
