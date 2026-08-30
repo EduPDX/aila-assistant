@@ -674,6 +674,36 @@ def test_profile_entities_feed_rerank(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_rerank_why_breakdown(tmp_path: Path):
+    """Fatia 3 (Fase 5): cada hit carrega POR QUE subiu (vec/graph/ctx/signals +
+    driver) — o sinal que o painel do subconsciente/Inspector mostra. Determinístico:
+    com vetor idêntico, o vetorial domina (driver=vec) e o ctx marca 0.1 só em quem
+    bateu no contexto."""
+    from aila.cognition.graph import GraphStore
+    from aila.memory.manager import MemoryManager
+    from aila.memory.store import MemoryStore
+
+    async def flat_embed(texts):
+        return [[1.0, 0.0] for _ in texts]
+
+    async def go():
+        store = MemoryStore(tmp_path / "why.db", flat_embed)
+        graph = GraphStore(tmp_path / "why_kg.db")
+        a = await store.add("nota Alpha", kind="fact", entities=["Alpha"])
+        b = await store.add("nota Bravo", kind="fact", entities=["Bravo"])
+
+        mgr = MemoryManager(store, graph=graph)
+        hits = await mgr.recall("qual?", top_k=2, context={"entities": ["Alpha"]})
+        by_id = {h.id: h for h in hits}
+        assert by_id[a].why is not None
+        assert set(by_id[a].why) == {"vec", "graph", "ctx", "signals", "driver"}
+        assert by_id[a].why["ctx"] == 0.1, "Alpha bateu no contexto"
+        assert by_id[b].why["ctx"] == 0.0, "Bravo não bateu no contexto"
+        assert by_id[a].why["driver"] == "vec", "vetorial (0.55) domina o score"
+
+    asyncio.run(go())
+
+
 def test_consolidation(tmp_path: Path):
     """Fase 4 (dreaming conservador): decay + dedup (com evidência+reforço) +
     grafo por co-ocorrência GATED por evidência + importância. Determinístico."""

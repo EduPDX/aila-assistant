@@ -534,7 +534,8 @@ class AilaEngine:
             blocks.append(profile)
         if hits:
             await emit("memory.recalled",
-                       {"items": [{"text": h.text, "score": round(h.score, 2)} for h in hits]})
+                       {"items": [{"text": h.text, "score": round(h.score, 2),
+                                   "why": h.why} for h in hits]})
             linhas = "\n".join(f"- [{h.kind}] {h.text}" for h in hits)
             blocks.append(f"Memórias relevantes:\n{linhas}")
         return "\n\n".join(blocks)

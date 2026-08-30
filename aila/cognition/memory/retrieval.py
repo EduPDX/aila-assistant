@@ -80,17 +80,23 @@ class HybridRetriever:
         ent_set, neigh_set = set(ent_ids), neigh
         ctx_ents = set((context or {}).get("entities", []))
         scored: list[tuple[float, int, dict]] = []
+        whys: dict[int, dict] = {}              # decomposição p/ observabilidade (subconsciente/Inspector)
         for mid, row in pool.items():
             ents = _entities_of(row)
             gscore = 1.0 if (ent_set & ents) else (0.6 if (neigh_set & ents) else 0.0)
             imp = float(row.get("importance") if row.get("importance") is not None else 0.5)
             conf = float(row.get("confidence") if row.get("confidence") is not None else 1.0)
-            final = (_W_VEC * vec_score.get(mid, 0.0) + _W_GRAPH * gscore
-                     + _W_IMP * imp + _W_CONF * conf)
-            if ctx_ents & ents:                 # bônus de contexto (projeto/tarefa atual)
-                final += 0.1
+            vec_c = _W_VEC * vec_score.get(mid, 0.0)
+            graph_c = _W_GRAPH * gscore
+            ctx_c = 0.1 if (ctx_ents & ents) else 0.0    # bônus de contexto (projeto/tarefa atual)
+            sig_c = _W_IMP * imp + _W_CONF * conf
+            final = vec_c + graph_c + ctx_c + sig_c
             if row.get("status") in ("archived", "superseded"):
                 final -= 0.5                    # desprioriza memórias aposentadas
+            comps = {"vec": round(vec_c, 3), "graph": round(graph_c, 3),
+                     "ctx": round(ctx_c, 3), "signals": round(sig_c, 3)}
+            # driver = por que ESTA memória subiu (o maior contribuinte do score)
+            whys[mid] = {**comps, "driver": max(comps, key=lambda k: comps[k])}
             scored.append((final, mid, row))
 
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -105,6 +111,7 @@ class HybridRetriever:
                 score=round(f, 4), created_at=row.get("created_at", "") or "",
                 importance=float(row.get("importance") if row.get("importance") is not None else 0.5),
                 confidence=float(row.get("confidence") if row.get("confidence") is not None else 1.0),
+                why=whys.get(mid),
             )
             for f, mid, row in top
         ]

@@ -82,6 +82,18 @@ const STATE = {
 };
 export const humanizeState = (status) => STATE[status] || status || 'Ociosa';
 
+// rótulos do "driver" do re-rank de memória (por que a memória subiu)
+const RECALL_DRIVER = { vec: 'similaridade', graph: 'grafo', ctx: 'contexto', signals: 'importância' };
+
+/** Sufixo " · via <driver>" quando há um motivo dominante comum às memórias lembradas. */
+function recallDriverHint(items) {
+  const drivers = (items || []).map((i) => i?.why?.driver).filter(Boolean);
+  if (!drivers.length) return '';
+  const top = drivers.sort((a, b) =>
+    drivers.filter((d) => d === b).length - drivers.filter((d) => d === a).length)[0];
+  return RECALL_DRIVER[top] ? ` · via ${RECALL_DRIVER[top]}` : '';
+}
+
 /** Frase para um evento (usada no feed de atividade). Retorna null se não vale mostrar. */
 export function humanizeEvent(m) {
   switch (m.type) {
@@ -100,7 +112,7 @@ export function humanizeEvent(m) {
     case 'permission.request': return { icon: '🔒', text: `Pediu permissão: ${humanizeTool(m.action)}`, tone: 'warn' };
     case 'task.created': return { icon: '▶', text: 'Iniciou uma tarefa', tone: 'info' };
     case 'task.state': return { icon: '▹', text: `Tarefa: ${taskStateLabel(m.state)}`, tone: 'info' };
-    case 'memory.recalled': return { icon: '🧠', text: `Lembrou de ${m.items?.length ?? 0} memória(s)`, tone: 'info' };
+    case 'memory.recalled': return { icon: '🧠', text: `Lembrou de ${m.items?.length ?? 0} memória(s)${recallDriverHint(m.items)}`, tone: 'info' };
     // --- atividade cognitiva (subconsciente) ---
     case 'memory.consolidated': return {
       icon: '🌙',

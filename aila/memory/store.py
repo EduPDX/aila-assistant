@@ -72,6 +72,7 @@ class MemoryHit:
     created_at: str
     importance: float = 0.5     # sinais cognitivos (preenchidos pelo retrieval híbrido)
     confidence: float = 1.0
+    why: dict | None = None     # decomposição do re-rank (vec/graph/ctx/signals + driver)
 
 
 class MemoryStore:
