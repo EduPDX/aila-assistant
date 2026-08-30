@@ -69,9 +69,22 @@ providers:
     api_key: ""
     model: "deepseek-chat"
 
-# Roteamento de modelo por tarefa. enabled:false = sempre o local (passthrough).
-# Quando ligado, cada tarefa tem uma ORDEM de provedores (fallback). "local" é
-# o modelo local. Ex.: reasoning: ["openai", "local"] · vision: ["gemini", "local"]
+# Roteamento de modelo por tarefa.
+#   enabled: false → PASSTHROUGH: toda tarefa vai para o local, sem exceção
+#                    (a classificação por complexidade continua rodando, mas não
+#                    muda de provedor enquanto o roteamento estiver desligado).
+#   enabled: true  → cada TIPO de tarefa tem uma ORDEM de provedores (fallback).
+# O engine classifica cada turno num destes tipos (chaves válidas de `rules`):
+#   basic     — cumprimento/conversa trivial (sempre prefere o local, rápido)
+#   chat      — conversa geral
+#   code      — programação
+#   reasoning — pergunta complexa (derivada por complexidade ≥ 0.6)
+#   vision    — entrada de imagem
+# Um tipo ausente de `rules` cai no `default`. "local" = o modelo local.
+# Habilite e configure em config/local.yaml, ex.:
+#   routing: { enabled: true, default: "local",
+#              rules: { reasoning: ["nvidia", "local"], code: ["gemini", "local"],
+#                       vision: ["gemini", "local"] } }
 routing:
   enabled: false
   default: "local"
