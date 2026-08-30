@@ -184,6 +184,13 @@ class AilaEngine:
         from aila.mind import AilaSelf
 
         self.self_model = AilaSelf.load()
+        # Autoconhecimento: deriva "o que eu consigo fazer" das ferramentas REALMENTE
+        # registradas. Sem isto, self_model.state() reporta capacidades VAZIAS (mente
+        # sobre si). Best-effort — nunca derruba o boot por um registry atípico.
+        try:
+            self.self_model.bind_capabilities(self.agents.registry)
+        except Exception as exc:  # noqa: BLE001 - autoconhecimento é informativo
+            log.debug(f"bind_capabilities falhou: {exc!r}")
 
     # ------------------------------------------------------------------ #
     def _system_prompt(self) -> str:

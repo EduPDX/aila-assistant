@@ -95,6 +95,41 @@ def test_e2e_happy_path_chat():
 
 
 # --------------------------------------------------------------------------- #
+def test_e2e_self_model_binds_capabilities():
+    """Autoconhecimento: o engine chama bind_capabilities no boot, então
+    self_model.state() reporta as capacidades REAIS (derivadas das ferramentas
+    registradas) em vez de uma lista vazia. Antes, state() mentia sobre si."""
+
+    class FakeLLM(LLMBackend):
+        name = "ollama"
+        default_model = "fake"
+
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+
+        async def chat(self, messages, **k):
+            yield ChatChunk(content="ok", done=True)
+
+        async def complete(self, messages, **k):
+            return "ok"
+
+        async def list_models(self):
+            return ["fake"]
+
+        async def health(self):
+            return True
+
+    eng = build_engine(_base_settings(), FakeLLM())
+    sm = eng.self_model
+    assert sm is not None
+    assert sm.capabilities.bound, "bind_capabilities deve ter rodado no boot"
+    caps = sm.state().capabilities
+    # há ferramentas de arquivo/código registradas por padrão → a lista NÃO é vazia
+    assert caps, "state() não pode reportar capacidades vazias"
+    assert all(isinstance(c, str) for c in caps)
+
+
+# --------------------------------------------------------------------------- #
 def test_e2e_tool_loop():
     """Laço de ferramenta: o modelo pede UMA tool na 1ª volta, o engine a executa
     e, na 2ª volta, o modelo responde o texto final. Verifica que a tool rodou
