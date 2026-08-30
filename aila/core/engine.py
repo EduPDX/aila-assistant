@@ -711,10 +711,14 @@ class AilaEngine:
             _dec = _decide(user_text, self_model=self.self_model)
             if _dec and _dec.actions:
                 decided_actions = [a.type for a in _dec.actions]
-                self.pending_gesture = _dec.actions[0].type
-                if len(decided_actions) > 1:          # série → sequenciador do avatar
-                    self.pending_gesture = None
-                    self.pending_gesture_sequence = decided_actions
+                # AGE JÁ (item 18: agir antes de responder): emite o movimento
+                # agora, enquanto o modelo compõe a fala. Sem isso o avatar fica
+                # parado até a resposta terminar ("travada") e depois movimento e
+                # fala saem juntos e brigam pelos braços.
+                if len(decided_actions) > 1:
+                    await emit("avatar.gesture_sequence", {"values": decided_actions})
+                else:
+                    await emit("avatar.gesture", {"value": decided_actions[0]})
                 self.self_model.update_experience(activity="gesturing")
                 from aila.mind.observability import trace as _trace
 
@@ -985,8 +989,9 @@ class AilaEngine:
         if getattr(self, "self_model", None) is not None:
             m = self.self_model.motion()
             _mb = (m.amplitude, m.speed, m.breath)
-        spec = self.planner.plan(final_text, tools_used=tools_used,
-                                 actions=decided_actions, motion_bias=_mb)
+        # decided_actions NÃO vão ao planner: já foram emitidos como gesto/série
+        # no início do turno. Passá-los aqui os replicaria na timeline da fala.
+        spec = self.planner.plan(final_text, tools_used=tools_used, motion_bias=_mb)
         await emit("avatar.behavior", spec.to_event_payload())
         self.last_avatar_state = self.emotions.from_text(final_text).to_event_payload()
         if self.avatar_sink is not None:            # compat: ponte OSC/estado

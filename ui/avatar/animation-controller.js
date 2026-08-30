@@ -218,7 +218,9 @@ export class AnimationController {
     // e sem gesto explícito, toca clips de "conversa" com intervalos. Quando isso
     // está ativo, ctx.talkClips avisa a camada procedural (robótica) p/ ficar
     // quieta. Sem clips de conversa disponíveis → cai no procedural (fallback).
-    const speaking = ctx.speech > 0.25 && ctx.gesture === 'rest';
+    // durante uma SÉRIE de movimentos (demonstração), a gesticulação da fala
+    // fica quieta — senão os dois disputam os braços e o movimento 'borra'.
+    const speaking = ctx.speech > 0.25 && ctx.gesture === 'rest' && !ctx._seqActive;
     if (speaking && this.playTalkClip && this._talkAvail !== false) {
       if (!this._clipAction) {
         this._talkT -= dt;

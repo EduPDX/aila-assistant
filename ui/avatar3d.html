@@ -257,12 +257,14 @@ function playGestureSequence(names) {
   _seqTimers.forEach(clearTimeout); _seqTimers = [];
   if (!controller || !Array.isArray(names) || !names.length) return;
   const HOLD = 1500, GAP = 600;   // ms segurando o gesto + pausa em repouso
+  controller.ctx._seqActive = true;              // fala não gesticula durante a série
   let t = 0;
   for (const name of names) {
     _seqTimers.push(setTimeout(() => controller.triggerGesture(name), t));
     _seqTimers.push(setTimeout(() => controller.triggerGesture('rest'), t + HOLD));
     t += HOLD + GAP;
   }
+  _seqTimers.push(setTimeout(() => { controller.ctx._seqActive = false; }, t + 200));
 }
 window.ailaPlaySequence = playGestureSequence;   // teste no console
 
