@@ -2873,6 +2873,55 @@ def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
     assert got == []
 
 
+def test_engine_resource_aware_behavior():
+    """R10: a Aila fica ciente de recurso. Sob pressão alta, _under_pressure=True →
+    a consolidação de fundo é ADIADA sem avançar o contador (retoma ao respirar);
+    com folga, roda a cadência normal."""
+    from aila.core.config import get_settings
+    from aila.core.engine import build_engine
+    from aila.core.hardware import GpuReading, HardwareMonitor
+    from aila.core.resources import ResourceManager
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+
+    class FakeLLM(LLMBackend):
+        name = "ollama"
+        async def chat(self, messages, **k):
+            yield ChatChunk(content="x", done=True)
+        async def complete(self, messages, **k):
+            return "[]"
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+
+    s = get_settings()
+    s.memory.enabled = False
+    eng = build_engine(s, FakeLLM())
+
+    # GPU sem folga (free=50 MB → CRITICAL) → sob pressão
+    tight = ResourceManager(HardwareMonitor(
+        gpu_probe=lambda: GpuReading("rtx", 90, 8000, 7950, 50, 70), cache_ttl=0))
+    eng.resources = tight
+    assert eng._under_pressure() is True
+
+    # consolidação ADIADA não avança o contador de turnos
+    eng.consolidator = object()          # truthy (basta p/ o gate)
+    eng._consolidating = False
+    eng._turns = 0
+    eng._maybe_consolidate(defer=True)
+    assert eng._turns == 0, "adiada → não conta o turno; retoma depois"
+    eng._maybe_consolidate(defer=False)  # sem pressão → avança (1%4!=0 → sem agendar)
+    assert eng._turns == 1
+
+    # GPU com folga (free=6000 MB) → sem pressão
+    roomy = ResourceManager(HardwareMonitor(
+        gpu_probe=lambda: GpuReading("rtx", 0, 8000, 2000, 6000, 45), cache_ttl=0))
+    eng.resources = roomy
+    assert eng._under_pressure() is False
+
+
 def test_keep_alive_adapts_to_pressure():
     """R9: keep_alive encolhe conforme a pressão de VRAM. NORMAL mantém o default
     (respostas repetidas rápidas); do ELEVATED p/ cima libera o modelo mais cedo."""

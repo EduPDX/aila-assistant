@@ -588,10 +588,22 @@ class AilaEngine:
             blocks.append(f"Memórias relevantes:\n{linhas}")
         return "\n\n".join(blocks)
 
-    def _maybe_consolidate(self, every: int = 4) -> None:
+    def _under_pressure(self) -> bool:
+        """A máquina está sob pressão de recurso AGORA? (R10 — modera trabalho de
+        fundo e proatividade). Barato (snapshot cacheado); falha → False (nunca trava)."""
+        try:
+            from aila.core.resources import Pressure
+
+            return self.resources.snapshot().pressure >= Pressure.HIGH
+        except Exception:  # noqa: BLE001 - medir recurso é best-effort
+            return False
+
+    def _maybe_consolidate(self, every: int = 4, *, defer: bool = False) -> None:
         """A cada `every` turnos, roda a consolidação em BACKGROUND (constrói o KG
-        das conversas). Não bloqueia a resposta; nunca há duas rodando ao mesmo tempo."""
-        if self.consolidator is None or self._consolidating:
+        das conversas). Não bloqueia a resposta; nunca há duas rodando ao mesmo tempo.
+        R10: `defer` (pressão alta) adia a rodada SEM avançar o contador — retoma
+        assim que a máquina respira, em vez de disputar VRAM/CPU no aperto."""
+        if self.consolidator is None or self._consolidating or defer:
             return
         self._turns += 1
         if self._turns % every != 0:
@@ -1197,7 +1209,10 @@ class AilaEngine:
         self.context.add_assistant(final_text)
         self._persist("assistant", final_text)
         await self._remember(user_text, final_text)
-        self._maybe_consolidate()          # "dreaming" em background (não bloqueia o turno)
+        # R10: consciência de recurso no comportamento — sob pressão, adia o
+        # "dreaming" de fundo e segura a proatividade (não gastar ciclos no aperto).
+        _pressured = self._under_pressure()
+        self._maybe_consolidate(defer=_pressured)   # "dreaming" (não bloqueia o turno)
 
         # Behavior Planner: decide o comportamento pelo SIGNIFICADO e emite ANTES
         # do assistant.message (que dispara o TTS) — o avatar já assume a
@@ -1210,7 +1225,9 @@ class AilaEngine:
             m = self.self_model.motion()
             _mb = (m.amplitude, m.speed, m.breath)
             # personalidade proativa? (opt-in: só dispara com initiative alto).
-            _init = self.self_model.may_act_on_own()
+            # R10: sob pressão, a Aila segura a iniciativa — atende, mas não gasta
+            # ciclos oferecendo próximos passos enquanto a máquina está no limite.
+            _init = self.self_model.may_act_on_own() and not _pressured
         # decided_actions NÃO vão ao planner: já foram emitidos como gesto/série
         # no início do turno. Passá-los aqui os replicaria na timeline da fala.
         spec = self.planner.plan(final_text, tools_used=tools_used, motion_bias=_mb,
