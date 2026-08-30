@@ -2534,3 +2534,37 @@ def test_code_review_folder_scans_and_caps(tmp_path):
         assert r2.data["files_reviewed"] == 1 and r2.data["partial"] is True
 
     asyncio.run(go())
+
+
+def test_web_search_cache_e_orientacao(monkeypatch):
+    """Buscas repetidas (comuns num 7B) viram acerto de cache — sem bombardear o
+    DuckDuckGo (o que causava rate-limit e 'Nenhum resultado' intermitente). E o
+    vazio orienta a responder do conhecimento em vez de insistir."""
+    import asyncio
+
+    from aila.agents import web_agent
+    from aila.agents.web_agent import WebAgent
+
+    web_agent._SEARCH_CACHE.clear()
+    w = object.__new__(WebAgent)
+
+    async def _auth(a, args): return True
+    w.authorize = _auth
+    w._offline_block = lambda: None
+
+    chamadas = {"n": 0}
+
+    async def _fake_ddg(q, n):
+        chamadas["n"] += 1
+        return [{"title": "IBM", "url": "u", "snippet": "rede neural"}] if q == "x" else []
+    w._ddg_search = _fake_ddg
+
+    async def go():
+        r1 = await w._search({"query": "x", "max_results": 5})
+        r2 = await w._search({"query": "x", "max_results": 5})   # repetição → cache
+        assert r1.ok and r2.ok
+        assert chamadas["n"] == 1                                # DDG batido UMA vez só
+        vazio = await w._search({"query": "nada", "max_results": 5})
+        assert not vazio.ok
+        assert "sem pesquisar" in vazio.content or "NÃO repita" in vazio.content
+    asyncio.run(go())

@@ -30,6 +30,13 @@ _UA = (
 )
 _DDG_HTML = "https://html.duckduckgo.com/html/"
 
+# Cache curto de buscas BEM-SUCEDIDAS: um 7B costuma repetir a MESMA busca várias
+# vezes seguidas; sem cache isso bombardeia o DuckDuckGo e ele passa a devolver
+# páginas de rate-limit (sem resultados) — o que fazia a busca "falhar" de forma
+# intermitente. Com o cache, as repetições viram acerto e o buscador respira.
+_SEARCH_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_SEARCH_TTL = 300.0   # segundos
+
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"[ \t\r\f\v]+")
 _MULTINL_RE = re.compile(r"\n\s*\n\s*\n+")
@@ -120,15 +127,32 @@ class WebAgent(BaseAgent):
             n = max(1, min(10, int(args.get("max_results") or 5)))
         except (TypeError, ValueError):
             n = 5
-        try:
-            results = await self._ddg_search(query, n)
-        except httpx.HTTPError as exc:
-            return ToolResult.error(f"Falha na busca (rede): {exc}")
-        except Exception as exc:  # noqa: BLE001
-            log.exception("erro na busca web")
-            return ToolResult.error(f"Falha na busca: {exc}")
+        import time as _time
+
+        chave = f"{query.lower()}|{n}"
+        cached = _SEARCH_CACHE.get(chave)
+        if cached and (_time.time() - cached[0]) < _SEARCH_TTL:
+            results = cached[1]                      # repetição → cache (sem bater no DDG)
+        else:
+            try:
+                results = await self._ddg_search(query, n)
+            except httpx.HTTPError as exc:
+                return ToolResult.error(
+                    f"A busca falhou (rede: {exc}). Responda com o que você já sabe "
+                    "sobre isso; NÃO repita a busca.")
+            except Exception:  # noqa: BLE001
+                log.exception("erro na busca web")
+                return ToolResult.error(
+                    "A busca falhou. Responda com o que você já sabe; NÃO repita a busca.")
+            if results:
+                _SEARCH_CACHE[chave] = (_time.time(), results)
         if not results:
-            return ToolResult.error(f"Nenhum resultado para '{query}'.")
+            # provável rate-limit do buscador → NÃO insista (senão piora): responda
+            # do próprio conhecimento. Isto quebra o ciclo de buscas repetidas.
+            return ToolResult.error(
+                f"A busca por '{query}' não retornou agora (o buscador limitou as "
+                "consultas repetidas). Responda com o que você já sabe sobre isso, "
+                "sem pesquisar de novo.")
         lines = [
             f"{i}. {r['title']}\n   {r['url']}\n   {r['snippet']}"
             for i, r in enumerate(results, 1)
