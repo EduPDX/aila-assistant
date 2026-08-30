@@ -101,3 +101,18 @@ class MemoryManager:
             return None
         linhas = "\n".join(f"- {r['text']}" for r in rows[:limit])
         return f"O que você sabe sobre o usuário/projeto:\n{linhas}"
+
+    def profile_entities(self, limit: int = 8) -> list[str]:
+        """Entidades do PERFIL (preferências/projeto) p/ o bônus de contexto do
+        re-rank híbrido: o que o usuário DECLAROU importar também puxa as memórias
+        relacionadas, não só o assunto da mensagem atual. Extrai do texto
+        (heurística) — linhas de perfil não guardam a coluna `entities`."""
+        from aila.cognition.memory.entities import extract
+
+        seen: list[str] = []
+        for kind in PROFILE:
+            for r in self.store.by_kind(kind, limit):
+                for e in extract(r.get("text", "")):
+                    if e not in seen:
+                        seen.append(e)
+        return seen

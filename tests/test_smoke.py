@@ -646,6 +646,34 @@ def test_hybrid_context_bonus_reranks(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_profile_entities_feed_rerank(tmp_path: Path):
+    """Fatia 2 (Fase 5): o que o usuário DECLAROU importar (perfil) entra no bônus
+    de contexto. profile_entities extrai a entidade do perfil, e alimentá-la no
+    context sobe a memória ligada a ela — mesmo sem a query nomeá-la."""
+    from aila.cognition.graph import GraphStore
+    from aila.memory.manager import MemoryManager
+    from aila.memory.store import MemoryStore
+
+    async def flat_embed(texts):
+        return [[1.0, 0.0] for _ in texts]
+
+    async def go():
+        store = MemoryStore(tmp_path / "prof.db", flat_embed)
+        graph = GraphStore(tmp_path / "prof_kg.db")     # vazio → gscore=0
+        await store.add("o projeto usa o framework Zeta", kind="preference")
+        z = await store.add("detalhe do Zeta", kind="fact", entities=["Zeta"])
+        await store.add("detalhe do Omega", kind="fact", entities=["Omega"])
+
+        mgr = MemoryManager(store, graph=graph)
+        assert "Zeta" in mgr.profile_entities(), "extrai a entidade do perfil"
+        # replica o que engine._recall faz: entidades da query (nenhuma) + perfil
+        ctx = {"entities": mgr.profile_entities()}
+        hits = await mgr.recall("me lembra de um detalhe?", top_k=2, context=ctx)
+        assert hits[0].id == z, "perfil (Zeta) deve priorizar a memória ligada a Zeta"
+
+    asyncio.run(go())
+
+
 def test_consolidation(tmp_path: Path):
     """Fase 4 (dreaming conservador): decay + dedup (com evidência+reforço) +
     grafo por co-ocorrência GATED por evidência + importância. Determinístico."""

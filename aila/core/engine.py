@@ -514,10 +514,13 @@ class AilaEngine:
         # Contexto do turno p/ o re-rank híbrido: entidades da mensagem atual
         # (extrator heurístico, offline) acendem o bônus de "tarefa atual" mesmo
         # ANTES de essas entidades virarem nós do grafo — enquanto o KG é imaturo,
-        # é o único sinal de sobreposição de entidade que o re-rank recebe.
+        # é o único sinal de sobreposição de entidade que o re-rank recebe. Somamos
+        # as entidades do PERFIL (o que o usuário declarou importar) → o re-rank
+        # também favorece memórias ligadas ao que já é conhecido sobre ele/projeto.
         from aila.cognition.memory.entities import extract as _extract_ents
 
-        ctx = {"entities": _extract_ents(query)}
+        ctx_ents = [*_extract_ents(query), *self.mem.profile_entities()]
+        ctx = {"entities": list(dict.fromkeys(ctx_ents))}   # dedup, preserva ordem
         try:
             hits = await self.mem.recall(query, top_k=cfg.top_k, min_score=cfg.min_score,
                                          context=ctx)
