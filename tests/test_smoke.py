@@ -2481,28 +2481,52 @@ def test_vram_classify_thresholds():
     assert classify(0) == "red"
 
 
-def test_vram_parses_nvidia_smi(monkeypatch):
-    """_probe_gpu_blocking lê o CSV do nvidia-smi (total,used,free)."""
+def test_hardware_probe_parses_nvidia_smi(monkeypatch):
+    """R1: o HardwareMonitor é a fonte única do nvidia-smi. A sonda lê o CSV de 6
+    campos (name,util,total,used,free,temp) — superconjunto dos 2 sítios antigos."""
     import subprocess
 
-    from aila.core import vram
+    from aila.core import hardware
 
     class _Out:
         returncode = 0
-        stdout = "8188, 6900, 1288\n"
+        stdout = "NVIDIA GeForce RTX 4060, 30, 8188, 6900, 1288, 55\n"
 
-    monkeypatch.setattr(vram.shutil, "which", lambda _: "nvidia-smi")
+    monkeypatch.setattr(hardware.shutil, "which", lambda _: "nvidia-smi")
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: _Out())
-    gpu = vram._probe_gpu_blocking()
-    assert gpu is not None
-    assert (gpu.total_mb, gpu.used_mb, gpu.free_mb) == (8188, 6900, 1288)
+    r = hardware._probe_nvidia_blocking()
+    assert r is not None
+    assert (r.name, r.util, r.total_mb, r.used_mb, r.free_mb, r.temp) == (
+        "NVIDIA GeForce RTX 4060", 30.0, 8188.0, 6900.0, 1288.0, 55.0)
+
+
+def test_hardware_monitor_caches_and_no_gpu():
+    """A sonda de GPU é injetável (CI sem RTX): cache respeita o ttl e a ausência
+    de GPU (probe None) não quebra; system() sempre devolve CPU/RAM."""
+    from aila.core.hardware import GpuReading, HardwareMonitor
+
+    calls = {"n": 0}
+
+    def _probe():
+        calls["n"] += 1
+        return GpuReading("fake", 10, 8000, 2000, 6000, 40)
+
+    mon = HardwareMonitor(gpu_probe=_probe, cache_ttl=60.0)
+    a = mon.gpu()
+    b = mon.gpu()
+    assert a is b and calls["n"] == 1, "2ª leitura vem do cache"
+    assert mon.gpu(fresh=True).free_mb == 6000 and calls["n"] == 2, "fresh ignora cache"
+    # sem GPU → None, sem levantar
+    assert HardwareMonitor(gpu_probe=lambda: None).gpu() is None
+    sysr = mon.system()
+    assert sysr.ram_total_gb > 0 and 0 <= sysr.ram_percent <= 100
 
 
 def test_vram_no_nvidia_smi_is_noop(monkeypatch):
     """Sem nvidia-smi, o planner não quebra: available=False, estado 'unknown'."""
     from aila.core import vram
 
-    monkeypatch.setattr(vram.shutil, "which", lambda _: None)
+    monkeypatch.setattr(vram, "_probe_gpu_blocking", lambda: None)
 
     async def _no_models(base_url, timeout=3.0):
         return 0, []

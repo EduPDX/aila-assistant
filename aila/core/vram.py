@@ -19,8 +19,6 @@ O estado é um "dial" em degraus a partir do headroom (VRAM livre):
 from __future__ import annotations
 
 import asyncio
-import shutil
-import subprocess
 from dataclasses import asdict, dataclass, field
 
 import httpx
@@ -65,30 +63,14 @@ class VramPlan:
 
 
 def _probe_gpu_blocking() -> GpuInfo | None:
-    """Lê a VRAM via nvidia-smi. Bloqueante — chamar com asyncio.to_thread."""
-    exe = shutil.which("nvidia-smi")
-    if not exe:
+    """Lê a VRAM via HardwareMonitor (fonte única de nvidia-smi — R1). Bloqueante;
+    a `measure()` chama em thread. Só recorta os campos que o plano de VRAM usa."""
+    from aila.core.hardware import monitor
+
+    r = monitor.gpu()
+    if r is None:
         return None
-    try:
-        out = subprocess.run(
-            [exe, "--query-gpu=memory.total,memory.used,memory.free",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),  # sem janela no Windows
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if out.returncode != 0 or not out.stdout.strip():
-        return None
-    # Uma linha por GPU; a Aila roda numa (RTX 4060) → primeira linha.
-    parts = [p.strip() for p in out.stdout.strip().splitlines()[0].split(",")]
-    if len(parts) < 3:
-        return None
-    try:
-        total, used, free = (int(float(x)) for x in parts[:3])
-    except ValueError:
-        return None
-    return GpuInfo(total_mb=total, used_mb=used, free_mb=free)
+    return GpuInfo(total_mb=int(r.total_mb), used_mb=int(r.used_mb), free_mb=int(r.free_mb))
 
 
 async def _probe_models(base_url: str, timeout: float = 3.0) -> tuple[int, list[dict]]:
