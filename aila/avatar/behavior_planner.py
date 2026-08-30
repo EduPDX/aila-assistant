@@ -86,6 +86,10 @@ _GESTURE_CUES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\b(deixa eu pensar|hmm+|talvez|n[ãa]o sei ao certo)\b", re.I), "think"),
 ]
 
+# intents em que a INICIATIVA (personalidade proativa) pode acrescentar um aceno
+# breve de reconhecimento — só conversa/explicação: nunca erro nem turno de tarefa.
+_INITIATIVE_INTENTS = frozenset({"conversation", "explanation"})
+
 _GREETING = re.compile(r"^\s*(ol[áa]|oi+|e a[íi]|bom dia|boa tarde|boa noite)\b", re.I)
 _FAREWELL = re.compile(r"\b(tchau|at[ée] (mais|logo|breve)|falou)\b", re.I)
 _ERROR = re.compile(r"\b(erro|falha|desculp|n[ãa]o consegui|infelizmente|deu problema)\b", re.I)
@@ -105,6 +109,7 @@ class BehaviorPlanner:
         speaking: bool = True,
         actions: Iterable[str] = (),
         motion_bias: tuple[float, float, float] | None = None,
+        initiative: bool = False,
     ) -> BehaviorSpec:
         """Monta o BehaviorSpec do turno.
 
@@ -113,6 +118,9 @@ class BehaviorPlanner:
         pedido do usuário, não adivinhada pelas palavras da resposta.
         ``motion_bias``: energia (amplitude, velocidade, respiração) vinda da
         personalidade (Fase C), multiplicando o estilo do intent.
+        ``initiative``: personalidade proativa (self_model.may_act_on_own). Quando
+        ligada, num turno conversacional SEM gesto de gatilho, a Aila acrescenta um
+        aceno breve de reconhecimento — presença física, nunca ação de ferramenta.
         """
         text = (text or "").strip()
         emo = self.emotions.from_text(text, speaking=speaking)
@@ -126,6 +134,13 @@ class BehaviorPlanner:
         # o usuário pediu o gesto, então ele acontece — no início da fala.
         decididos = [GestureCue(type=a, at_time=0.0) for a in (actions or ()) if a]
         mb = motion_bias or (1.0, 1.0, 1.0)
+
+        gestures = decididos or self._gestures(text, est)
+        # INICIATIVA (personalidade proativa, opt-in via may_act_on_own): num turno
+        # conversacional sem nenhum gesto de gatilho, um aceno breve de reconhecimento.
+        # Não sobrepõe gesto pedido/decidido nem entra em turnos de erro/tarefa.
+        if initiative and not gestures and intent in _INITIATIVE_INTENTS:
+            gestures = [GestureCue(type="nod", at_time=0.0, at_word="(iniciativa)")]
 
         # CognitiveUI: o backend DIRIGE a cena holográfica (Fase 6).
         # 'conversation' e 'greeting' não acendem a tela — a Aila encara o usuário.
@@ -145,7 +160,7 @@ class BehaviorPlanner:
             posture=posture,
             gaze=gaze,
             motion=Motion(amplitude=amp * mb[0], speed=speed * mb[1], breath=breath * mb[2]),
-            gestures=decididos or self._gestures(text, est),
+            gestures=gestures,
             est_speech_seconds=est,
             text=text[:200],
             cognitive_ui=cognitive_ui,

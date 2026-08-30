@@ -1114,12 +1114,16 @@ class AilaEngine:
         # SPEECH x ACTION (Fase J/L): a fala é do LLM; a ação vem da decisão. A
         # personalidade entra como energia do movimento (Fase C).
         _mb = None
+        _init = False
         if getattr(self, "self_model", None) is not None:
             m = self.self_model.motion()
             _mb = (m.amplitude, m.speed, m.breath)
+            # personalidade proativa? (opt-in: só dispara com initiative alto).
+            _init = self.self_model.may_act_on_own()
         # decided_actions NÃO vão ao planner: já foram emitidos como gesto/série
         # no início do turno. Passá-los aqui os replicaria na timeline da fala.
-        spec = self.planner.plan(final_text, tools_used=tools_used, motion_bias=_mb)
+        spec = self.planner.plan(final_text, tools_used=tools_used, motion_bias=_mb,
+                                 initiative=_init)
         await emit("avatar.behavior", spec.to_event_payload())
         self.last_avatar_state = self.emotions.from_text(final_text).to_event_payload()
         if self.avatar_sink is not None:            # compat: ponte OSC/estado

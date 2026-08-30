@@ -1888,6 +1888,28 @@ def test_behavior_planner_reads_meaning():
     assert p.plan("Sim, com certeza.").gestures[0].type == "nod"
 
 
+def test_behavior_planner_initiative():
+    """Iniciativa (personalidade proativa): num turno CONVERSACIONAL sem gesto de
+    gatilho, initiative=True acrescenta UM aceno de reconhecimento. Sem initiative,
+    nada. Nunca sobrepõe gesto de gatilho, e NÃO entra em turno de erro (segurança)."""
+    from aila.avatar.behavior_planner import BehaviorPlanner
+
+    p = BehaviorPlanner()
+    plano = "O relatório ficou pronto ontem."     # conversa, SEM gatilho léxico
+    assert p.plan(plano).gestures == [], "sem iniciativa não força gesto"
+    ini = p.plan(plano, initiative=True)
+    assert ini.intent == "conversation" and ini.gestures[0].type == "nod"
+
+    # não sobrepõe um gesto de gatilho: 'perfeito' → thumbs_up vence
+    trig = p.plan("Perfeito, funcionou!", initiative=True)
+    assert trig.gestures[0].type == "thumbs_up"
+
+    # SEGURANÇA: turno de erro não recebe aceno de iniciativa
+    err = p.plan("Desculpe, deu um erro.", initiative=True)
+    assert err.intent == "error"
+    assert all(g.type != "nod" for g in err.gestures)
+
+
 def test_clip_tool_result_for_context():
     """Resultados grandes de ferramenta são cortados (cabeça+cauda) p/ não
     entupir o contexto; pequenos passam intactos."""
