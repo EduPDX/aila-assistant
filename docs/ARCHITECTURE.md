@@ -69,6 +69,7 @@ por interfaces bem definidas e por um **barramento de eventos**.
 | Segurança | `security/*` | Permissões, sandbox, auditoria |
 | Avatar | `avatar/*` | Protocolo `AvatarState` + Emotion Engine |
 | API | `api/*` | REST + WebSocket |
+| Resource Intelligence | `core/hardware.py`, `core/resources.py`, `core/models.py`, `core/oom.py`, `core/context_budget.py`, `core/benchmark.py`, `llm/health.py`, `llm/telemetry.py`, `llm/lifecycle.py`, `llm/model_policy.py` | Mede recursos, escolhe/monitora modelos, previne OOM (ver abaixo) |
 
 ### Os quatro "planners" (papéis distintos, nomes parecidos)
 
@@ -84,6 +85,38 @@ redundantes** — cada um resolve uma coisa diferente:
 
 Regra mental: `Planner` = *o que fazer*, `PlanManager` = *aprovar e conduzir*,
 `TaskManager` = *acompanhar a execução*, `BehaviorPlanner` = *como o corpo reage*.
+
+## Resource Intelligence (consciência de recursos)
+
+A Aila **orquestra** recursos e modelos — ela não faz inferência (isso é do Ollama).
+A regra de ouro é **medir do real** e **orçar antes de agir**, inspirada no
+`kimi-k3-in-c`. Um laço de três tempos, todos aditivos e read-only por padrão:
+
+```
+MEDIR                        DECIDIR                         AGIR
+HardwareMonitor (nvidia-smi  ResourceManager → pressão       model_policy (degrada p/ o
++ psutil, injetável p/ CI)   unificada GPU+RAM               modelo local pequeno sob pressão)
+ModelManager (papel/estado/  health (circuit-breaker por     oom.decide_load (shrink/proceed)
+footprint via /api/ps,tags)  provedor: cooldown/recuperação) lifecycle (keep_alive adaptativo)
+telemetry (tps/TTFT/fallback)context_budget (schemas de      engine adia consolidação de fundo
+benchmark (escada medida)    tools contam na janela)         e modera a proatividade sob pressão
+```
+
+| Módulo | Papel |
+|--------|-------|
+| `core/hardware.py` | **Porta única** para o hardware: GPU via `nvidia-smi` (cacheado) e CPU/RAM via `psutil`. Sonda injetável → CI nunca depende de GPU. |
+| `core/resources.py` | Junta GPU+RAM num `ResourceSnapshot` e traduz para uma **pressão** comum `NORMAL/ELEVATED/HIGH/CRITICAL` (a pior das duas). |
+| `core/models.py` | Inventário dos modelos: papel (chat/code/vision/embed/fast), instalado, carregado, footprint (VRAM) e expiração (keep_alive). |
+| `llm/health.py` | Circuit-breaker por provedor (saúde **entre** turnos): falhas seguidas → cooldown; half-open → recupera. O router pula quem está em cooldown, **sem** remover o fallback local. |
+| `llm/model_policy.py` | Sob pressão de GPU, escolhe o modelo local **pequeno** — só entre modelos locais, nunca troca de provedor. |
+| `core/oom.py` | Pré-voo geral `decide_load`/`can_load`: cabe? → `proceed`/`shrink`. Generaliza o antigo pré-voo da visão. |
+| `core/context_budget.py` | Orça a janela por componente e **desconta o custo real dos schemas de ferramentas** do histórico (antes invisível). |
+| `llm/telemetry.py` | Desempenho por modelo (tokens/s, TTFT, taxa de fallback), por EWMA. |
+| `llm/lifecycle.py` | `keep_alive` adaptativo: encolhe a permanência do modelo conforme a pressão de VRAM. |
+| `core/benchmark.py` | Benchmark sob demanda (`python -m aila.core.benchmark`) — a "escada" de modelos medida do real. Fora do hot-path. |
+
+Diagnóstico consolidado em `GET /api/resources` (aba **Recursos** no Inspector).
+**Privacidade > recurso**: falta de VRAM nunca vira envio para a nuvem.
 
 ## Por que essas escolhas
 

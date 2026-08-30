@@ -58,9 +58,34 @@ A Aila é entregue em fases. Cada fase é utilizável por conta própria — nad
 - [ ] Lip-sync 3D via envelope de amplitude do áudio TTS no Unreal
 - [ ] Mapeamento fino gesto→montagem e emoção→Control Rig de morph (no editor)
 
+## Resource Intelligence — consciência de recursos (ENTREGUE ✅)
+
+A Aila **entende os próprios recursos** (GPU/VRAM/RAM/modelos) para orquestrar,
+monitorar e escolher — **sem virar engine de inferência** (kernels/quantização/
+offload seguem responsabilidade do Ollama). Entregue em 12 fatias aditivas
+(R1–R12), cada uma testada e isolada. Ver [ARCHITECTURE.md](ARCHITECTURE.md#resource-intelligence-consciência-de-recursos).
+
+- ✅ **R1** `HardwareMonitor` — porta única p/ nvidia-smi + psutil (antes duplicado).
+- ✅ **R2** `ResourceManager` — pressão unificada GPU+RAM (NORMAL/ELEVATED/HIGH/CRITICAL).
+- ✅ **R3** `ModelManager` — inventário: papel, instalado, carregado, footprint, expiração.
+- ✅ **R4** Circuit-breaker de saúde por provedor (cooldown + recuperação half-open).
+- ✅ **R5** Roteamento consciente de recurso — sob pressão, degrada p/ o modelo local pequeno.
+- ✅ **R6** OOM prevention geral (`decide_load`/`can_load` reusável; generaliza o pré-voo da visão).
+- ✅ **R7** Orçamento de contexto explícito — os schemas de ferramentas contam na janela.
+- ✅ **R8** Telemetria de desempenho por modelo (tokens/s, TTFT, taxa de fallback).
+- ✅ **R9** `keep_alive` **adaptativo** por pressão de VRAM (antes fixo em `10m`).
+- ✅ **R10** Comportamento ciente de recurso — adia consolidação de fundo e modera a proatividade.
+- ✅ **R11** Painel **Recursos** no Inspector — tudo isso visível (`GET /api/resources`).
+- ✅ **R12** Benchmark da "escada" de modelos (`python -m aila.core.benchmark`) — medir do real.
+
+**Regra inviolável:** privacidade > recurso — falta de VRAM **nunca** empurra a tarefa
+para a nuvem (respeita a `network_policy`).
+
 ## Escolhas de modelo para a RTX 4060 8GB
 
 Veja [`config/models.yaml`](../config/models.yaml). Regra de bolso:
 - **7B–8B Q4_K_M** cabem 100% na VRAM (rápido).
 - **14B** rodam híbrido GPU+CPU (mais lento, mas viável com 32 GB de RAM).
-- Rode **um modelo por vez**; o Ollama descarrega da VRAM após `keep_alive`.
+- Rode **um modelo por vez**; o Ollama descarrega da VRAM após `keep_alive` — que
+  agora é **adaptativo** (R9): encolhe sob pressão de VRAM para liberar o modelo frio
+  mais cedo, e volta ao padrão quando há folga.

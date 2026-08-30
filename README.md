@@ -23,6 +23,7 @@
 - [Avatar 3D (VRM)](#avatar-3d-vrm)
 - [Agentes e ferramentas](#agentes-e-ferramentas)
 - [Segurança e autonomia](#segurança-e-autonomia)
+- [Resource Intelligence — consciência de recursos](#resource-intelligence--consciência-de-recursos)
 - [Interface (command-center)](#interface-command-center)
 - [Estrutura do projeto](#estrutura-do-projeto)
 - [Início rápido](#início-rápido)
@@ -62,6 +63,10 @@ em `localStorage`, nunca no git).
 - 🔒 **Segurança de verdade** — níveis de autonomia **L1–L5**, classificação de risco de
   cada ação (SAFE/REVIEW/DANGER/BLOCKED), sandbox de caminhos, orçamento de chamadas,
   denylist de comandos, defesa contra prompt-injection e **log de auditoria** (`audit.jsonl`).
+- 📊 **Resource Intelligence** — a Aila entende os próprios recursos: mede GPU/VRAM/RAM,
+  conhece o footprint de cada modelo, escolhe o modelo local certo sob pressão, previne OOM,
+  orça a janela de contexto e adapta o `keep_alive` — tudo visível na aba **Recursos**.
+  Privacidade > recurso: falta de VRAM **nunca** empurra a tarefa para a nuvem.
 - 🖥️ **UI "command-center"** — chat, avatar em palco, painel de atividade, o 🧠 subconsciente
   (grafos 2D/3D) e configurações dirigidas por schema.
 - 📴 **100% offline** — three.js e three-vrm vendorizados; degrada com elegância quando o
@@ -181,6 +186,27 @@ A Aila pode controlar o seu computador — então a segurança é levada a séri
 
 Leia [`docs/SECURITY.md`](docs/SECURITY.md) antes de habilitar o Computer Agent.
 
+## Resource Intelligence — consciência de recursos
+
+Com só 8 GB de VRAM, saber o que cabe e o que custa é decisivo. A Aila **orquestra**
+recursos e modelos (não faz inferência — isso é do Ollama), num laço **medir → decidir
+→ agir**, inspirado no `kimi-k3-in-c` (*medir do real, orçar antes de carregar*):
+
+- **Pressão unificada** GPU+RAM (`NORMAL/ELEVATED/HIGH/CRITICAL`) a partir de uma porta
+  única de hardware (`nvidia-smi` + `psutil`).
+- **Inventário de modelos** — papel, instalado/carregado, footprint (VRAM) e expiração.
+- **Roteamento consciente de recurso** — sob pressão, degrada para o modelo local pequeno
+  (nunca troca de provedor por recurso).
+- **Prevenção de OOM** — pré-voo `can_load` (cabe? → segue / encolhe o avatar).
+- **Orçamento de contexto** — os schemas de ferramentas passam a contar na janela.
+- **Circuit-breaker** por provedor + **telemetria** (tokens/s, TTFT, taxa de fallback).
+- **`keep_alive` adaptativo** e **consolidação de fundo** que respeitam a pressão.
+- **Benchmark** da "escada" de modelos: `python -m aila.core.benchmark`.
+
+Diagnóstico ao vivo na aba **Recursos** (Inspector) e em `GET /api/resources`. Detalhes
+em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#resource-intelligence-consciência-de-recursos).
+**Privacidade > recurso:** a falta de VRAM nunca gera envio automático para a nuvem.
+
 ## Interface (command-center)
 
 A UI é vanilla JS (ES-modules, sem framework/bundler), estética HUD/FUI:
@@ -190,6 +216,8 @@ A UI é vanilla JS (ES-modules, sem framework/bundler), estética HUD/FUI:
 - **Avatar** em palco, com controle de fala e emoções.
 - **🧠 Subconsciente** — grafos de Código / Conhecimento / Projetos (2D e 3D).
 - **Atividade** — status, eventos cognitivos, tarefas.
+- **Recursos** — pressão GPU+RAM, inventário de modelos (quente/frio + footprint), saúde
+  dos provedores e desempenho por modelo (Resource Intelligence, poll ao vivo).
 - **Configurações** — dirigidas por schema, mapeadas 1:1 para `config/local.yaml`
   (aparência, modelos, voz, avatar, memória, autonomia, agentes, segurança, rede, sistema).
 
@@ -198,8 +226,10 @@ A UI é vanilla JS (ES-modules, sem framework/bundler), estética HUD/FUI:
 ```
 aila-assistant/
 ├── aila/                    # Backend Python (pacote principal)
-│   ├── core/                # Engine, event bus, config, contexto
-│   ├── llm/                 # Backends de modelos (Ollama, llama.cpp)
+│   ├── core/                # Engine, event bus, config, contexto + Resource Intelligence
+│   │                        #   (hardware, resources, models, oom, context_budget, benchmark)
+│   ├── llm/                 # Backends de modelos (Ollama, llama.cpp) + router, health,
+│   │                        #   telemetry, lifecycle, model_policy
 │   ├── agents/              # File, Code, Document, Computer, Vision, Binary, Git, Web, Memory, Avatar
 │   ├── cognition/           # Camada cognitiva
 │   │   ├── memory/          #   consolidação, entidades, retrieval híbrido
@@ -334,6 +364,7 @@ Fases entregues e próximas em [`docs/ROADMAP.md`](docs/ROADMAP.md).
 | 9    | **Cognição**: memória cognitiva + grafos + subconsciente | ✅ funcional  |
 | 10   | UI command-center (topbar/stage/inspector/settings)| ✅ funcional  |
 | 11   | **Projetos**: grafo de código por projeto anexado  | ✅ funcional  |
+| RI   | **Resource Intelligence** (R1–R12): pressão, inventário, routing, OOM, telemetria, benchmark | ✅ funcional  |
 | 12   | Evolução do Motion Engine do avatar (VRMA, eventos)| 🔜 planejado  |
 
 ## Licença

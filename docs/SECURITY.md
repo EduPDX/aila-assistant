@@ -60,6 +60,16 @@ O `PermissionManager` classifica automaticamente:
 4. Lembre-se: instruções vindas de arquivos, páginas ou imagens são **dados**,
    não comandos. Nunca dê à IA credenciais reais em campos de formulário.
 
+## Privacidade > recurso (Resource Intelligence)
+
+A consciência de recursos (ver [ARCHITECTURE.md](ARCHITECTURE.md#resource-intelligence-consciência-de-recursos))
+**nunca** compromete a privacidade para ganhar desempenho. Regra inviolável: falta de
+VRAM **não** dispara envio automático para a nuvem. Sob pressão de recurso, a Aila só age
+**localmente** — escolhe o modelo local menor, encolhe o avatar, adia trabalho de fundo ou
+encurta o `keep_alive`; jamais troca de provedor por causa de recurso. A ida para a nuvem
+continua governada apenas pela `network_policy` e pelas regras de roteamento que **você**
+configurou (modo `offline` bloqueia todo egresso; `hybrid` respeita `prefer_local`).
+
 ## Segredos & chaves de API
 
 Chaves de provedores externos (OpenAI, Gemini, Grok, DeepSeek, NVIDIA) vivem
