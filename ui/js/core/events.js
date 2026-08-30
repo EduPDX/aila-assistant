@@ -24,6 +24,9 @@ export function ingest(m) {
     case 'aila.state':
       State.set({ status: m.status, tool: m.tool || null });
       break;
+    case 'aila.capabilities':
+      State.set({ capabilities: Array.isArray(m.items) ? m.items : [] });
+      break;
     case 'model.selected':
       if (m.provider) State.set({ provider: m.provider });
       break;

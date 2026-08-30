@@ -31,6 +31,7 @@ const _state = {
   readOnly: false,
   memoryCount: 0,
   agents: [],
+  capabilities: [],        // "o que a Aila consegue fazer" (slugs; enviados no connect)
 
   // --- tarefas (Task Center) ---
   tasks: {},               // { id: {id, goal, state, progress, …} }

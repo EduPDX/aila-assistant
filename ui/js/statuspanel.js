@@ -7,6 +7,20 @@ const fmtUptime = (s) => {
   return h ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
 };
 
+// slug de capacidade → [ícone, rótulo pt-BR]. As capacidades vêm do self-model
+// (derivadas das ferramentas reais) e chegam uma vez no connect (aila.capabilities).
+const CAP = {
+  pesquisa_web: ['🔎', 'Pesquisa na web'],
+  visao: ['👁', 'Visão'],
+  programacao: ['💻', 'Programação'],
+  arquivos: ['📁', 'Arquivos'],
+  controle_do_pc: ['🖥', 'Controle do PC'],
+  controle_do_corpo: ['🧍', 'Corpo / avatar'],
+  memoria: ['🧠', 'Memória'],
+  git: ['🔀', 'Git'],
+  projetos: ['📦', 'Projetos'],
+};
+
 export function initStatusPanel(target) {
   const box = target || byId('statuspanel');
   if (!box) return;
@@ -26,7 +40,9 @@ export function initStatusPanel(target) {
           <div class="sp-mrow"><span>${k.toUpperCase()}</span><span id="sp-${k}-v" class="muted">—</span></div>
           <div class="sp-bar"><i id="sp-${k}-bar"></i></div>
         </div>`).join('')}
-    </div>`;
+    </div>
+    <div class="sp-title sp-caps-title">O QUE EU SEI FAZER</div>
+    <div class="sp-caps" id="sp-caps"></div>`;
 
   // Fonte única: estado + métricas vêm do State (o poller vive no HUD do palco,
   // shell/hud.js, que escreve State.metrics). Aqui só renderizamos.
@@ -37,6 +53,18 @@ export function initStatusPanel(target) {
 function render(s) {
   updateState(s);
   renderMeters(s.metrics || {});
+  renderCaps(s.capabilities || []);
+}
+
+function renderCaps(caps) {
+  const box = byId('sp-caps');
+  if (!box) return;
+  const list = Array.isArray(caps) ? caps : [];
+  if (!list.length) { box.innerHTML = '<span class="sp-cap-empty">descobrindo…</span>'; return; }
+  box.innerHTML = list.map((c) => {
+    const [icon, label] = CAP[c] || ['•', c];
+    return `<span class="chip sp-cap" title="${label}">${icon} ${label}</span>`;
+  }).join('');
 }
 
 function updateState(s) {

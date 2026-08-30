@@ -80,6 +80,13 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     engine.permissions.set_confirm_handler(session.confirm)
     await session.emit("system.status", {"message": "conectado"})
 
+    # Autorrepresentação: as capacidades REAIS (derivadas das ferramentas
+    # registradas) são estáticas após o boot → manda UMA vez no connect p/ a UI
+    # mostrar "o que a Aila consegue fazer".
+    if engine.self_model is not None:
+        await session.emit("aila.capabilities",
+                           {"items": engine.self_model.state().capabilities})
+
     # Ao conectar: começar VAZIO (padrão) evita contaminar o modelo com um
     # histórico antigo/confuso; ou retomar a última conversa se configurado.
     # O histórico anterior continua salvo e acessível pela barra lateral.

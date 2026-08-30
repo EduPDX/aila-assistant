@@ -463,6 +463,11 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .sp-v { font-size: var(--fs-lg); color: var(--accent); font-weight: 600; margin-top: 3px; }
 .sp-v.sm { font-size: var(--fs-sm); word-break: break-all; }
 
+.sp-caps-title { margin-top: var(--s-3); }
+.sp-caps { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-2); }
+.sp-cap { font-size: var(--fs-xs); cursor: default; }
+.sp-cap-empty { font-size: var(--fs-xs); color: var(--muted); }
+
 .sp-meters { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-1); }
 .sp-mrow { display: flex; justify-content: space-between; font-size: var(--fs-xs);
   text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
