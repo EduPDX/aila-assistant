@@ -63,6 +63,7 @@ from aila.core.verify import (  # auto-verificação/lint + conjuntos de escrita
 )
 from aila.database.store import ConversationStore
 from aila.llm.base import LLMBackend
+from aila.llm.lifecycle import keep_alive_for
 from aila.llm.messages import to_provider_messages
 from aila.llm.router import ModelRouter, RouteTask
 from aila.memory.manager import MemoryManager
@@ -867,12 +868,14 @@ class AilaEngine:
         # nunca pode quebrar o turno → falha vira NORMAL (sem degradação).
         from aila.core.resources import Pressure
 
+        # pressão medida SEMPRE (barata, cacheada): alimenta a escolha de modelo (R5)
+        # e o keep_alive adaptativo (R9), que valem mesmo sem fast_model configurado.
         _pressure = Pressure.NORMAL
+        try:
+            _pressure = (await self.resources.snapshot_async()).pressure
+        except Exception:  # noqa: BLE001 - telemetria de recurso é best-effort
+            _pressure = Pressure.NORMAL
         if (self.settings.llm.fast_model or "").strip():
-            try:
-                _pressure = (await self.resources.snapshot_async()).pressure
-            except Exception:  # noqa: BLE001 - telemetria de recurso é best-effort
-                _pressure = Pressure.NORMAL
             task.est_context = self._estimate_context_tokens(
                 self._messages_with_memory(mem_block, None)
             )
@@ -915,9 +918,14 @@ class AilaEngine:
             _model = turn_model or getattr(backend, "default_model", "") or backend.name
             _t0 = time.monotonic()
             _ttft_ms = 0.0
+            # R9: keep_alive adaptativo — sob pressão de VRAM, o modelo local fica
+            # residente menos tempo depois de responder (a nuvem ignora o parâmetro).
+            _ka = (keep_alive_for(_pressure, self.settings.llm.keep_alive)
+                   if backend.capabilities().local else None)
             try:
                 async for chunk in backend.chat(
                     msgs, stream=True, tools=tools, options=opts, model=turn_model,
+                    keep_alive=_ka,
                 ):
                     if chunk.reasoning:
                         await emit("assistant.reasoning", {"text": chunk.reasoning})

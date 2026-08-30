@@ -44,6 +44,11 @@ class OllamaBackend(LLMBackend):
         self.last_tps = 0.0  # tokens/s da última geração (painel de status)
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=timeout)
 
+    def _keep_alive(self, override: str | None) -> str:
+        """keep_alive efetivo: override adaptativo (R9, por pressão) OU o default
+        configurado. `None`/vazio cai no default — a chamada nunca fica sem valor."""
+        return override or self.keep_alive
+
     # ------------------------------------------------------------------ #
     async def chat(
         self,
@@ -60,7 +65,7 @@ class OllamaBackend(LLMBackend):
             "model": model or self.default_model,
             "messages": messages,
             "stream": stream,
-            "keep_alive": self.keep_alive,
+            "keep_alive": self._keep_alive(kwargs.get("keep_alive")),  # R9: adaptativo
             "options": {},
         }
         if tools:
@@ -156,7 +161,7 @@ class OllamaBackend(LLMBackend):
             "model": model or self.default_model,
             "messages": messages,
             "stream": False,
-            "keep_alive": self.keep_alive,
+            "keep_alive": self._keep_alive(kwargs.get("keep_alive")),  # R9: adaptativo
         }
         if tools:
             body["tools"] = tools

@@ -2873,6 +2873,30 @@ def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
     assert got == []
 
 
+def test_keep_alive_adapts_to_pressure():
+    """R9: keep_alive encolhe conforme a pressão de VRAM. NORMAL mantém o default
+    (respostas repetidas rápidas); do ELEVATED p/ cima libera o modelo mais cedo."""
+    from aila.core.resources import Pressure
+    from aila.llm.lifecycle import keep_alive_for
+
+    assert keep_alive_for(Pressure.NORMAL, "10m") == "10m"     # folga → default
+    assert keep_alive_for(Pressure.ELEVATED, "10m") == "5m"
+    assert keep_alive_for(Pressure.HIGH, "10m") == "2m"
+    assert keep_alive_for(Pressure.CRITICAL, "10m") == "30s"   # aperto → libera cedo
+    # o default é respeitado quando a pressão é NORMAL (config manda)
+    assert keep_alive_for(Pressure.NORMAL, "1h") == "1h"
+
+
+def test_ollama_keep_alive_override():
+    """O backend usa o keep_alive adaptativo quando passado; None/vazio cai no default."""
+    from aila.llm.ollama_backend import OllamaBackend
+
+    be = OllamaBackend(keep_alive="10m")
+    assert be._keep_alive("30s") == "30s"    # override adaptativo
+    assert be._keep_alive(None) == "10m"     # sem override → default
+    assert be._keep_alive("") == "10m"       # vazio → default (nunca sem valor)
+
+
 def test_api_resources_composes_all_signals(monkeypatch):
     """R11: /api/resources reúne pressão(R2)+inventário(R3)+saúde(R4)+telemetria(R8)
     numa foto só. Ollama offline → inventário ainda lista os papéis (determinístico)."""
