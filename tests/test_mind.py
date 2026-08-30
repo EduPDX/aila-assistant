@@ -558,10 +558,12 @@ def test_pedido_que_depende_de_algo_externo_mantem_ferramentas():
               "leia o arquivo relatorio.pdf",
               "o que tem na pasta Documentos?",
               "lembre que eu gosto de python",
-              "faça um jogo e salve como x.py",
-              "levante a mão direita"):
+              "faça um jogo e salve como x.py"):
         _, use_tools = _classify_task(p, "auto")
         assert use_tools, p
+    # gesto conhecido é decidido sem LLM → sem ferramentas (sem spam de avatar.gesture)
+    _, ut = _classify_task("levante a mão direita", "auto")
+    assert not ut
 
 
 # --------------------------------------------- Fase F: emoção → tom (sem duplicar) #

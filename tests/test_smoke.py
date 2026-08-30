@@ -2133,11 +2133,14 @@ def test_classify_command_vs_casual():
     Comandos de avatar → local (rápido) COM ferramentas; cumprimento → sem."""
     from aila.core.engine import _classify_task
 
-    for cmd in ("levante os braços", "acene para mim", "dance", "sorria",
-                "aponte para a tela", "olhe para mim"):
+    # gesto CONHECIDO → decidido pelo Decision Engine, sem ferramentas (rápido,
+    # sem o modelo spammar avatar.gesture); todos vão para o local.
+    for cmd in ("levante os braços", "acene para mim", "aponte para a tela"):
         task, use_tools = _classify_task(cmd, "auto")
-        assert use_tools, cmd                      # precisa de avatar.gesture
-        assert task.prefer_local, cmd              # local = gesto sem atraso
+        assert task.prefer_local and not use_tools, cmd
+    # gesto NÃO mapeado ("olhe para...") → mantém ferramentas p/ o modelo tentar
+    task, use_tools = _classify_task("olhe para mim", "auto")
+    assert task.prefer_local and use_tools
 
     for saud in ("oi", "olá, como vai?", "bom dia", "obrigado!", "tudo bem?"):
         task, use_tools = _classify_task(saud, "auto")

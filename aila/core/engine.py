@@ -1631,10 +1631,16 @@ def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
     if _is_casual(user_text):
         # básico/casual → LOCAL (prefer_local filtra p/ só local), sem ferramentas
         return RouteTask(kind="basic", needs_tools=False, prefer_local=True), False
-    if _is_avatar_command(user_text) and not _is_code_request(user_text):
-        # gesto/pose: precisa de FERRAMENTA (avatar.gesture) e de ser rápido →
-        # modelo local principal (tool-calling confiável), sem ida à nuvem.
-        return RouteTask(kind="chat", needs_tools=True, prefer_local=True), True
+    if _is_avatar_command(user_text):
+        # gesto/pose SEMPRE vence a detecção de código ("levante a mão p/ testes"
+        # não é tarefa de código!). Vai p/ o LOCAL, rápido. Se o Decision Engine já
+        # cuida do gesto, NÃO oferecemos ferramentas — senão o modelo chama
+        # avatar.gesture várias vezes à toa. Gesto não mapeado ("olhe p/ a
+        # esquerda") mantém ferramentas p/ o modelo tentar.
+        from aila.mind.decision_engine import decide_gesture
+
+        tem_gesto = decide_gesture(user_text) is not None
+        return RouteTask(kind="chat", needs_tools=not tem_gesto, prefer_local=True), (not tem_gesto)
     if _is_code_request(user_text):
         # código → cadeia 'code' das rules (ex.: Gemini, melhor em código; local é
         # fallback). NÃO forçamos mais local: as travadas na nuvem vinham do parser
