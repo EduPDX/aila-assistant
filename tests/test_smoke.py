@@ -2522,6 +2522,53 @@ def test_hardware_monitor_caches_and_no_gpu():
     assert sysr.ram_total_gb > 0 and 0 <= sysr.ram_percent <= 100
 
 
+def test_pressure_bands_gpu_and_ram():
+    """R2: pressão traduz headroom de VRAM e %RAM na mesma escala de 4 degraus.
+    GPU alinha com o dial (verde→NORMAL, amarelo→ELEVATED); o vermelho parte em
+    HIGH e, no fim da folga, CRITICAL."""
+    from aila.core.resources import (
+        GPU_CRITICAL_MB,
+        Pressure,
+        gpu_pressure,
+        ram_pressure,
+    )
+    from aila.core.vram import RED_MB, YELLOW_MB
+
+    assert gpu_pressure(YELLOW_MB + 1) is Pressure.NORMAL
+    assert gpu_pressure(RED_MB + 1) is Pressure.ELEVATED     # amarelo
+    assert gpu_pressure(GPU_CRITICAL_MB + 1) is Pressure.HIGH  # vermelho, com fôlego
+    assert gpu_pressure(0) is Pressure.CRITICAL               # vermelho, no fim
+    assert ram_pressure(50) is Pressure.NORMAL
+    assert ram_pressure(80) is Pressure.ELEVATED
+    assert ram_pressure(90) is Pressure.HIGH
+    assert ram_pressure(99) is Pressure.CRITICAL
+
+
+def test_resource_snapshot_takes_worst_pressure():
+    """A pressão geral é a PIOR das duas dimensões: RAM calma mas GPU no talo
+    ainda deixa o snapshot CRITICAL; e sem GPU a RAM manda sozinha."""
+    from aila.core.hardware import GpuReading, HardwareMonitor, SystemReading
+    from aila.core.resources import Pressure, ResourceManager
+
+    # GPU sem folga (free=50 → CRITICAL), RAM tranquila (40%) → geral CRITICAL.
+    tight = HardwareMonitor(gpu_probe=lambda: GpuReading("fake", 90, 8000, 7950, 50, 70))
+    tight.system = lambda: SystemReading(20.0, 6.0, 32.0, 40.0)  # type: ignore[method-assign]
+    snap = ResourceManager(tight).snapshot()
+    assert snap.gpu_pressure is Pressure.CRITICAL
+    assert snap.ram_pressure is Pressure.NORMAL
+    assert snap.pressure is Pressure.CRITICAL
+    assert snap.to_dict()["pressure"] == "critical"
+
+    # Sem GPU: não inventa pressão de VRAM; a RAM (88% → HIGH) decide.
+    nogpu = HardwareMonitor(gpu_probe=lambda: None)
+    nogpu.system = lambda: SystemReading(10.0, 28.0, 32.0, 88.0)  # type: ignore[method-assign]
+    snap2 = ResourceManager(nogpu).snapshot()
+    assert snap2.gpu_available is False
+    assert snap2.gpu_pressure is Pressure.NORMAL
+    assert snap2.pressure is Pressure.HIGH
+    assert snap2.to_dict()["gpu"] is None
+
+
 def test_vram_no_nvidia_smi_is_noop(monkeypatch):
     """Sem nvidia-smi, o planner não quebra: available=False, estado 'unknown'."""
     from aila.core import vram
