@@ -704,6 +704,21 @@ def test_rerank_why_breakdown(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_build_recall_context_project_name():
+    """Fatia 4 (Fase 5): o NOME do projeto ativo entra no context (via extrator),
+    junto de query+perfil, deduplicado e em ordem. Símbolos de código NÃO entram
+    (contrato de isolamento código↔chat) — a função só recebe o nome."""
+    from aila.core.engine import _build_recall_context
+
+    ctx = _build_recall_context(["Alpha"], ["Alpha", "Perfil"], "Projeto Zephyr")
+    ents = ctx["entities"]
+    assert "Zephyr" in ents, "nome do projeto ativo vira entidade de contexto"
+    assert ents.count("Alpha") == 1, "dedup preserva uma ocorrência"
+    assert ents.index("Alpha") == 0, "ordem preservada (query primeiro)"
+    # sem projeto → só query + perfil
+    assert _build_recall_context(["X"], ["Y"], None)["entities"] == ["X", "Y"]
+
+
 def test_consolidation(tmp_path: Path):
     """Fase 4 (dreaming conservador): decay + dedup (com evidência+reforço) +
     grafo por co-ocorrência GATED por evidência + importância. Determinístico."""

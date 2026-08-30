@@ -95,6 +95,19 @@ def _normalize_tool_args(tool_calls: list[dict] | None) -> list[dict]:
     return tool_calls or []
 
 
+def _build_recall_context(query_ents: list[str], profile_ents: list[str],
+                          project_name: str | None) -> dict:
+    """Monta o ``context.entities`` do re-rank híbrido: entidades da mensagem +
+    do perfil + do NOME do projeto ativo. SÓ o nome entra — os símbolos do code
+    graph ficam de fora de propósito, p/ preservar o isolamento código↔chat do KG
+    (nós de código não poluem o match de entidades da conversa). Dedup por ordem."""
+    ents = [*query_ents, *profile_ents]
+    if project_name:
+        from aila.cognition.memory.entities import extract
+        ents += extract(project_name)
+    return {"entities": list(dict.fromkeys(e for e in ents if e))}
+
+
 class AilaEngine:
     def __init__(
         self,
@@ -519,8 +532,18 @@ class AilaEngine:
         # também favorece memórias ligadas ao que já é conhecido sobre ele/projeto.
         from aila.cognition.memory.entities import extract as _extract_ents
 
-        ctx_ents = [*_extract_ents(query), *self.mem.profile_entities()]
-        ctx = {"entities": list(dict.fromkeys(ctx_ents))}   # dedup, preserva ordem
+        # projeto de código ATIVO (ProjectRegistry) → só o NOME entra no contexto.
+        proj_name = None
+        try:
+            from aila.cognition.graph.projects import get_registry
+
+            reg = get_registry()
+            slug = reg.active()
+            if slug:
+                proj_name = (reg.get(slug) or {}).get("name") or slug
+        except Exception as exc:  # noqa: BLE001 - memória/projeto nunca quebra o chat
+            log.debug(f"projeto ativo p/ contexto indisponível: {exc!r}")
+        ctx = _build_recall_context(_extract_ents(query), self.mem.profile_entities(), proj_name)
         try:
             hits = await self.mem.recall(query, top_k=cfg.top_k, min_score=cfg.min_score,
                                          context=ctx)
