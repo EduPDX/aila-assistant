@@ -737,6 +737,23 @@ class AilaEngine:
         await self._emit_decided_gestures(user_text, emit)
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
+        (
+            final_text, backend, generated_code, wrote_ok, tools_used,
+        ) = await self._run_tool_loop(
+            task, use_tools, tools, opts, mem_block, mode, emit)
+
+        final_text = await self._finalize_text(
+            final_text, user_text, use_tools, generated_code, wrote_ok,
+            backend, opts, mem_block, emit)
+
+        return await self._deliver_response(final_text, user_text, tools_used, emit)
+
+    async def _run_tool_loop(self, task, use_tools, tools, opts, mem_block, mode, emit):
+        """Laço agêntico do turno (fase extraída na 2f): escolhe a cadeia de
+        provedores, streama a resposta, executa ferramentas (leituras em paralelo,
+        escritas em série com auto-verificação), aplica o orçamento anti-loop e o
+        fallback entre provedores. Devolve (final_text, backend, generated_code,
+        wrote_ok, tools_used) para process() finalizar e entregar a resposta."""
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
         wrote_ok = False             # alguma escrita REALMENTE deu certo neste turno
         generated_code = ""          # código produzido por code.generate (p/ salvar se preciso)
@@ -961,12 +978,7 @@ class AilaEngine:
                 break
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
-
-        final_text = await self._finalize_text(
-            final_text, user_text, use_tools, generated_code, wrote_ok,
-            backend, opts, mem_block, emit)
-
-        return await self._deliver_response(final_text, user_text, tools_used, emit)
+        return final_text, backend, generated_code, wrote_ok, tools_used
 
     async def _emit_decided_gestures(self, user_text, emit) -> None:
         """Decisão (Fase I) + AÇÃO imediata: um pedido corporal inequívoco
