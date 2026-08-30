@@ -618,6 +618,34 @@ def test_hybrid_retrieval(tmp_path: Path):
     asyncio.run(go())
 
 
+def test_hybrid_context_bonus_reranks(tmp_path: Path):
+    """O bônus de 'tarefa atual' (context.entities) re-ranqueia: com vetor idêntico
+    e SEM match no grafo (gscore=0 p/ ambos), quem escolhe é o contexto. Provamos
+    causação invertendo a ordem só ao trocar a entidade favorecida — é o sinal que
+    engine._recall passa (entidades da mensagem) e que antes nascia morto."""
+    from aila.cognition.graph import GraphStore
+    from aila.memory.manager import MemoryManager
+    from aila.memory.store import MemoryStore
+
+    async def flat_embed(texts):          # vetorial não diferencia → contexto decide
+        return [[1.0, 0.0] for _ in texts]
+
+    async def go():
+        store = MemoryStore(tmp_path / "ctx.db", flat_embed)
+        graph = GraphStore(tmp_path / "ctx_kg.db")   # grafo VAZIO → gscore=0 p/ ambos
+        a = await store.add("nota sobre Alpha", kind="fact", entities=["Alpha"])
+        b = await store.add("nota sobre Bravo", kind="fact", entities=["Bravo"])
+
+        mgr = MemoryManager(store, graph=graph)
+        # a query não nomeia nó do grafo → só o context muda o ranking
+        hits_a = await mgr.recall("qual nota?", top_k=2, context={"entities": ["Alpha"]})
+        hits_b = await mgr.recall("qual nota?", top_k=2, context={"entities": ["Bravo"]})
+        assert hits_a[0].id == a, "context Alpha deve subir a memória de Alpha"
+        assert hits_b[0].id == b, "context Bravo deve subir a memória de Bravo"
+
+    asyncio.run(go())
+
+
 def test_consolidation(tmp_path: Path):
     """Fase 4 (dreaming conservador): decay + dedup (com evidência+reforço) +
     grafo por co-ocorrência GATED por evidência + importância. Determinístico."""

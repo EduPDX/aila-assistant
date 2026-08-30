@@ -511,8 +511,16 @@ class AilaEngine:
             return None
         cfg = self.settings.memory
         profile = self.mem.profile_block()
+        # Contexto do turno p/ o re-rank híbrido: entidades da mensagem atual
+        # (extrator heurístico, offline) acendem o bônus de "tarefa atual" mesmo
+        # ANTES de essas entidades virarem nós do grafo — enquanto o KG é imaturo,
+        # é o único sinal de sobreposição de entidade que o re-rank recebe.
+        from aila.cognition.memory.entities import extract as _extract_ents
+
+        ctx = {"entities": _extract_ents(query)}
         try:
-            hits = await self.mem.recall(query, top_k=cfg.top_k, min_score=cfg.min_score)
+            hits = await self.mem.recall(query, top_k=cfg.top_k, min_score=cfg.min_score,
+                                         context=ctx)
         except Exception as exc:  # noqa: BLE001 - memória nunca deve quebrar o chat
             log.warning(f"recuperação de memória falhou: {exc!r}")
             hits = []
