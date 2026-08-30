@@ -2873,6 +2873,81 @@ def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
     assert got == []
 
 
+def test_oom_decide_load_actions():
+    """R6: a decisão PURA de pré-voo. Sem medição ou já carregado → proceed; cabe →
+    proceed; não cabe → shrink (liberar VRAM antes)."""
+    from aila.core.oom import decide_load
+
+    # sem medição de VRAM → não bloqueia com base no desconhecido
+    d = decide_load("m", 0, False, need_mb=5000)
+    assert d.action == "proceed" and d.fits and not d.available
+    # já carregado → no-op
+    d = decide_load("m", 100, True, need_mb=5000, already_loaded=True)
+    assert d.action == "proceed" and d.already_loaded
+    # cabe folgado
+    d = decide_load("m", 6000, True, need_mb=5000)
+    assert d.action == "proceed" and d.fits
+    # não cabe → shrink
+    d = decide_load("m", 2000, True, need_mb=5000)
+    assert d.action == "shrink" and not d.fits
+    assert d.to_dict()["action"] == "shrink" and d.to_dict()["need_mb"] == 5000
+
+
+def test_oom_footprint_estimate():
+    """R6: footprint medido do real — carregado usa size_vram; instalado usa
+    disco×overhead; desconhecido cai na estimativa default."""
+    from aila.core.models import ModelState
+    from aila.core.oom import _DEFAULT_FOOTPRINT_MB, _footprint_from_state
+
+    loaded = ModelState(name="m", roles=["target"], installed=True, loaded=True,
+                        vram_mb=5200, disk_mb=4700)
+    assert _footprint_from_state(loaded) == 5200                 # já quente → real
+    installed = ModelState(name="m", roles=["target"], installed=True, disk_mb=4700)
+    assert _footprint_from_state(installed) == int(4700 * 1.15)  # disco×overhead
+    assert _footprint_from_state(None) == _DEFAULT_FOOTPRINT_MB  # desconhecido
+
+
+def test_oom_can_load_composes_headroom_and_footprint(monkeypatch):
+    """R6: can_load junta headroom REAL (HardwareMonitor) + footprint estimado do
+    inventário (ModelManager). O mesmo modelo cabe ou não conforme a VRAM livre."""
+    from aila.core import hardware, models
+    from aila.core.hardware import GpuReading
+    from aila.core.oom import OomGuard
+
+    async def _tags(base_url, timeout=3.0):
+        return {"qwen2.5:7b": 4700}          # instalado, ~4.7 GB em disco
+
+    async def _ps(base_url, timeout=3.0):
+        return {}                            # não carregado
+
+    monkeypatch.setattr(models, "_probe_tags", _tags)
+    monkeypatch.setattr(models, "_probe_ps", _ps)
+
+    class _FakeMon:
+        def __init__(self, free):
+            self._free = free
+        async def gpu_async(self, *, fresh=False):
+            return GpuReading("rtx", 0, 8188, 8188 - self._free, self._free, 50)
+
+    need = int(4700 * 1.15)  # 5405
+    monkeypatch.setattr(hardware, "monitor", _FakeMon(6000))
+
+    async def go():
+        d = await OomGuard().can_load("qwen2.5:7b")
+        assert d.need_mb == need and d.headroom_mb == 6000
+        assert d.action == "proceed" and d.fits            # 6000 >= 5405
+
+    asyncio.run(go())
+
+    monkeypatch.setattr(hardware, "monitor", _FakeMon(3000))
+
+    async def go2():
+        d = await OomGuard().can_load("qwen2.5:7b")
+        assert d.action == "shrink" and not d.fits         # 3000 < 5405
+
+    asyncio.run(go2())
+
+
 def test_code_review_wraps_code_and_detects_profile(tmp_path):
     """code.review lê um arquivo do repo, detecta o perfil e embrulha o código
     como DADO externo (anti prompt-injection) antes de mandar ao modelo."""

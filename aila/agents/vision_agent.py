@@ -87,10 +87,17 @@ class VisionAgent(BaseAgent):
         reassume o estado real em ~2 s. No-op sem nvidia-smi; nunca quebra a visão."""
         try:
             from aila.core.event_bus import bus
+            from aila.core.oom import decide_load
             from aila.core.vram import VISION_HEADROOM_MB, VramPlanner
 
             plan = await VramPlanner(self.deps.settings.llm.base_url).measure()
-            if plan.available and plan.headroom_mb < VISION_HEADROOM_MB:
+            # decisão de pré-voo COMPARTILHADA (R6): o modelo de visão precisa de
+            # ~5 GB; se não couber no headroom, a ação é 'shrink' (liberar VRAM).
+            decision = decide_load(
+                self.vision_model, plan.headroom_mb, plan.available,
+                need_mb=VISION_HEADROOM_MB,
+            )
+            if decision.action == "shrink":
                 payload = plan.to_dict()
                 payload["state"] = "red"            # encolhimento preventivo
                 payload["reason"] = "vision-preload"
