@@ -141,6 +141,23 @@ def test_confianca_controla_hedge():
     assert not derive_style(PersonalityTraits(confidence=0.9)).hedge
 
 
+def test_iniciativa_vira_diretiva_de_texto():
+    """O traço `initiative` deixa de ser inerte: >= 0.60 gera uma diretiva de
+    COMPORTAMENTO (oferecer um próximo passo em 1 frase). Abaixo do limiar não há
+    diretiva. O default (0.50) NÃO ativa — opt-in, sem mudar o comportamento padrão."""
+    from aila.mind import derive_style
+
+    proativa = derive_style(PersonalityTraits(initiative=0.8))
+    reservada = derive_style(PersonalityTraits(initiative=0.2))
+    padrao = derive_style(PersonalityTraits())            # initiative=0.50
+    assert proativa.comment_freely and not reservada.comment_freely
+    assert not padrao.comment_freely, "default não ativa iniciativa (opt-in)"
+    assert any("próximo passo" in d.lower() for d in proativa.directives)
+    assert not any("próximo passo" in d.lower() for d in reservada.directives)
+    # iniciativa é TEXTO, nunca ferramenta: nenhuma diretiva manda agir sozinha
+    assert not any("ferramenta" in d.lower() for d in proativa.directives)
+
+
 def test_iniciativa_respeita_risco():
     """Iniciativa alta age sozinha em coisa inofensiva, mas RISCO sempre barra —
     ação arriscada é permissão, não personalidade."""

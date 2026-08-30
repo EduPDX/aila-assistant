@@ -67,6 +67,11 @@ def derive_style(t: PersonalityTraits) -> PersonalityStyle:
     }[length])
     if ask:
         d.append("Se o pedido estiver vago, faça UMA pergunta curta antes de agir.")
+    if comment:
+        # iniciativa vira COMPORTAMENTO de texto (nunca ação de ferramenta: ação por
+        # conta própria é permissão, não personalidade — ver should_take_initiative).
+        d.append("Quando notar um próximo passo útil ou um detalhe relevante, "
+                 "ofereça em UMA frase — sem esperar pedirem e sem insistir se não colar.")
     if humor:
         d.append("Leveza é bem-vinda, sem forçar piada.")
     if reassure:
