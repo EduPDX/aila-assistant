@@ -133,6 +133,11 @@ class AilaEngine:
         from aila.core.resources import ResourceManager
 
         self.resources = ResourceManager()
+        # Telemetria de desempenho POR MODELO (R8): tokens/s, TTFT e taxa de fallback
+        # reais deste PC. Só acumula — alimenta R9/R10 e a UI (R11).
+        from aila.llm.telemetry import PerfTelemetry
+
+        self.telemetry = PerfTelemetry()
         # Model Router: escolhe o provedor por tarefa (regras em settings.routing;
         # respeita capacidade/offline; passthrough p/ o local quando desligado).
         self.router = ModelRouter(
@@ -905,6 +910,11 @@ class AilaEngine:
             # resposta e gesto quase imediatos, sem ocupar a VRAM do modelo grande.
             # R5: sob pressão de GPU, também degrada turnos médios p/ o pequeno.
             turn_model = self._pick_local_model(task, use_tools, backend, _pressure)
+            # R8: telemetria desta geração — modelo real + relógio p/ o TTFT (o que
+            # o usuário sente). tps sai do backend.last_tps (Ollama, no chunk 'done').
+            _model = turn_model or getattr(backend, "default_model", "") or backend.name
+            _t0 = time.monotonic()
+            _ttft_ms = 0.0
             try:
                 async for chunk in backend.chat(
                     msgs, stream=True, tools=tools, options=opts, model=turn_model,
@@ -918,6 +928,8 @@ class AilaEngine:
                             step = reasoning_text.split('\n')[0][:120]
                             await emit("thinking.step", {"text": step})
                     if chunk.content:
+                        if not _ttft_ms:                 # 1º token → latência percebida
+                            _ttft_ms = (time.monotonic() - _t0) * 1000
                         collected.append(chunk.content)
                         # Não vazar tool-call na tela: se a resposta começa com { / [ /
                         # ```  ou contém "tool"/"name", é JSON de ferramenta → suprime o
@@ -934,6 +946,7 @@ class AilaEngine:
             except Exception as exc:  # noqa: BLE001 - provedor falhou → fallback
                 failed.add(backend)   # não volta pra ele (evita ping-pong Gemini↔ollama)
                 self.health.record_failure(backend.name, repr(exc))  # R4: saúde entre turnos
+                self.telemetry.record_fallback(_model)               # R8
                 nxt = next((b for b in chain if b not in failed), None)
                 if nxt is not None and not collected:
                     log.warning(f"provedor '{backend.name}' falhou ({exc!r}); fallback → '{nxt.name}'")
@@ -947,11 +960,18 @@ class AilaEngine:
 
             text = "".join(collected)
 
+            # R8: geração REAL (com prosa ou tool-call) entra na telemetria do modelo.
+            if text.strip() or tool_calls:
+                self.telemetry.record_generation(
+                    _model, tps=getattr(backend, "last_tps", 0.0), ttft_ms=_ttft_ms,
+                )
+
             # Fallback em resposta VAZIA (não-exceção): o provedor respondeu nada.
             # Troca para o próximo da cadeia (uma vez) em vez de entregar em branco.
             if not text.strip() and not tool_calls:
                 failed.add(backend)
                 self.health.record_failure(backend.name, "resposta vazia")  # R4
+                self.telemetry.record_fallback(_model)                       # R8
                 nxt = next((b for b in chain if b not in failed), None)
                 if nxt is not None:
                     log.warning(f"'{backend.name}' respondeu vazio; fallback → '{nxt.name}'")

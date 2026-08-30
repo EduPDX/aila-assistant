@@ -2873,6 +2873,36 @@ def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
     assert got == []
 
 
+def test_perf_telemetry_per_model():
+    """R8: telemetria acumula por modelo — tps/TTFT por EWMA (1ª amostra assume o
+    valor cheio), gerações contadas, e taxa de fallback = falhas / tentativas."""
+    from aila.llm.telemetry import PerfTelemetry
+
+    t = {"now": 0.0}
+    tel = PerfTelemetry(alpha=0.5, clock=lambda: t["now"])
+
+    tel.record_generation("qwen2.5:7b", tps=40.0, ttft_ms=200.0)
+    snap = tel.snapshot()["qwen2.5:7b"]
+    assert snap["gens"] == 1 and snap["tps"] == 40.0 and snap["ttft_ms"] == 200.0
+
+    # 2ª amostra: EWMA com alpha=0.5 → média(40,60)=50 ; TTFT média(200,400)=300
+    tel.record_generation("qwen2.5:7b", tps=60.0, ttft_ms=400.0)
+    snap = tel.snapshot()["qwen2.5:7b"]
+    assert snap["gens"] == 2 and snap["tps"] == 50.0 and snap["ttft_ms"] == 300.0
+
+    # tps/ttft <= 0 são ignorados (provedor pode não reportar), mas gens conta
+    tel.record_generation("qwen2.5:7b", tps=0.0, ttft_ms=0.0)
+    assert tel.snapshot()["qwen2.5:7b"]["gens"] == 3
+    assert tel.snapshot()["qwen2.5:7b"]["tps"] == 50.0  # inalterado
+
+    # fallback do outro modelo: taxa = 1 falha / (0 gen + 1 falha) = 1.0
+    tel.record_fallback("gemini")
+    g = tel.snapshot()["gemini"]
+    assert g["fallbacks"] == 1 and g["fallback_rate"] == 1.0 and g["gens"] == 0
+    # modelo saudável: 3 gens, 0 falhas → taxa 0
+    assert tel.snapshot()["qwen2.5:7b"]["fallback_rate"] == 0.0
+
+
 def test_context_budget_accounts_tool_schemas():
     """R7: o orçamento da janela é explícito e desconta o custo REAL dos schemas.
     Sem tools o teto é idêntico ao legado (só fração); tools grandes APERTAM o
