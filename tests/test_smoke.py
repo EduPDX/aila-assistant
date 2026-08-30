@@ -2873,6 +2873,40 @@ def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
     assert got == []
 
 
+def test_benchmark_measures_and_builds_ladder():
+    """R12: o benchmark mede TTFT/tps por modelo e monta a ESCADA (só os que
+    responderam, do mais leve ao mais pesado por footprint). Falha do provedor
+    vira ok=False com o erro — nunca levanta."""
+    from aila.core.benchmark import BenchReport, BenchSample, benchmark_model
+
+    class _OkLLM:
+        last_tps = 45.0
+        async def chat(self, messages, **k):
+            from aila.llm.base import ChatChunk
+            yield ChatChunk(content="ok", done=True)
+
+    class _DeadLLM:
+        async def chat(self, messages, **k):
+            raise RuntimeError("ollama offline")
+            yield  # pragma: no cover - torna async generator
+
+    ok = asyncio.run(benchmark_model(_OkLLM(), "qwen2.5:7b"))
+    assert ok.ok is True and ok.tps == 45.0 and ok.model == "qwen2.5:7b"
+
+    dead = asyncio.run(benchmark_model(_DeadLLM(), "sumido:7b"))
+    assert dead.ok is False and "offline" in dead.error   # falha graciosa
+
+    # a escada ordena por footprint e exclui os que falharam
+    rep = BenchReport(samples=[
+        BenchSample("big", ok=True, footprint_mb=6000),
+        BenchSample("small", ok=True, footprint_mb=2000),
+        BenchSample("broken", ok=False, error="x"),
+    ], gpu="RTX 4060")
+    assert [s.model for s in rep.ladder()] == ["small", "big"]
+    assert rep.to_dict()["ladder"] == ["small", "big"]
+    assert rep.to_dict()["gpu"] == "RTX 4060"
+
+
 def test_engine_resource_aware_behavior():
     """R10: a Aila fica ciente de recurso. Sob pressão alta, _under_pressure=True →
     a consolidação de fundo é ADIADA sem avançar o contador (retoma ao respirar);
