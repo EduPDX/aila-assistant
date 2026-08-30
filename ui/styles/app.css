@@ -1087,3 +1087,43 @@ body[data-tab="chat"] .subc { display: none; }           /* na aba Conversa: só
   .statuspanel.inspector > * { width: min(320px, 86vw); }
   body[data-drawer="open"] .statuspanel.inspector { transform: translateX(0); }
 }
+
+/* ── Recursos (R11): diagnóstico de Resource Intelligence ─────────────── */
+.res-body { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; overflow-y: auto; }
+.res-card { border: 1px solid var(--border); background: var(--panel-2); padding: 8px 10px; }
+.res-card-head { display: flex; justify-content: space-between; align-items: center;
+  font-size: var(--fs-xs); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.res-sub { color: var(--muted); font-size: 10px; letter-spacing: 0; text-transform: none; }
+.res-note { color: var(--muted); font-size: 10px; margin-top: 4px; opacity: .8; }
+/* badge de pressão por nível */
+.res-badge { font-size: 10px; font-weight: 600; letter-spacing: .5px; padding: 1px 7px; border: 1px solid; }
+.res-badge[data-lvl="normal"]   { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.res-badge[data-lvl="elevated"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.res-badge[data-lvl="high"]     { color: #ff8c1a; border-color: color-mix(in srgb, #ff8c1a 45%, transparent); }
+.res-badge[data-lvl="critical"] { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  animation: pulse 1.4s infinite; }
+/* medidores GPU/RAM */
+.res-meter { margin-top: 6px; }
+.res-meter-top { display: flex; justify-content: space-between; font-size: 11px; color: var(--text); }
+.res-meter-top span:last-child { color: var(--muted); }
+.res-meter-tr { height: 6px; margin-top: 3px; background: color-mix(in srgb, var(--border) 60%, transparent); overflow: hidden; }
+.res-meter-tr i { display: block; height: 100%; width: 0; background: var(--ok); transition: width var(--dur-2) var(--ease); }
+.res-meter[data-lvl="elevated"] .res-meter-tr i { background: var(--warn); }
+.res-meter[data-lvl="high"]     .res-meter-tr i { background: #ff8c1a; }
+.res-meter[data-lvl="critical"] .res-meter-tr i { background: var(--danger); }
+/* linhas de modelo / provedor / desempenho */
+.res-model, .res-prov, .res-perf { display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 3px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 40%, transparent); }
+.res-model:first-of-type, .res-prov:first-of-type, .res-perf:first-of-type { border-top: none; }
+.res-dot { color: var(--muted); font-size: 9px; }
+.res-model[data-hot="1"] .res-dot { color: var(--ok); text-shadow: 0 0 6px var(--ok); }
+.res-model-name, .res-perf-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res-model-role { color: var(--muted); font-size: 10px; }
+.res-model-vram { color: var(--muted); min-width: 46px; text-align: right; }
+.res-prov-name { flex: 1; }
+.res-prov-state { color: var(--muted); font-size: 10px; }
+.res-prov[data-state="open"] .res-prov-state { color: var(--danger); }
+.res-prov[data-state="half_open"] .res-prov-state { color: var(--warn); }
+.res-prov-fails { color: var(--danger); font-size: 10px; }
+.res-perf-v { color: var(--muted); min-width: 58px; text-align: right; }
+.res-perf-fb { color: var(--warn); font-size: 10px; }

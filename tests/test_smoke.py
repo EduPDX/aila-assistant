@@ -2873,6 +2873,53 @@ def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
     assert got == []
 
 
+def test_api_resources_composes_all_signals(monkeypatch):
+    """R11: /api/resources reúne pressão(R2)+inventário(R3)+saúde(R4)+telemetria(R8)
+    numa foto só. Ollama offline → inventário ainda lista os papéis (determinístico)."""
+    from types import SimpleNamespace
+
+    from aila.api.routes import resources as resources_route
+    from aila.core import models
+    from aila.core.config import get_settings
+    from aila.core.engine import build_engine
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+
+    class FakeLLM(LLMBackend):
+        name = "ollama"
+        async def chat(self, messages, **k):
+            yield ChatChunk(content="x", done=True)
+        async def complete(self, messages, **k):
+            return "[]"
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+
+    async def _none(base_url, timeout=3.0):
+        return None
+
+    monkeypatch.setattr(models, "_probe_tags", _none)
+    monkeypatch.setattr(models, "_probe_ps", _none)
+
+    s = get_settings()
+    s.memory.enabled = False
+    eng = build_engine(s, FakeLLM())
+    # semeia sinais de R4/R8 p/ provar que aparecem na foto
+    eng.health.record_failure("gemini", "x")
+    eng.telemetry.record_generation("qwen2.5:7b", tps=42.0, ttft_ms=150.0)
+
+    req = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(engine=eng)))
+    data = asyncio.run(resources_route(req))
+
+    assert set(data) == {"pressure", "models", "health", "perf"}
+    assert "pressure" in data["pressure"]                 # R2: nível geral
+    assert data["models"]["ollama_ok"] is False           # R3: offline, mas compôs
+    assert data["health"]["gemini"]["fails"] == 1         # R4
+    assert data["perf"]["qwen2.5:7b"]["tps"] == 42.0      # R8
+
+
 def test_perf_telemetry_per_model():
     """R8: telemetria acumula por modelo — tps/TTFT por EWMA (1ª amostra assume o
     valor cheio), gerações contadas, e taxa de fallback = falhas / tentativas."""

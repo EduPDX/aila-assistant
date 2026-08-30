@@ -6,11 +6,13 @@
 import { byId } from '../dom.js';
 import { initActivity } from '../views/activity.js';
 import { initTasks } from '../views/tasks.js';
+import { initResources } from '../views/resources.js';
 import { initStatusPanel } from '../statuspanel.js';
 
 const TABS = [
   { id: 'activity', label: 'Atividade' },
   { id: 'tasks', label: 'Tarefas' },
+  { id: 'resources', label: 'Recursos' },
   { id: 'system', label: 'Sistema' },
 ];
 
@@ -25,6 +27,7 @@ export function initInspector() {
     <div class="insp-body">
       <div class="insp-pane active" id="insp-activity"></div>
       <div class="insp-pane" id="insp-tasks"></div>
+      <div class="insp-pane" id="insp-resources"></div>
       <div class="insp-pane" id="insp-system"></div>
     </div>`;
 
@@ -34,6 +37,7 @@ export function initInspector() {
 
   initActivity(byId('insp-activity'));
   initTasks(byId('insp-tasks'));
+  initResources(byId('insp-resources'));
   initStatusPanel(byId('insp-system'));
 }
 

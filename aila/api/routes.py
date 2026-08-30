@@ -441,6 +441,26 @@ async def models(request: Request) -> dict:
     return {"models": await engine.llm.list_models()}
 
 
+@router.get("/resources")
+async def resources(request: Request) -> dict:
+    """Diagnóstico de Resource Intelligence (R11): a foto que R2–R8 já produzem —
+    pressão unificada GPU+RAM (R2), inventário de modelos (R3), saúde dos provedores
+    (R4) e telemetria de desempenho por modelo (R8). Só leitura."""
+    from aila.core.models import ModelManager, roles_from_settings
+
+    engine = request.app.state.engine
+    snap = await engine.resources.snapshot_async()
+    inv = await ModelManager(
+        roles_from_settings(engine.settings), engine.settings.llm.base_url,
+    ).inventory()
+    return {
+        "pressure": snap.to_dict(),
+        "models": inv.to_dict(),
+        "health": engine.health.snapshot(),
+        "perf": engine.telemetry.snapshot(),
+    }
+
+
 @router.get("/audit")
 async def audit(request: Request, n: int = 50) -> dict:
     engine = request.app.state.engine
