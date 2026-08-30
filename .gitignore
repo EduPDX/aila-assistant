@@ -55,6 +55,9 @@ Thumbs.db
 .vscode/
 *.swp
 
+# config de ferramentas de CLI/agente (pessoal, não versionar)
+.codex/
+
 # workspace do usuário (não versionar conteúdo)
 workspace/**
 !workspace/.gitkeep
