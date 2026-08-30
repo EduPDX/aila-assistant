@@ -35,6 +35,8 @@ data/
 *.sqlite3
 logs/
 *.log
+# cache da escada de modelos (R12); em dev DATA_ROOT = raiz do repo
+benchmark.json
 audit/
 
 # --- Voz / TTS / STT cache ---

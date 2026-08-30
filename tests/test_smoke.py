@@ -2906,6 +2906,56 @@ def test_benchmark_measures_and_builds_ladder():
     assert rep.to_dict()["ladder"] == ["small", "big"]
     assert rep.to_dict()["gpu"] == "RTX 4060"
 
+    # só modelos de CHAT entram no benchmark — o papel 'embed' é excluído
+    from aila.core.benchmark import _benchmarkable
+    roles = {"chat": "qwen2.5:7b", "embed": "nomic-embed-text", "fast": "qwen2.5:3b"}
+    assert _benchmarkable(roles) == ["qwen2.5:7b", "qwen2.5:3b"]
+
+
+def test_boot_benchmark_caches_and_skips_when_fresh(monkeypatch, tmp_path):
+    """R12/boot: o benchmark de boot roda em background com CACHE — mede quando não
+    há cache, salva, e PULA quando o cache está fresco e cobre os mesmos modelos.
+    Assim não pesa a cada run.bat."""
+    from types import SimpleNamespace
+
+    from aila.core import benchmark, resources
+    from aila.core.benchmark import BenchReport, BenchSample, load_cached
+
+    monkeypatch.setattr(benchmark, "_cache_path", lambda: tmp_path / "benchmark.json")
+    # pressão NORMAL determinística (não depende de GPU no CI)
+    monkeypatch.setattr(resources, "resources",
+                        SimpleNamespace(snapshot=lambda: SimpleNamespace(pressure=resources.Pressure.NORMAL)))
+
+    runs = {"n": 0}
+
+    async def _fake_run(backend, models, **k):
+        runs["n"] += 1
+        return BenchReport(samples=[BenchSample("a", ok=True, footprint_mb=5000, tps=40.0)],
+                           gpu="RTX 4060")
+
+    monkeypatch.setattr(benchmark, "run_benchmark", _fake_run)
+
+    s = SimpleNamespace(
+        llm=SimpleNamespace(model="a", code_model="", vision_model="",
+                            fast_model="", base_url="http://x"),
+        memory=SimpleNamespace(embed_model=""),
+    )
+
+    async def go():
+        # 1ª vez: sem cache → mede e salva
+        rep = await benchmark.boot_benchmark(None, s, max_age_days=7)
+        assert rep is not None and runs["n"] == 1
+        cached = load_cached()
+        assert cached and cached["ladder"] == ["a"] and cached["models_sig"] == "a"
+        # 2ª vez: cache fresco, mesmos modelos → PULA (não remede)
+        rep2 = await benchmark.boot_benchmark(None, s, max_age_days=7)
+        assert rep2 is None and runs["n"] == 1
+        # cache "velho" (max_age_days=0) → remede
+        rep3 = await benchmark.boot_benchmark(None, s, max_age_days=0)
+        assert rep3 is not None and runs["n"] == 2
+
+    asyncio.run(go())
+
 
 def test_engine_resource_aware_behavior():
     """R10: a Aila fica ciente de recurso. Sob pressão alta, _under_pressure=True →
@@ -3020,7 +3070,7 @@ def test_api_resources_composes_all_signals(monkeypatch):
     req = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(engine=eng)))
     data = asyncio.run(resources_route(req))
 
-    assert set(data) == {"pressure", "models", "health", "perf"}
+    assert set(data) == {"pressure", "models", "health", "perf", "benchmark"}
     assert "pressure" in data["pressure"]                 # R2: nível geral
     assert data["models"]["ollama_ok"] is False           # R3: offline, mas compôs
     assert data["health"]["gemini"]["fails"] == 1         # R4

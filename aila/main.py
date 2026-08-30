@@ -102,6 +102,18 @@ async def lifespan(app: FastAPI):
             log.info(f"warm-up concluído (chat: {eff} · embed: {settings.memory.embed_model})")
         asyncio.create_task(_warmup())
 
+    # Benchmark da escada de modelos (R12) no boot: background + cache. Só mede de
+    # fato se o cache estiver velho/desatualizado e a VRAM não estiver apertada —
+    # então não pesa a cada run.bat. A aba Recursos lê o resultado guardado.
+    if online and settings.llm.benchmark_on_boot:
+        async def _boot_bench() -> None:
+            with contextlib.suppress(Exception):
+                from aila.core.benchmark import boot_benchmark
+
+                await boot_benchmark(
+                    llm, settings, max_age_days=settings.llm.benchmark_max_age_days)
+        asyncio.create_task(_boot_bench())
+
     # Event Bus como backbone: logging estruturado + tracker de estado/atividade.
     from aila.core.event_bus import bus as event_bus
     from aila.core.observability import attach_observability

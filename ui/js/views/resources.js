@@ -37,6 +37,7 @@ async function poll() {
     modelsCard(data.models || {}),
     healthCard(data.health || {}),
     perfCard(data.perf || {}),
+    benchCard(data.benchmark),
   );
 }
 
@@ -105,6 +106,28 @@ function healthCard(h) {
         s.fails ? el('span', { class: 'res-prov-fails' }, `${s.fails} falha(s)`) : null,
       );
     }),
+  );
+}
+
+/** Escada de modelos medida (R12, cacheada): footprint + tps do benchmark. */
+function benchCard(bench) {
+  if (!bench || !Array.isArray(bench.samples)) return el('span');
+  const ok = bench.samples.filter((s) => s.ok);
+  if (!ok.length) return el('span');
+  const when = bench.ts ? new Date(bench.ts * 1000).toLocaleDateString() : '';
+  // ordena pela escada (mais leve → mais pesado por footprint)
+  const order = bench.ladder || ok.map((s) => s.model);
+  ok.sort((a, b) => order.indexOf(a.model) - order.indexOf(b.model));
+  return el('div', { class: 'res-card' },
+    el('div', { class: 'res-card-head' },
+      el('span', {}, 'ESCADA'),
+      el('span', { class: 'res-sub' }, when ? `medida ${when}` : 'benchmark'),
+    ),
+    ...ok.map((s) => el('div', { class: 'res-perf' },
+      el('span', { class: 'res-perf-name', title: s.model }, s.model),
+      el('span', { class: 'res-perf-v' }, s.footprint_mb ? `${(s.footprint_mb / 1024).toFixed(1)} GB` : '—'),
+      el('span', { class: 'res-perf-v' }, s.tps ? `${s.tps} tok/s` : '—'),
+    )),
   );
 }
 

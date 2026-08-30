@@ -453,11 +453,14 @@ async def resources(request: Request) -> dict:
     inv = await ModelManager(
         roles_from_settings(engine.settings), engine.settings.llm.base_url,
     ).inventory()
+    from aila.core.benchmark import load_cached
+
     return {
         "pressure": snap.to_dict(),
         "models": inv.to_dict(),
         "health": engine.health.snapshot(),
         "perf": engine.telemetry.snapshot(),
+        "benchmark": load_cached(),   # escada medida (R12), se já rodou; senão None
     }
 
 

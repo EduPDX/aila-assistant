@@ -16,6 +16,8 @@ relatório segue. Não decide nada: só produz números.
 
 from __future__ import annotations
 
+import contextlib
+import json
 import time
 from dataclasses import asdict, dataclass, field
 
@@ -111,11 +113,73 @@ async def run_benchmark(
     return BenchReport(samples=samples, gpu=gpu.name if gpu else "")
 
 
+def _benchmarkable(roles: dict[str, str]) -> list[str]:
+    """Modelos únicos que fazem CHAT — exclui o papel 'embed' (embeddings não
+    respondem /api/chat; benchmarká-los só geraria um erro garantido)."""
+    return list(dict.fromkeys(m for r, m in roles.items() if r != "embed"))
+
+
+def _cache_path():
+    """Onde a escada medida fica guardada (data/, gitignored)."""
+    from aila.core.config import data_path
+
+    return data_path("benchmark.json")
+
+
+def load_cached() -> dict | None:
+    """Último relatório salvo (p/ a UI/`/api/resources`). None se não houver."""
+    p = _cache_path()
+    try:
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _save(report: BenchReport, models_sig: str) -> None:
+    data = report.to_dict()
+    data["ts"] = time.time()            # quando mediu (p/ o cache envelhecer)
+    data["models_sig"] = models_sig     # conjunto de modelos coberto
+    with contextlib.suppress(OSError):
+        _cache_path().write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+async def boot_benchmark(backend, settings, *, max_age_days: float = 7.0) -> BenchReport | None:
+    """Benchmark no BOOT, em background e com cache: só roda de fato se o cache
+    estiver velho (> `max_age_days`) ou cobrir modelos diferentes — e nunca sob
+    pressão alta (não disputa VRAM com o que o usuário está fazendo). Devolve o
+    relatório quando roda, ou None quando pula. Nunca levanta."""
+    from aila.core.models import roles_from_settings
+    from aila.core.resources import Pressure, resources
+
+    models = _benchmarkable(roles_from_settings(settings))
+    sig = ",".join(models)
+
+    cached = load_cached()
+    if cached and cached.get("models_sig") == sig:
+        age_days = (time.time() - cached.get("ts", 0)) / 86400
+        if age_days < max_age_days:
+            log.info(f"benchmark: cache fresco ({age_days:.1f}d < {max_age_days}d) — pulando")
+            return None
+
+    with contextlib.suppress(Exception):        # sob pressão, adia p/ o próximo boot
+        if resources.snapshot().pressure >= Pressure.HIGH:
+            log.info("benchmark: pressão alta no boot — adiado")
+            return None
+
+    log.info(f"benchmark: medindo a escada de {len(models)} modelo(s) em background…")
+    report = await run_benchmark(backend, models, base_url=settings.llm.base_url)
+    _save(report, sig)
+    log.info(f"benchmark: escada salva — {report.to_dict()['ladder']}")
+    return report
+
+
 def _main() -> None:
     """CLI: `python -m aila.core.benchmark` — mede os modelos configurados e imprime
     o relatório (JSON). Fora do hot-path; seguro rodar quando quiser calibrar."""
     import asyncio
-    import json
 
     from aila.core.config import get_settings
     from aila.core.models import roles_from_settings
@@ -123,8 +187,9 @@ def _main() -> None:
 
     s = get_settings()
     backend = get_backend(s.llm)
-    models = list(dict.fromkeys(roles_from_settings(s).values()))  # únicos, ordem estável
+    models = _benchmarkable(roles_from_settings(s))     # só modelos de chat, únicos
     report = asyncio.run(run_benchmark(backend, models, base_url=s.llm.base_url))
+    _save(report, ",".join(models))     # atualiza o cache que a aba Recursos lê
     print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
 
 

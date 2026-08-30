@@ -90,6 +90,11 @@ class LLMConfig(BaseModel):
     num_ctx: int = 8192          # janela de contexto (Ollama usa 2048 por padrão!)
     keep_alive: str = "10m"
     timeout_seconds: int = 120
+    # Benchmark da "escada" de modelos (R12): roda no boot, em BACKGROUND e com
+    # cache — só re-mede se o cache passar de `benchmark_max_age_days` ou os
+    # modelos mudarem, e nunca sob pressão alta. Desligue com benchmark_on_boot=false.
+    benchmark_on_boot: bool = True
+    benchmark_max_age_days: float = 7.0
 
 
 class ContextConfig(BaseModel):
