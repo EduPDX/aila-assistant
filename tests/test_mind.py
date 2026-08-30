@@ -700,3 +700,44 @@ def test_gesto_unico_continua_unico():
     assert decide_actions("levante a mão direita") == ["raise_right"]
     assert decide_actions("acene") == ["wave"]
     assert decide_actions("oi, tudo bem?") == []
+
+
+# ---------------------------------------------- Fase H: roteamento por complexidade #
+
+def test_estima_complexidade():
+    from aila.mind.task_analyzer import analyze, estimate_complexity
+
+    assert estimate_complexity("oi") < 0.15
+    assert estimate_complexity("qual a capital do Brasil?") < 0.2
+    dificil = estimate_complexity(
+        "compare prós e contras de microservices vs monolito e diga quando usar cada um")
+    assert dificil >= 0.5 and analyze("compare prós e contras disso")["reasoning"]
+    assert estimate_complexity("") == 0.0
+
+
+def test_roteamento_por_complexidade():
+    """Trivial → leve (3B); raciocínio pesado → cadeia 'reasoning' (Nemotron)."""
+    from aila.core.engine import AilaEngine, _classify_task
+
+    t, ut = _classify_task("qual a capital do Brasil?", "auto")
+    assert t.kind == "chat" and t.complexity < 0.2
+    assert AilaEngine._is_light_turn(t, ut)                 # vai p/ o modelo rápido
+
+    t2, _ = _classify_task(
+        "compare prós e contras de microservices vs monolito e diga quando usar", "auto")
+    assert t2.kind == "reasoning" and t2.complexity >= 0.6  # → Nemotron
+
+    t3, _ = _classify_task("o que você acha de IA?", "auto")
+    assert t3.kind == "chat"                                # opinião comum: não é reasoning
+
+
+def test_turno_leve_so_com_baixa_complexidade():
+    from aila.core.engine import AilaEngine
+    from aila.llm.router import RouteTask
+
+    leve = RouteTask(kind="chat", complexity=0.08)
+    pesado = RouteTask(kind="chat", complexity=0.8)
+    assert AilaEngine._is_light_turn(leve, False)
+    assert not AilaEngine._is_light_turn(pesado, False)     # complexo não vai p/ o 3B
+    assert not AilaEngine._is_light_turn(leve, True)        # com ferramentas, não é leve
+    assert AilaEngine._is_light_turn(RouteTask(kind="basic"), False)   # casual sempre leve

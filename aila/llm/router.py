@@ -35,6 +35,7 @@ class RouteTask:
     needs_vision: bool = False
     prefer_local: bool = False  # tarefa sensível → forçar local
     est_context: int = 0
+    complexity: float = 0.0     # 0..1 (Fase H) — trivial→3B, pesada→maior
 
 
 class ModelRouter:

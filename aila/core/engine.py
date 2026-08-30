@@ -611,6 +611,15 @@ class AilaEngine:
         rep["backfilled"] = len(rows)
         return rep
 
+    @staticmethod
+    def _is_light_turn(task, use_tools: bool) -> bool:
+        """Turno leve → modelo pequeno/rápido (3B): saudação/casual OU conversa
+        trivial (complexidade baixa) que não precisa de ferramentas."""
+        if task.kind == "basic":
+            return True
+        return (task.kind == "chat" and not use_tools
+                and getattr(task, "complexity", 1.0) <= 0.15)
+
     def _casual_prompt(self) -> str:
         """Prompt CURTO p/ conversa casual. O modelo local é um *coder* — inundá-lo
         com instruções de ferramentas/código faz ele responder código até p/ 'oi'.
@@ -741,7 +750,8 @@ class AilaEngine:
         _fast = (self.settings.llm.fast_model or "").strip()
         await emit("model.selected", {
             "provider": backend.name,
-            "model": (_fast if (task.kind == "basic" and _fast and backend.capabilities().local)
+            "model": (_fast if (self._is_light_turn(task, use_tools) and _fast
+                                and backend.capabilities().local)
                       else getattr(backend, "default_model", "") or ""),
         })
         final_text = ""
@@ -771,7 +781,7 @@ class AilaEngine:
             # papo casual num backend LOCAL → modelo pequeno/rápido (se configurado):
             # resposta e gesto quase imediatos, sem ocupar a VRAM do modelo grande.
             fast = (self.settings.llm.fast_model or "").strip()
-            turn_model = (fast if (task.kind == "basic" and fast
+            turn_model = (fast if (self._is_light_turn(task, use_tools) and fast
                                    and backend.capabilities().local) else None)
             try:
                 async for chunk in backend.chat(
@@ -813,6 +823,20 @@ class AilaEngine:
                 raise
 
             text = "".join(collected)
+
+            # Fallback em resposta VAZIA (não-exceção): o provedor respondeu nada.
+            # Troca para o próximo da cadeia (uma vez) em vez de entregar em branco.
+            if not text.strip() and not tool_calls:
+                failed.add(backend)
+                nxt = next((b for b in chain if b not in failed), None)
+                if nxt is not None:
+                    log.warning(f"'{backend.name}' respondeu vazio; fallback → '{nxt.name}'")
+                    backend = nxt
+                    self._last_local = bool(backend.capabilities().local)
+                    await emit("model.selected", {"provider": backend.name,
+                                                  "model": getattr(backend, "default_model", ""),
+                                                  "fallback": True})
+                    continue
 
             # Fallback: modelos como qwen-coder emitem a tool-call como TEXTO
             # (tool_calls nativo vem vazio). Tentamos interpretar o JSON do texto.
@@ -1658,12 +1682,18 @@ def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
         # fallback). NÃO forçamos mais local: as travadas na nuvem vinham do parser
         # de tool-call, que rejeitava código multi-linha (corrigido com strict=False).
         return RouteTask(kind="code", needs_tools=True), True
+    # COMPLEXIDADE (Fase H): trivial → modelo pequeno/rápido; raciocínio PESADO →
+    # cadeia 'reasoning' (ex.: Nemotron), só quando realmente vale a espera.
+    from aila.mind.task_analyzer import analyze
+
+    info = analyze(user_text)
+    comp = info["complexity"]
+    kind = "reasoning" if comp >= 0.6 else "chat"
     if not _needs_tools(user_text):
-        # conhecimento puro ("por onde começo a estudar IA?"): o modelo responde
-        # do que sabe. Oferecer ferramentas aqui só gera tentativas inúteis
-        # (docs.read/web.fetch) que ATRASAM uma resposta simples.
-        return RouteTask(kind="chat", needs_tools=False), False
-    return RouteTask(kind="chat", needs_tools=True), True
+        # conhecimento puro ("por onde começo a estudar IA?"): responde do que
+        # sabe. Ferramentas aqui só geram tentativas inúteis que atrasam.
+        return RouteTask(kind=kind, needs_tools=False, complexity=comp), False
+    return RouteTask(kind=kind, needs_tools=True, complexity=comp), True
 
 
 def _tool_status(tool_name: str) -> str:
