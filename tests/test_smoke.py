@@ -2656,6 +2656,79 @@ def test_expires_in_s_handles_sentinel_and_iso():
     assert 290 <= _expires_in_s(future) <= 300
 
 
+def test_local_model_policy_resource_aware():
+    """R5: a escolha do modelo LOCAL vira consciente de recurso. Sob NORMAL é o de
+    sempre (leve→rápido, médio→grande); sob pressão alta degrada turno médio p/ o
+    rápido, mas mantém o grande p/ turno pesado ou contexto cheio. Nunca sai do local."""
+    from aila.core.resources import Pressure
+    from aila.llm.model_policy import select_local_model
+
+    F = "qwen2.5:3b"
+    # sem fast_model configurado → sempre o grande, mesmo sob pressão crítica
+    assert select_local_model(fast_model="", is_light=True, pressure=Pressure.CRITICAL) is None
+    # NORMAL: comportamento idêntico ao anterior
+    assert select_local_model(fast_model=F, is_light=True, pressure=Pressure.NORMAL) == F
+    assert select_local_model(fast_model=F, is_light=False, complexity=0.3,
+                              pressure=Pressure.NORMAL) is None
+    # HIGH: degrada turno médio; mantém o grande p/ turno pesado (complexity >= 0.6)
+    assert select_local_model(fast_model=F, is_light=False, complexity=0.3,
+                              pressure=Pressure.HIGH) == F
+    assert select_local_model(fast_model=F, is_light=False, complexity=0.8,
+                              pressure=Pressure.HIGH) is None
+    # contexto no limite da janela → o grande, mesmo sob pressão (não degrada prompt cheio)
+    assert select_local_model(fast_model=F, is_light=False, complexity=0.3,
+                              pressure=Pressure.CRITICAL, est_context=9000, ctx_limit=8192) is None
+
+
+def test_engine_pick_local_model_degrades_under_pressure():
+    """R5 (cola no engine): _pick_local_model respeita fast_model/num_ctx da config,
+    só age em backend LOCAL e degrada sob pressão. Backend de nuvem nunca usa o rápido."""
+    from aila.core.config import get_settings
+    from aila.core.engine import build_engine
+    from aila.core.resources import Pressure
+    from aila.llm.base import ChatChunk, LLMBackend, ModelCapabilities
+    from aila.llm.router import RouteTask
+
+    class FakeLLM(LLMBackend):
+        name = "ollama"
+        async def chat(self, messages, **k):
+            yield ChatChunk(content="x", done=True)
+        async def complete(self, messages, **k):
+            return "[]"
+        async def list_models(self):
+            return []
+        async def health(self):
+            return True
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True)
+
+    class Cloud:
+        name = "gemini"
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=False)
+
+    s = get_settings()
+    s.memory.enabled = False
+    old_fast = s.llm.fast_model
+    s.llm.fast_model = "qwen2.5:3b"
+    try:
+        eng = build_engine(s, FakeLLM())
+        local = eng.llm
+        medium = RouteTask(kind="chat", needs_tools=False, complexity=0.3)
+        assert eng._pick_local_model(medium, False, local, Pressure.NORMAL) is None
+        assert eng._pick_local_model(medium, False, local, Pressure.HIGH) == "qwen2.5:3b"
+        # nuvem nunca usa o modelo local rápido, mesmo sob pressão crítica
+        assert eng._pick_local_model(medium, False, Cloud(), Pressure.CRITICAL) is None
+        # turno leve continua rápido sob NORMAL (comportamento preservado)
+        light = RouteTask(kind="basic", needs_tools=False)
+        assert eng._pick_local_model(light, False, local, Pressure.NORMAL) == "qwen2.5:3b"
+        # estimativa de contexto: chars/4 sobre os conteúdos das mensagens
+        assert eng._estimate_context_tokens(
+            [{"role": "user", "content": "x" * 400}]) == 100
+    finally:
+        s.llm.fast_model = old_fast
+
+
 def test_health_circuit_breaker_lifecycle():
     """R4: falhas consecutivas abrem o circuito; passado o cooldown vira half-open
     (uma prova); sucesso fecha, falha na prova reabre e reinicia o cooldown."""

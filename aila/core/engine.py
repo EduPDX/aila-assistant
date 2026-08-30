@@ -128,6 +128,11 @@ class AilaEngine:
         from aila.llm.health import HealthRegistry
 
         self.health = HealthRegistry()
+        # Consciência de recurso (R5): a foto unificada GPU+RAM que decide, sob
+        # pressão, degradar p/ o modelo LOCAL pequeno. Injetável em teste (fake monitor).
+        from aila.core.resources import ResourceManager
+
+        self.resources = ResourceManager()
         # Model Router: escolhe o provedor por tarefa (regras em settings.routing;
         # respeita capacidade/offline; passthrough p/ o local quando desligado).
         self.router = ModelRouter(
@@ -694,6 +699,31 @@ class AilaEngine:
         return (task.kind == "chat" and not use_tools
                 and getattr(task, "complexity", 1.0) <= 0.15)
 
+    def _pick_local_model(self, task, use_tools: bool, backend, pressure) -> str | None:
+        """Sub-modelo LOCAL p/ este turno: nome do rápido, ou None (=grande/padrão).
+        Só se aplica a backend local; consciente de recurso (R5) — sob pressão de
+        GPU, degrada p/ o pequeno. Nunca troca provedor nem sai p/ a nuvem."""
+        fast = (self.settings.llm.fast_model or "").strip()
+        if not fast or not backend.capabilities().local:
+            return None
+        from aila.llm.model_policy import select_local_model
+
+        return select_local_model(
+            fast_model=fast,
+            is_light=self._is_light_turn(task, use_tools),
+            complexity=getattr(task, "complexity", 0.0),
+            pressure=pressure,
+            est_context=getattr(task, "est_context", 0),
+            ctx_limit=self.settings.llm.num_ctx,
+        )
+
+    @staticmethod
+    def _estimate_context_tokens(messages) -> int:
+        """Estimativa grosseira de tokens do prompt (chars/4). Medida REAL do que vai
+        ao contexto — usada só p/ ESCOLHER modelo (R5), não p/ truncar (isso é R7)."""
+        chars = sum(len(m.get("content") or "") for m in messages)
+        return chars // 4
+
     def _casual_prompt(self) -> str:
         """Prompt CURTO p/ conversa casual. O modelo local é um *coder* — inundá-lo
         com instruções de ferramentas/código faz ele responder código até p/ 'oi'.
@@ -816,12 +846,24 @@ class AilaEngine:
 
         _trace("MODEL", provider=backend.name,
                model=getattr(backend, "default_model", ""), local=self._last_local)
-        _fast = (self.settings.llm.fast_model or "").strip()
+        # R5: pressão de recurso (uma leitura cacheada) + estimativa REAL do contexto,
+        # p/ a política decidir se degrada p/ o modelo local pequeno. Medir recurso
+        # nunca pode quebrar o turno → falha vira NORMAL (sem degradação).
+        from aila.core.resources import Pressure
+
+        _pressure = Pressure.NORMAL
+        if (self.settings.llm.fast_model or "").strip():
+            try:
+                _pressure = (await self.resources.snapshot_async()).pressure
+            except Exception:  # noqa: BLE001 - telemetria de recurso é best-effort
+                _pressure = Pressure.NORMAL
+            task.est_context = self._estimate_context_tokens(
+                self._messages_with_memory(mem_block, None)
+            )
         await emit("model.selected", {
             "provider": backend.name,
-            "model": (_fast if (self._is_light_turn(task, use_tools) and _fast
-                                and backend.capabilities().local)
-                      else getattr(backend, "default_model", "") or ""),
+            "model": (self._pick_local_model(task, use_tools, backend, _pressure)
+                      or getattr(backend, "default_model", "") or ""),
         })
         final_text = ""
         failed: set = set()   # provedores que JÁ falharam neste turno (não voltar → sem ping-pong)
@@ -849,9 +891,8 @@ class AilaEngine:
             )
             # papo casual num backend LOCAL → modelo pequeno/rápido (se configurado):
             # resposta e gesto quase imediatos, sem ocupar a VRAM do modelo grande.
-            fast = (self.settings.llm.fast_model or "").strip()
-            turn_model = (fast if (self._is_light_turn(task, use_tools) and fast
-                                   and backend.capabilities().local) else None)
+            # R5: sob pressão de GPU, também degrada turnos médios p/ o pequeno.
+            turn_model = self._pick_local_model(task, use_tools, backend, _pressure)
             try:
                 async for chunk in backend.chat(
                     msgs, stream=True, tools=tools, options=opts, model=turn_model,
