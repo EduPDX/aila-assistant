@@ -984,6 +984,17 @@ class AilaEngine:
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
 
+        final_text = await self._finalize_text(
+            final_text, user_text, use_tools, generated_code, wrote_ok,
+            backend, opts, mem_block, emit)
+
+        return await self._deliver_response(final_text, user_text, tools_used, emit)
+
+    async def _finalize_text(self, final_text, user_text, use_tools,
+                             generated_code, wrote_ok, backend, opts, mem_block, emit):
+        """Finaliza o TEXTO (fase extraída na 2e): blinda contra tool-call JSON
+        crua/eco de formato, aplica a rede de segurança de salvamento de código
+        e valida a identidade (1ª pessoa/capacidades). Devolve o texto pronto."""
         # Blindagem: NUNCA mostrar tool-call JSON crua NEM o "eco" das instruções de
         # formato (ex.: "<function-name>", "respostas serão formatadas como…") como
         # resposta. Se a saída final for isso, fecha o turno com resposta natural.
@@ -1004,7 +1015,14 @@ class AilaEngine:
         # capacidade que tem ("não faço tarefas físicas" tendo corpo), regenera
         # UMA vez com instrução corretiva.
         final_text = await self._validate_identity(final_text, user_text, backend, opts, emit)
+        return final_text
 
+    async def _deliver_response(self, final_text: str, user_text: str,
+                                tools_used: list[str], emit: Emit) -> str:
+        """Entrega a resposta FINAL (fase extraída na 2e): guardrail de saída,
+        atualiza estado/experiência, grava no contexto+memória+consolidação,
+        planeja o comportamento do avatar e emite assistant.message + gestos
+        pendentes. Recebe o texto já finalizado/validado por process()."""
         # Guardrail de SAÍDA: redige segredos ANTES de gravar no contexto/memória
         # e antes do TTS (a resposta falada e persistida já sai limpa).
         guarded = self.guardrails.check_output(final_text)
