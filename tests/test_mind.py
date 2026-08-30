@@ -596,3 +596,49 @@ def test_emocao_nao_e_duplicada():
     # o módulo de tom não deve conter heurística de derivação (léxico/regex)
     fonte = inspect.getsource(m)
     assert "re.compile" not in fonte and "LEXICON" not in fonte
+
+
+# -------------------------------- Fase M: Cognitive Scene → BodyState (nomes reais) #
+
+def test_vocabulario_da_cena_vira_nome_natural():
+    """Item 21: o objeto da cena (analysis/panel_memory) vira nome legível na
+    fala — 'apontando para o gráfico', não 'apontando para panel_memory'."""
+    from aila.mind.scene import readable_action, readable_target
+
+    assert readable_target("analysis") == "o gráfico"
+    assert readable_target("panel_memory") == "o painel de memória"
+    assert readable_target("search") == "os resultados da busca"
+    assert readable_target("") == ""
+    assert readable_action("point") == "apontando para"
+    assert readable_action("inspect") == "examinando"
+    assert readable_action("desconhecido") == "olhando para"   # padrão seguro
+
+
+def test_cena_alimenta_o_bodystate_com_nome_real():
+    """Scene Object → InteractionTarget → BodyState (descrição em 1ª pessoa)."""
+    from aila.mind.scene import readable_action, readable_target
+
+    eu = AilaSelf.load()
+    # como o websocket faz ao receber o body.report da cena
+    eu.update_body(
+        interaction_target=readable_target("analysis"),
+        interaction_action=readable_action("point"),
+        gaze_target=readable_target("panel_analysis"),
+    )
+    d = eu.body.describe()
+    assert "apontando para o gráfico" in d
+    assert "olhando para o gráfico" in d
+    assert "panel_" not in d and "analysis" not in d          # nada de id cru na fala
+
+
+def test_cena_define_a_atencao_e_aparece_no_bloco():
+    """Quando a Aila interage com a cena, o objeto vira o FOCO de atenção."""
+    from aila.mind.scene import readable_target
+
+    e = _engine_fake()
+    alvo = readable_target("memory")
+    e.self_model.update_experience(activity="searching", attention=alvo)
+    e.self_model.update_body(interaction_target=alvo, interaction_action="examinando")
+    bloco = e._body_block()
+    assert "o painel de memória" in bloco
+    assert "panel" not in bloco.lower()

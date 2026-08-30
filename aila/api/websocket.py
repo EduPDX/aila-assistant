@@ -141,14 +141,23 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 try:
                     body = data.get("body") or {}
                     if isinstance(body, dict) and engine.self_model is not None:
+                        from aila.mind.scene import readable_action, readable_target
+
+                        # Fase M: traduz os ids da cena (analysis/panel_memory…) em
+                        # nomes naturais, p/ a fala sair "apontando para o gráfico".
+                        alvo = readable_target(body.get("interaction_target") or "")
+                        gaze = readable_target(body.get("gaze_target") or "")
                         engine.self_model.update_body(
                             posture=body.get("posture"),
                             gesture=body.get("gesture"),
                             hands=body.get("hands"),
-                            gaze_target=body.get("gaze_target"),
-                            interaction_target=body.get("interaction_target"),
-                            interaction_action=body.get("interaction_action"),
+                            gaze_target=gaze or (body.get("gaze_target") or ""),
+                            interaction_target=alvo,
+                            interaction_action=(readable_action(body.get("interaction_action"))
+                                                if alvo else ""),
                         )
+                        if alvo:                       # a cena vira o FOCO de atenção
+                            engine.self_model.update_experience(attention=alvo)
                         await session.emit("aila.state",
                                            engine.self_model.state().to_event_payload())
                 except Exception as exc:  # noqa: BLE001 - relato é informativo
