@@ -2656,6 +2656,64 @@ def test_expires_in_s_handles_sentinel_and_iso():
     assert 290 <= _expires_in_s(future) <= 300
 
 
+def test_health_circuit_breaker_lifecycle():
+    """R4: falhas consecutivas abrem o circuito; passado o cooldown vira half-open
+    (uma prova); sucesso fecha, falha na prova reabre e reinicia o cooldown."""
+    from aila.llm.health import Circuit, HealthRegistry
+
+    t = {"now": 0.0}
+    reg = HealthRegistry(fail_threshold=3, cooldown_s=30.0, clock=lambda: t["now"])
+
+    assert reg.available("gemini") and reg.state("gemini") is Circuit.CLOSED
+    reg.record_failure("gemini", "boom")
+    reg.record_failure("gemini", "boom")
+    assert reg.available("gemini"), "2 falhas < limiar: ainda fechado"
+    reg.record_failure("gemini", "boom")               # 3ª → abre
+    assert reg.state("gemini") is Circuit.OPEN and not reg.available("gemini")
+    snap = reg.snapshot()["gemini"]
+    assert snap["state"] == "open" and snap["fails"] == 3 and snap["cooldown_left_s"] == 30.0
+
+    t["now"] = 20.0
+    assert not reg.available("gemini"), "dentro do cooldown segue indisponível"
+    t["now"] = 31.0
+    assert reg.available("gemini") and reg.state("gemini") is Circuit.HALF_OPEN
+    reg.record_failure("gemini", "again")              # falha na prova → reabre
+    assert reg.state("gemini") is Circuit.OPEN and not reg.available("gemini")
+
+    t["now"] = 62.0
+    assert reg.available("gemini"), "novo cooldown passou → half-open de novo"
+    reg.record_success("gemini")                        # prova passou → fecha
+    assert reg.state("gemini") is Circuit.CLOSED and reg.available("gemini")
+    assert reg.snapshot()["gemini"]["fails"] == 0
+
+
+def test_router_skips_unhealthy_but_keeps_local_fallback():
+    """O router pula um provedor em cooldown, mas o fallback LOCAL garantido nunca
+    some — a cadeia jamais fica vazia (privacidade/robustez preservadas)."""
+    from aila.core.config import RoutingConfig
+    from aila.llm.base import ModelCapabilities
+    from aila.llm.health import HealthRegistry
+    from aila.llm.router import ModelRouter, RouteTask
+
+    class _BE:
+        def __init__(self, name, local):
+            self.name = name
+            self._local = local
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=self._local, tools=True, vision=True)
+
+    local = _BE("ollama", True)
+    cloud = _BE("gemini", False)
+    reg = HealthRegistry(fail_threshold=1, cooldown_s=30.0, clock=lambda: 0.0)
+    cfg = RoutingConfig(enabled=True, default="local", rules={"chat": ["gemini", "local"]})
+    router = ModelRouter(default=local, providers={"gemini": cloud}, config=cfg, health=reg)
+
+    task = RouteTask(kind="chat")
+    assert [b.name for b in router.chain(task)] == ["gemini", "ollama"], "saudável: nuvem 1º"
+    reg.record_failure("gemini")                        # limiar=1 → abre
+    assert [b.name for b in router.chain(task)] == ["ollama"], "nuvem em cooldown some; local fica"
+
+
 def test_vram_no_nvidia_smi_is_noop(monkeypatch):
     """Sem nvidia-smi, o planner não quebra: available=False, estado 'unknown'."""
     from aila.core import vram

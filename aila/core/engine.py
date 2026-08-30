@@ -122,10 +122,17 @@ class AilaEngine:
         self.settings = settings
         self.llm = llm
         self.network = network
+        # Circuit-breaker por provedor (R4): saúde ENTRE turnos. Um provedor que
+        # falha seguidas vezes entra em cooldown e o router para de oferecê-lo até
+        # se recuperar. Nunca filtra o fallback local garantido.
+        from aila.llm.health import HealthRegistry
+
+        self.health = HealthRegistry()
         # Model Router: escolhe o provedor por tarefa (regras em settings.routing;
         # respeita capacidade/offline; passthrough p/ o local quando desligado).
         self.router = ModelRouter(
             default=llm, providers=providers, config=settings.routing, network=network,
+            health=self.health,
         )
         self.agents = agents
         self.store = store
@@ -873,6 +880,7 @@ class AilaEngine:
                         tool_calls = chunk.tool_calls
             except Exception as exc:  # noqa: BLE001 - provedor falhou → fallback
                 failed.add(backend)   # não volta pra ele (evita ping-pong Gemini↔ollama)
+                self.health.record_failure(backend.name, repr(exc))  # R4: saúde entre turnos
                 nxt = next((b for b in chain if b not in failed), None)
                 if nxt is not None and not collected:
                     log.warning(f"provedor '{backend.name}' falhou ({exc!r}); fallback → '{nxt.name}'")
@@ -890,6 +898,7 @@ class AilaEngine:
             # Troca para o próximo da cadeia (uma vez) em vez de entregar em branco.
             if not text.strip() and not tool_calls:
                 failed.add(backend)
+                self.health.record_failure(backend.name, "resposta vazia")  # R4
                 nxt = next((b for b in chain if b not in failed), None)
                 if nxt is not None:
                     log.warning(f"'{backend.name}' respondeu vazio; fallback → '{nxt.name}'")
@@ -1020,6 +1029,7 @@ class AilaEngine:
                 break
         else:
             final_text = final_text or "Limite de iterações de ferramentas atingido."
+        self.health.record_success(backend.name)  # R4: o backend que entregou está saudável
         return final_text, backend, generated_code, wrote_ok, tools_used
 
     async def _emit_decided_gestures(self, user_text, emit) -> None:

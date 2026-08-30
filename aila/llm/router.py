@@ -21,6 +21,7 @@ from aila.llm.base import LLMBackend
 
 if TYPE_CHECKING:
     from aila.core.config import RoutingConfig
+    from aila.llm.health import HealthRegistry
     from aila.security.network_policy import NetworkPolicy
 
 log = get_logger("router")
@@ -45,10 +46,14 @@ class ModelRouter:
         providers: dict[str, LLMBackend] | None = None,
         config: RoutingConfig | None = None,
         network: NetworkPolicy | None = None,
+        health: HealthRegistry | None = None,
     ) -> None:
         self.default = default
         self.config = config
         self.network = network
+        # circuit-breaker por provedor (R4). None → sem filtro de saúde (comportamento
+        # idêntico ao anterior). Só PULA provedores extras; nunca esvazia a cadeia.
+        self.health = health
         # provedores nomeados (inclui o default como "local" e pelo nome real).
         self.providers: dict[str, LLMBackend] = {default.name: default}
         if providers:
@@ -83,12 +88,19 @@ class ModelRouter:
         out: list[LLMBackend] = []
         for name in names:
             be = self._resolve(name)
-            if be and be not in out and self._allowed(be, task):
+            if be and be not in out and self._allowed(be, task) and self._healthy(be):
                 out.append(be)
         # garante o local como último fallback (se permitido)
         if self.default not in out and self._allowed(self.default, task):
             out.append(self.default)
         return out or [self.default]
+
+    def _healthy(self, be: LLMBackend) -> bool:
+        """Provedor não está em cooldown? Sem HealthRegistry, todos passam. O default
+        NUNCA é filtrado aqui — o fallback local garantido é adicionado à parte."""
+        if self.health is None or be is self.default:
+            return True
+        return self.health.available(be.name)
 
     def select(self, task: RouteTask | None = None) -> LLMBackend:
         """Melhor provedor para a tarefa (o primeiro da cadeia)."""
