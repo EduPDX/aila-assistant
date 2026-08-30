@@ -2569,6 +2569,93 @@ def test_resource_snapshot_takes_worst_pressure():
     assert snap2.to_dict()["gpu"] is None
 
 
+def test_roles_from_settings_maps_and_omits_empty_fast():
+    """R3: papel→modelo vem da config; fast_model vazio herda o chat e NÃO vira papel."""
+    from types import SimpleNamespace
+
+    from aila.core.models import roles_from_settings
+
+    s = SimpleNamespace(
+        llm=SimpleNamespace(model="qwen2.5:7b", code_model="deepseek-coder:6.7b",
+                            vision_model="llava:7b", fast_model=""),
+        memory=SimpleNamespace(embed_model="nomic-embed-text"),
+    )
+    roles = roles_from_settings(s)
+    assert roles == {"chat": "qwen2.5:7b", "code": "deepseek-coder:6.7b",
+                     "vision": "llava:7b", "embed": "nomic-embed-text"}
+    assert "fast" not in roles
+    s.llm.fast_model = "qwen2.5:1.5b"
+    assert roles_from_settings(s)["fast"] == "qwen2.5:1.5b"
+
+
+def test_model_inventory_composes_state_and_footprint(monkeypatch):
+    """R3: o inventário junta papéis (config) + instalados (/api/tags) + carregados
+    (/api/ps c/ footprint e expiração). Modelo carregado sem papel também aparece."""
+    from aila.core import models
+
+    async def _tags(base_url, timeout=3.0):
+        return {"qwen2.5:7b": 4700, "llava:7b": 4500, "mistral:latest": 4100}
+
+    async def _ps(base_url, timeout=3.0):
+        # chat quente (com expiração) + um modelo carregado POR FORA (sem papel).
+        return {
+            "qwen2.5:7b": {"vram_mb": 5200, "expires_in_s": 540},
+            "mistral:latest": {"vram_mb": 4000, "expires_in_s": None},
+        }
+
+    monkeypatch.setattr(models, "_probe_tags", _tags)
+    monkeypatch.setattr(models, "_probe_ps", _ps)
+
+    roles = {"chat": "qwen2.5:7b", "vision": "llava:7b", "embed": "nomic-embed-text"}
+
+    async def go():
+        inv = await models.ModelManager(roles).inventory()
+        assert inv.ollama_ok is True
+        chat = inv.by_role("chat")
+        assert chat.installed and chat.loaded and chat.vram_mb == 5200
+        assert chat.expires_in_s == 540 and chat.disk_mb == 4700
+        vis = inv.by_role("vision")
+        assert vis.installed and not vis.loaded and vis.vram_mb == 0
+        emb = inv.by_role("embed")
+        assert not emb.installed and not emb.loaded  # nome não está no /api/tags
+        foreign = next(s for s in inv.states if s.name == "mistral:latest")
+        assert foreign.roles == [] and foreign.loaded
+        assert inv.loaded_vram_mb == 5200 + 4000  # soma dos quentes
+
+    asyncio.run(go())
+
+
+def test_model_inventory_ollama_down_lists_roles(monkeypatch):
+    """Ollama fora: inventário ainda lista os papéis (installed/loaded=False, ollama_ok=False)."""
+    from aila.core import models
+
+    async def _none(base_url, timeout=3.0):
+        return None
+
+    monkeypatch.setattr(models, "_probe_tags", _none)
+    monkeypatch.setattr(models, "_probe_ps", _none)
+
+    async def go():
+        inv = await models.ModelManager({"chat": "qwen2.5:7b"}).inventory()
+        assert inv.ollama_ok is False and inv.loaded_vram_mb == 0
+        chat = inv.by_role("chat")
+        assert chat is not None and not chat.installed and not chat.loaded
+
+    asyncio.run(go())
+
+
+def test_expires_in_s_handles_sentinel_and_iso():
+    """expires_at: ISO vira segundos futuros; a data-sentinela de 'sem expiração' → None."""
+    from datetime import UTC, datetime, timedelta
+
+    from aila.core.models import _expires_in_s
+
+    assert _expires_in_s(None) is None
+    assert _expires_in_s("0001-01-01T00:00:00Z") is None  # sentinela keep_alive infinito
+    future = (datetime.now(UTC) + timedelta(seconds=300)).isoformat()
+    assert 290 <= _expires_in_s(future) <= 300
+
+
 def test_vram_no_nvidia_smi_is_noop(monkeypatch):
     """Sem nvidia-smi, o planner não quebra: available=False, estado 'unknown'."""
     from aila.core import vram
