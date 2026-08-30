@@ -673,3 +673,30 @@ def test_trace_omite_vazios_e_nunca_quebra():
     trace_speech("")                            # fala vazia → nada
     # valor "impossível" (objeto sem str amigável) não pode derrubar
     trace("X", v=object())
+
+
+# ------------------------------------------- série de movimentos (decidida) #
+
+def test_serie_de_movimentos_vira_sequencia():
+    """"faça uma série de movimentos" deve produzir VÁRIOS gestos executáveis —
+    antes o modelo listava os nomes em texto e não fazia nada."""
+    from aila.mind.decision_engine import decide, decide_actions
+
+    for p in ("faça uma série de movimento para eu testar",
+              "demonstre seus movimentos", "me mostre alguns gestos",
+              "faça vários gestos", "teste de movimento"):
+        acts = decide_actions(p)
+        assert len(acts) >= 3, p
+        from aila.mind.decision_engine import GESTOS_VALIDOS
+        assert all(a in GESTOS_VALIDOS for a in acts), p    # todos executáveis
+
+    d = decide("faça uma série de movimentos")
+    assert d and len(d.actions) > 1 and d.reason.endswith(":series")
+
+
+def test_gesto_unico_continua_unico():
+    from aila.mind.decision_engine import decide_actions
+
+    assert decide_actions("levante a mão direita") == ["raise_right"]
+    assert decide_actions("acene") == ["wave"]
+    assert decide_actions("oi, tudo bem?") == []

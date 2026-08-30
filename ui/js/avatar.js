@@ -10,6 +10,8 @@ export const avatarEmotion = (emotion, state, gesture) =>
 export const avatarStatus = (status) => toAvatar({ type: 'aila:status', value: status });
 export const avatarBehavior = (spec) => toAvatar({ type: 'aila:behavior', spec });
 export const avatarGesture = (name) => toAvatar({ type: 'aila:gesture', value: name });
+// série de movimentos (demonstração): o iframe toca um a um, com pausa
+export const avatarGestureSequence = (names) => toAvatar({ type: 'aila:gesture_seq', values: names });
 export const avatarMouth = (v) => toAvatar({ type: 'aila:mouth', value: v });
 export const avatarReload = () => toAvatar({ type: 'aila:reloadVRM' });
 // P8: pausa/retoma o render do avatar conforme ele está (ou não) na tela

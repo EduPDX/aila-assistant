@@ -73,6 +73,7 @@ function route(m) {
     case 'avatar.state': State.set({ emotion: m.emotion }); avatar.avatarEmotion(m.emotion, m.animation, m.gesture); break;
     case 'avatar.behavior': State.set({ emotion: m.emotion }); avatar.avatarBehavior(m); break;
     case 'avatar.gesture': avatar.avatarGesture(m.value); break;
+    case 'avatar.gesture_sequence': avatar.avatarGestureSequence(m.values); break;
     case 'aila.state': State.set({ status: m.status, tool: m.tool || null }); avatar.avatarStatus(m.status); break;
     case 'permission.request': showPerm(m); break;
     case 'session.loaded': chat.renderMessages(m.messages); State.set({ activeSession: m.id }); sidebar.loadSessions(); break;

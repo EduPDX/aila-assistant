@@ -133,6 +133,7 @@ class AilaEngine:
         self.last_avatar_state: dict[str, Any] | None = None
         # gesto pedido pela IA (AvatarAgent) durante o turno atual
         self.pending_gesture: str | None = None
+        self.pending_gesture_sequence: list[str] | None = None
         # confirmações de permissão pendentes (id -> Future). Vive no engine (não
         # na conexão WS) p/ sobreviver a reconexões: qualquer conexão resolve.
         self.perm_pending: dict[str, Any] = {}
@@ -711,6 +712,9 @@ class AilaEngine:
             if _dec and _dec.actions:
                 decided_actions = [a.type for a in _dec.actions]
                 self.pending_gesture = _dec.actions[0].type
+                if len(decided_actions) > 1:          # série → sequenciador do avatar
+                    self.pending_gesture = None
+                    self.pending_gesture_sequence = decided_actions
                 self.self_model.update_experience(activity="gesturing")
                 from aila.mind.observability import trace as _trace
 
@@ -1000,6 +1004,9 @@ class AilaEngine:
         if self.pending_gesture:
             await emit("avatar.gesture", {"value": self.pending_gesture})
             self.pending_gesture = None
+        if self.pending_gesture_sequence:
+            await emit("avatar.gesture_sequence", {"values": self.pending_gesture_sequence})
+            self.pending_gesture_sequence = None
         await emit("aila.state", {"status": "IDLE"})
         return final_text
 
@@ -1572,7 +1579,7 @@ _CODE_ACTION_RX = re.compile(
 _AVATAR_CMD_RX = re.compile(
     r"\b(levant\w+|erga|abaix\w+|acen\w+|tchau|dance|dan[çc]\w+|sorri\w+|"
     r"aponte|apont\w+|olhe|olha p|vire|gire|balan[çc]\w+|bata palma|palmas|"
-    r"pule|sente|senta|fique de p[ée]|gesto|pose|bra[çc]os?|m[ãa]os?|cabe[çc]a)\b",
+    r"pule|sente|senta|fique de p[ée]|gesto|pose|movimento|bra[çc]os?|m[ãa]os?|cabe[çc]a)\b",
     re.IGNORECASE)
 # Verbos imperativos em geral (pedido de AÇÃO) — desqualifica "conversa casual"
 _COMMAND_RX = re.compile(

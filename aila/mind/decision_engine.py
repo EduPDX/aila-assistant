@@ -49,15 +49,40 @@ _REGRAS: tuple[tuple[str, str], ...] = (
 _COMPILADAS = tuple((re.compile(p, re.IGNORECASE), g) for p, g in _REGRAS)
 
 
-def decide_gesture(user_text: str) -> str | None:
-    """Gesto pedido explicitamente pelo usuário (None se não for um pedido claro)."""
+#: pedido de VÁRIOS movimentos ("faça uma série de movimentos p/ eu testar")
+_SERIE_RX = re.compile(
+    r"\b(s[ée]rie|sequ[êe]ncia|v[áa]rios?|alguns?|uns)\s+"
+    r"(de\s+)?(movimento|gesto|pose)s?"
+    r"|\bdemonstr\w+"
+    r"|\bmostr\w+\s+(os\s+|seus\s+|alguns\s+)?(movimento|gesto)s?"
+    r"|\b(fa[çc]a|faz)\s+(uns|alguns|v[áa]rios)\s+(movimento|gesto)s?"
+    r"|\bteste?\s+de\s+movimento",
+    re.IGNORECASE)
+
+#: demonstração: uma sequência de gestos variados (o frontend intercala descanso)
+_SEQUENCIA_DEMO = ["raise_right", "raise_left", "wave", "point", "thumbs_up", "cheer"]
+
+
+def decide_actions(user_text: str) -> list[str]:
+    """Gestos pedidos: vazio (nenhum), 1 (gesto único) ou vários (série).
+
+    Determinístico: é isto que faz a Aila REALMENTE se mexer quando pedem, em vez
+    de o modelo listar os nomes dos gestos como texto e não fazer nada."""
     t = (user_text or "").strip()
     if not t:
-        return None
+        return []
+    if _SERIE_RX.search(t):
+        return list(_SEQUENCIA_DEMO)               # série de demonstração
     for rx, gesto in _COMPILADAS:
         if rx.search(t):
-            return gesto if gesto in GESTOS_VALIDOS else None
-    return None
+            return [gesto] if gesto in GESTOS_VALIDOS else []
+    return []
+
+
+def decide_gesture(user_text: str) -> str | None:
+    """Primeiro gesto pedido (None se nenhum) — usado pela classificação."""
+    acts = decide_actions(user_text)
+    return acts[0] if acts else None
 
 
 def decide(user_text: str, *, self_model: object | None = None) -> Decision | None:
@@ -66,8 +91,8 @@ def decide(user_text: str, *, self_model: object | None = None) -> Decision | No
     Devolver None é o caso comum e é de propósito: só assumimos o controle do
     corpo quando o pedido é inequívoco. Ambiguidade fica com o LLM.
     """
-    gesto = decide_gesture(user_text)
-    if gesto is None:
+    gestos = decide_actions(user_text)
+    if not gestos:
         return None
 
     estilo = "neutral"
@@ -80,6 +105,6 @@ def decide(user_text: str, *, self_model: object | None = None) -> Decision | No
 
     return Decision(
         speech=Speech(text="", style=estilo),   # o texto continua sendo do LLM
-        actions=[Action(type=gesto, target="body")],
-        reason="user_request:body_action",
+        actions=[Action(type=g, target="body") for g in gestos],
+        reason="user_request:body_action" + (":series" if len(gestos) > 1 else ""),
     )

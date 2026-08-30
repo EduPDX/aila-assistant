@@ -249,6 +249,23 @@ function playRandomTalkClip() {
 // teste/console: dispara uma intenção pela biblioteca (ex.: ailaPlayClip('wave'))
 window.ailaPlayClip = (name = 'wave') => playGestureClip(name) || (controller && controller.triggerGesture(name));
 
+// Série de movimentos (demonstração): toca cada gesto e volta ao repouso entre
+// eles, espaçado por tempo — INDEPENDENTE da fala (a timeline de gestos da fala
+// pararia se a frase acabasse antes da série). Cancela uma série anterior.
+let _seqTimers = [];
+function playGestureSequence(names) {
+  _seqTimers.forEach(clearTimeout); _seqTimers = [];
+  if (!controller || !Array.isArray(names) || !names.length) return;
+  const HOLD = 1500, GAP = 600;   // ms segurando o gesto + pausa em repouso
+  let t = 0;
+  for (const name of names) {
+    _seqTimers.push(setTimeout(() => controller.triggerGesture(name), t));
+    _seqTimers.push(setTimeout(() => controller.triggerGesture('rest'), t + HOLD));
+    t += HOLD + GAP;
+  }
+}
+window.ailaPlaySequence = playGestureSequence;   // teste no console
+
 function disposeVRM() {
   if (!vrm) return;
   scene.remove(vrm.scene);
@@ -423,6 +440,7 @@ addEventListener('message', (e) => {
     case 'aila:hide':      paused = true; sceneManager.setPaused(true); break;                       // saiu do palco → pausa render
     case 'aila:mouth':     controller?.setMouth(d.value); break;
     case 'aila:gesture':   controller?.triggerGesture(d.value); break;
+    case 'aila:gesture_seq': playGestureSequence(d.values); break;
     case 'aila:vram-pressure': applyVramPressure(d.state); break;
     case 'aila:metrics':   sceneManager.setMetrics(d.payload); break;   // dados reais → tela de STATUS
     case 'aila:say':       sceneManager.showMessage(d.text); break;     // resumo → balão holográfico
