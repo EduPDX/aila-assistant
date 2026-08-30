@@ -32,7 +32,7 @@ from aila.avatar.emotion_engine import EmotionEngine
 from aila.core.config import Settings
 from aila.core.context import ConversationContext, Message
 from aila.core.context_fit import (  # ajuste de janela de contexto (Fase 2; re-exportado)
-    _CHARS_PER_TOKEN,
+    _CHARS_PER_TOKEN,  # noqa: F401 — re-exportado p/ compat (agora via context_budget)
     MAX_TOOL_RESULT_CHARS,  # noqa: F401 — re-exportado p/ compat (testes/chamadas)
     _clip_for_context,  # noqa: F401 — re-exportado p/ compat (testes)
     _fit_context_window,
@@ -744,7 +744,8 @@ class AilaEngine:
         )
 
     def _messages_with_memory(self, mem_block: str | None,
-                              system_override: str | None = None) -> list[dict]:
+                              system_override: str | None = None,
+                              tools: list | None = None) -> list[dict]:
         msgs = self.context.build()
         if system_override and msgs and msgs[0].get("role") == "system":
             msgs[0] = {"role": "system", "content": system_override}
@@ -764,10 +765,20 @@ class AilaEngine:
 
         # Gestão de janela: compacta resultados de tool antigos p/ caber no num_ctx
         # (protege system/plano de ser truncado silenciosamente em turnos longos).
+        # R7: orçamento explícito — desconta o custo REAL dos schemas de ferramentas
+        # (antes invisível) do teto do histórico. Só APERTA (min): sem tools, idêntico.
+        from aila.core.context_budget import measure_tools_chars, plan_budget
+
         cfg = self.settings.context
-        budget = int(self.settings.llm.num_ctx * _CHARS_PER_TOKEN * cfg.window_budget_ratio)
+        plan = plan_budget(
+            num_ctx=self.settings.llm.num_ctx,
+            tools_chars=measure_tools_chars(tools),
+            ratio=cfg.window_budget_ratio,
+            answer_reserve_tokens=self.settings.llm.max_tokens,
+        )
         return _fit_context_window(
-            msgs, budget_chars=budget, keep_recent_tools=cfg.keep_recent_tools,
+            msgs, budget_chars=plan.msgs_budget_chars,
+            keep_recent_tools=cfg.keep_recent_tools,
         )
 
     # ------------------------------------------------------------------ #
@@ -886,6 +897,7 @@ class AilaEngine:
                 self._messages_with_memory(
                     mem_block,
                     self._casual_prompt() if task.kind == "basic" else None,
+                    tools=tools,   # R7: os schemas contam no orçamento da janela
                 ),
                 backend.capabilities().local,
             )

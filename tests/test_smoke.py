@@ -2873,6 +2873,42 @@ def test_vision_preflight_shrinks_avatar_when_vram_tight(monkeypatch, tmp_path):
     assert got == []
 
 
+def test_context_budget_accounts_tool_schemas():
+    """R7: o orçamento da janela é explícito e desconta o custo REAL dos schemas.
+    Sem tools o teto é idêntico ao legado (só fração); tools grandes APERTAM o
+    histórico p/ o total não estourar; nunca afrouxa (min)."""
+    from aila.core.context_budget import plan_budget
+
+    # num_ctx=8192, ratio=0.5, reserva=2048 tok → teto legado = 14336 chars
+    base = plan_budget(num_ctx=8192, tools_chars=0)
+    assert base.msgs_budget_chars == int(8192 * 3.5 * 0.5) == 14336
+    assert base.fits and base.to_dict()["tightened"] is False
+
+    # tools modestas: fit_cap ainda > teto legado → não aperta (mantém 14336)
+    modest = plan_budget(num_ctx=8192, tools_chars=3000)
+    assert modest.msgs_budget_chars == 14336 and modest.to_dict()["tightened"] is False
+
+    # tools grandes: fit_cap = 28672 − 7168 − 12000 = 9504 < 14336 → aperta
+    big = plan_budget(num_ctx=8192, tools_chars=12000)
+    assert big.msgs_budget_chars == 9504 and big.to_dict()["tightened"] is True
+
+    # tools absurdas: reserva+tools estouram a janela → não cabe, teto vai a 0
+    huge = plan_budget(num_ctx=8192, tools_chars=25000)
+    assert huge.fits is False and huge.msgs_budget_chars == 0
+
+
+def test_measure_tools_chars():
+    """Mede o JSON real dos schemas; sem tools → 0; não-serializável → fallback str."""
+    from aila.core.context_budget import measure_tools_chars
+
+    assert measure_tools_chars(None) == 0
+    assert measure_tools_chars([]) == 0
+    tools = [{"name": "file.read", "params": {"path": "string"}}]
+    import json
+    assert measure_tools_chars(tools) == len(json.dumps(tools, ensure_ascii=False))
+    assert measure_tools_chars([{object()}]) > 0  # não-serializável não quebra
+
+
 def test_oom_decide_load_actions():
     """R6: a decisão PURA de pré-voo. Sem medição ou já carregado → proceed; cabe →
     proceed; não cabe → shrink (liberar VRAM antes)."""
