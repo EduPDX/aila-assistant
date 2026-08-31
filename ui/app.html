@@ -22,7 +22,9 @@
   <!-- ========== SIDEBAR (linha do tempo) ========== -->
   <aside class="sidebar" id="drawer">
     <div class="brand">
-      <div class="orb"></div><h1>AILA</h1>
+      <div class="orb"></div>
+      <div class="brand-copy"><h1>AILA</h1><small>PERSONAL AI OS</small></div>
+      <span class="brand-state" title="Sistema online"><i></i>ONLINE</span>
       <button class="gear" id="btn-settings" title="Configurações">⚙️</button>
     </div>
     <button class="mind-navbtn mind-open" id="btn-mind" title="O grafo da mente da Aila (código e conversa)">🧠 <span>Subconsciente</span></button>
@@ -37,16 +39,16 @@
 
     <!-- Central de comando (seções) -->
     <div class="central" id="central">
-      <section class="cx-sec">
-        <div class="cx-h">🗂️ PROJETOS</div>
+      <section class="cx-sec" data-section="projects">
+        <div class="cx-h"><span class="cx-h-icon">▱</span><span>PROJETOS</span><b class="cx-count" id="cx-project-count">0</b></div>
         <div class="cx-body" id="cx-projects"><div class="cx-empty">—</div></div>
       </section>
-      <section class="cx-sec">
-        <div class="cx-h">⚡ TAREFAS</div>
+      <section class="cx-sec" data-section="tasks">
+        <div class="cx-h"><span class="cx-h-icon">ϟ</span><span>TAREFAS</span><b class="cx-count" id="cx-task-count">0</b></div>
         <div class="cx-body" id="cx-tasks"><div class="cx-empty">—</div></div>
       </section>
-      <section class="cx-sec">
-        <div class="cx-h">🧩 O QUE ELA SABE</div>
+      <section class="cx-sec" data-section="memory">
+        <div class="cx-h"><span class="cx-h-icon">◇</span><span>O QUE ELA SABE</span><b class="cx-count" id="cx-memory-count">0</b></div>
         <div class="cx-body" id="cx-memory"><div class="cx-empty">—</div></div>
       </section>
     </div>
