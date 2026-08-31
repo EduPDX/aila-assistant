@@ -5,6 +5,12 @@ import { HOLO, fillMat, glowMat, textPlane, disposeObject } from './primitives.j
 
 const STATUS_COLOR = { active: 0x64ffd8, ready: HOLO.blue, offline: 0x46536b };
 const MAX_RACKS = 10;
+const PORT_COLORS = [
+  new THREE.Color(0x36ff9a), // tráfego normal
+  new THREE.Color(0x49bfff), // atividade de rede/modelo
+  new THREE.Color(0xff4d5e), // alerta breve
+  new THREE.Color(0x061018), // pulso apagado
+];
 
 function rackLabel(raw) {
   const s = String(raw || 'MODELO');
@@ -126,11 +132,19 @@ function createRack(data, index) {
   // Painel de rede/controle: portas RJ45, USB e botão de energia.
   const portGeo = new THREE.BoxGeometry(w * 0.045, h * 0.025, d * 0.018);
   const ports = new THREE.InstancedMesh(portGeo, new THREE.MeshBasicMaterial({ color: 0x02080d }), 6);
+  const portLedGeo = new THREE.BoxGeometry(w * 0.012, h * 0.007, d * 0.016);
+  const portLedMat = glowMat(0xffffff, data.status === 'offline' ? 0.22 : 0.95);
+  const portLights = new THREE.InstancedMesh(portLedGeo, portLedMat, 6);
   for (let i = 0; i < 6; i++) {
-    mm.makeTranslation(-w * 0.16 + i * w * 0.063, h * 0.285, d * 0.57);
+    const x = -w * 0.16 + i * w * 0.063;
+    mm.makeTranslation(x, h * 0.285, d * 0.57);
     ports.setMatrixAt(i, mm);
+    mm.makeTranslation(x + w * 0.014, h * 0.293, d * 0.584);
+    portLights.setMatrixAt(i, mm);
+    portLights.setColorAt(i, data.status === 'offline' ? PORT_COLORS[3] : PORT_COLORS[i % 2]);
   }
-  root.add(ports);
+  portLights.instanceColor.needsUpdate = true;
+  root.add(ports, portLights);
   const power = new THREE.Mesh(new THREE.TorusGeometry(w * 0.019, w * 0.006, 6, 14), glowMat(color, 0.9));
   power.position.set(w * 0.30, h * 0.285, d * 0.575); root.add(power);
 
@@ -200,7 +214,10 @@ function createRack(data, index) {
   shell.renderOrder = -30;
   edges.renderOrder = -29;
 
-  root.userData = { index, status: data.status, leds, baseOpacity: ledMat.opacity, phase: index * 0.71, rackHeight: h, rackWidth: w };
+  root.userData = {
+    index, status: data.status, leds, portLights, lastPortTick: -1,
+    baseOpacity: ledMat.opacity, phase: index * 0.71, rackHeight: h, rackWidth: w,
+  };
   return root;
 }
 
@@ -240,6 +257,21 @@ export function createServerHall() {
       const u = rack.userData;
       if (u.status === 'active') u.leds.material.opacity = 0.68 + Math.sin(elapsed * 4 + u.phase) * 0.24;
       else u.leds.material.opacity = u.baseOpacity;
+
+      // LEDs das portas piscam em ritmos diferentes. A sequência é
+      // determinística e atualiza apenas quatro vezes por segundo (0 GC/frame).
+      const tick = Math.floor(elapsed * 4);
+      if (tick !== u.lastPortTick) {
+        u.lastPortTick = tick;
+        for (let i = 0; i < 6; i++) {
+          let ci = 0;
+          if (u.status === 'offline' || (tick + i + u.index) % 5 === 0) ci = 3;
+          else if ((tick + i * 3 + u.index * 5) % 31 === 0) ci = 2;
+          else if ((tick + i + u.index) % 3 === 0) ci = 1;
+          u.portLights.setColorAt(i, PORT_COLORS[ci]);
+        }
+        u.portLights.instanceColor.needsUpdate = true;
+      }
     }
   }
 
