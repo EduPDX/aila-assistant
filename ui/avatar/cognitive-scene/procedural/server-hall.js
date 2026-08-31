@@ -23,7 +23,7 @@ function createRack(data, index) {
   root.name = `model-rack:${data.id}`;
   const scale = Math.max(0.82, Math.min(1.34, Number(data.scale) || 1));
   // Mantém proporção por capacidade, mas dentro de dimensões de um rack 19".
-  const w = 0.76 * (0.92 + scale * 0.08), h = 1.70 * scale, d = 0.58;
+  const w = 0.82 * (0.92 + scale * 0.08), h = 1.76 * scale, d = 0.64;
   const color = STATUS_COLOR[data.status] ?? HOLO.blue;
 
   const cabinetMat = new THREE.MeshBasicMaterial({
@@ -154,6 +154,19 @@ function createRack(data, index) {
   const display = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.30, h * 0.035), glowMat(color, 0.34));
   display.position.set(0, h * 0.415, d * 0.552); root.add(display);
 
+  // Laterais ventiladas: ao orbitar a câmera o rack continua parecendo um
+  // equipamento completo, em vez de perder todos os detalhes fora da frente.
+  const sideVentGeo = new THREE.BoxGeometry(w * 0.018, h * 0.018, d * 0.42);
+  const sideVents = new THREE.InstancedMesh(sideVentGeo, new THREE.MeshBasicMaterial({
+    color: 0x173b50, transparent: true, opacity: 0.78,
+  }), 12);
+  for (let side = 0; side < 2; side++) for (let row = 0; row < 6; row++) {
+    const x = (side ? 1 : -1) * w * 0.508;
+    const y = -h * 0.27 + row * h * 0.105;
+    mm.makeTranslation(x, y, 0); sideVents.setMatrixAt(side * 6 + row, mm);
+  }
+  root.add(sideVents);
+
   // Parafusos nas quatro quinas da porta.
   const screwGeo = new THREE.CircleGeometry(w * 0.009, 8);
   for (const x of [-w * 0.405, w * 0.405]) for (const y of [-h * 0.405, h * 0.405]) {
@@ -171,7 +184,14 @@ function createRack(data, index) {
 
   // Transparências da cena principal também não escrevem profundidade. Uma
   // ordem negativa garante que o salão seja realmente o pano de fundo.
-  root.traverse((obj) => { obj.renderOrder = -20; });
+  root.traverse((obj) => {
+    obj.renderOrder = -20;
+    if (obj.isMesh && obj.material) obj.material.side = THREE.DoubleSide;
+  });
+  // A carcaça é desenhada primeiro; porta, módulos e indicadores ficam acima
+  // dela e não somem por ordenação de transparência em ângulos oblíquos.
+  shell.renderOrder = -30;
+  edges.renderOrder = -29;
 
   root.userData = { index, status: data.status, leds, baseOpacity: ledMat.opacity, phase: index * 0.71, rackHeight: h, rackWidth: w };
   return root;
