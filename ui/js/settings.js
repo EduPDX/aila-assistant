@@ -289,8 +289,7 @@ function buildSettings() {
   if (!nav || !main) return;
   nav.innerHTML = '<div class="settings-brand"><div class="settings-title">AILA // AJUSTES</div>'
     + '<div class="settings-subtitle">CENTRO DE CONTROLE</div></div>';
-  main.innerHTML = '<div class="settings-toolbar"><span id="cfg-save-status" class="cfg-save-status" data-state="idle">Tudo atualizado</span>'
-    + '<button class="settings-close-x" type="button" id="btn-settings-close-x" aria-label="Fechar configurações">×</button></div>'
+  main.innerHTML = '<div class="settings-toolbar"><span id="cfg-save-status" class="cfg-save-status" data-state="idle">Tudo atualizado</span></div>'
     + '<div class="settings-scroll" id="settings-scroll">'
     + '<div class="cfg-restart" id="cfg-restart">↻ Reinicie a Aila para aplicar algumas mudanças.</div></div>';
   const scroll = byId('settings-scroll');
@@ -321,7 +320,6 @@ function buildSettings() {
   nav.append(el('div', { class: 'settings-side-foot' },
     el('span', {}, `${CATEGORIES.length} módulos`),
     el('button', { class: 'btn', id: 'btn-settings-close', onclick: closeSettings }, 'Fechar')));
-  byId('btn-settings-close-x').onclick = closeSettings;
 }
 
 /* ---------- Memória (/api/memory — leitura) ---------- */
