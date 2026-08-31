@@ -5,7 +5,7 @@ import { HOLO, fillMat, glowMat, textPlane, disposeObject } from './primitives.j
 
 const STATUS_COLOR = { active: 0x64ffd8, ready: HOLO.blue, offline: 0x46536b };
 const MAX_RACKS = 10;
-const PORT_COLORS = [
+const ACTIVITY_COLORS = [
   new THREE.Color(0x36ff9a), // tráfego normal
   new THREE.Color(0x49bfff), // atividade de rede/modelo
   new THREE.Color(0xff4d5e), // alerta breve
@@ -103,15 +103,15 @@ function createRack(data, index) {
   // Malha perfurada nos módulos: 60 furos em um único draw call. É o detalhe
   // que faz a frente lembrar uma grade de ventilação de servidor real.
   const holeGeo = new THREE.BoxGeometry(w * 0.010, h * 0.006, d * 0.010);
-  const holes = new THREE.InstancedMesh(holeGeo, new THREE.MeshBasicMaterial({
-    color: 0x02070c, transparent: true, opacity: 0.95,
-  }), 60);
+  const holes = new THREE.InstancedMesh(holeGeo, glowMat(0xffffff, 0.88), 60);
   let hi = 0;
   for (let row = 0; row < 10; row++) for (let col = 0; col < 6; col++) {
     const y = -h * 0.35 + row * h * 0.071;
     const x = -w * 0.15 + col * w * 0.035;
-    mm.makeTranslation(x, y, d * 0.568); holes.setMatrixAt(hi++, mm);
+    mm.makeTranslation(x, y, d * 0.568); holes.setMatrixAt(hi, mm);
+    holes.setColorAt(hi++, ACTIVITY_COLORS[3]);
   }
+  holes.instanceColor.needsUpdate = true;
   root.add(holes);
 
   // Quatro baias hot-swap com recorte, trava e LED próprio.
@@ -128,25 +128,6 @@ function createRack(data, index) {
     mm.makeTranslation(x, y - h * 0.035, d * 0.58); latches.setMatrixAt(i, mm);
   }
   root.add(drives, latches);
-
-  // Painel de rede/controle: portas RJ45, USB e botão de energia.
-  const portGeo = new THREE.BoxGeometry(w * 0.045, h * 0.025, d * 0.018);
-  const ports = new THREE.InstancedMesh(portGeo, new THREE.MeshBasicMaterial({ color: 0x02080d }), 6);
-  const portLedGeo = new THREE.BoxGeometry(w * 0.012, h * 0.007, d * 0.016);
-  const portLedMat = glowMat(0xffffff, data.status === 'offline' ? 0.22 : 0.95);
-  const portLights = new THREE.InstancedMesh(portLedGeo, portLedMat, 6);
-  for (let i = 0; i < 6; i++) {
-    const x = -w * 0.16 + i * w * 0.063;
-    mm.makeTranslation(x, h * 0.285, d * 0.57);
-    ports.setMatrixAt(i, mm);
-    mm.makeTranslation(x + w * 0.014, h * 0.293, d * 0.584);
-    portLights.setMatrixAt(i, mm);
-    portLights.setColorAt(i, data.status === 'offline' ? PORT_COLORS[3] : PORT_COLORS[i % 2]);
-  }
-  portLights.instanceColor.needsUpdate = true;
-  root.add(ports, portLights);
-  const power = new THREE.Mesh(new THREE.TorusGeometry(w * 0.019, w * 0.006, 6, 14), glowMat(color, 0.9));
-  power.position.set(w * 0.30, h * 0.285, d * 0.575); root.add(power);
 
   // Numeração das unidades e identificação do cluster na própria porta.
   const unitLabel = textPlane('18U  12U  06U  01U', {
@@ -215,7 +196,7 @@ function createRack(data, index) {
   edges.renderOrder = -29;
 
   root.userData = {
-    index, status: data.status, leds, portLights, lastPortTick: -1,
+    index, status: data.status, leds, activityLights: holes, lastActivityTick: -1,
     baseOpacity: ledMat.opacity, phase: index * 0.71, rackHeight: h, rackWidth: w,
   };
   return root;
@@ -258,19 +239,21 @@ export function createServerHall() {
       if (u.status === 'active') u.leds.material.opacity = 0.68 + Math.sin(elapsed * 4 + u.phase) * 0.24;
       else u.leds.material.opacity = u.baseOpacity;
 
-      // LEDs das portas piscam em ritmos diferentes. A sequência é
-      // determinística e atualiza apenas quatro vezes por segundo (0 GC/frame).
+      // Reutiliza os seis pequenos pontos de cada módulo como LEDs reais; não
+      // cria um painel extra. A sequência atualiza 4x/s e não aloca por frame.
       const tick = Math.floor(elapsed * 4);
-      if (tick !== u.lastPortTick) {
-        u.lastPortTick = tick;
-        for (let i = 0; i < 6; i++) {
-          let ci = 0;
-          if (u.status === 'offline' || (tick + i + u.index) % 5 === 0) ci = 3;
-          else if ((tick + i * 3 + u.index * 5) % 31 === 0) ci = 2;
-          else if ((tick + i + u.index) % 3 === 0) ci = 1;
-          u.portLights.setColorAt(i, PORT_COLORS[ci]);
+      if (tick !== u.lastActivityTick) {
+        u.lastActivityTick = tick;
+        for (let i = 0; i < 60; i++) {
+          let ci = 3;
+          if (u.status !== 'offline') {
+            if ((tick + i * 7 + u.index * 11) % 97 === 0) ci = 2;
+            else if ((tick + i + u.index) % 13 === 0) ci = 1;
+            else if ((tick * 2 + i * 3 + u.index) % 17 === 0) ci = 0;
+          }
+          u.activityLights.setColorAt(i, ACTIVITY_COLORS[ci]);
         }
-        u.portLights.instanceColor.needsUpdate = true;
+        u.activityLights.instanceColor.needsUpdate = true;
       }
     }
   }
