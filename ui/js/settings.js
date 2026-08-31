@@ -9,14 +9,29 @@ import { confirmDialog } from './ui.js';
 import { CATEGORIES, CUSTOM_HTML, KNOWN_AGENTS } from './settings-schema.js';
 
 const THEMES = [
-  { id: 'aqua', c: '#38e1d0' }, { id: 'cyber', c: '#c257ff' }, { id: 'rose', c: '#ff6fae' },
-  { id: 'forest', c: '#43e08a' }, { id: 'light', c: '#0bb3a0' },
+  { id: 'aqua', label: 'Aqua', c: '#38e1d0', c2: '#4aa8ff', tone: '#070b12' },
+  { id: 'cobalt', label: 'Cobalto', c: '#55a7ff', c2: '#58e6ff', tone: '#050b18' },
+  { id: 'cyber', label: 'Cyber', c: '#c257ff', c2: '#ff5cd6', tone: '#0a0713' },
+  { id: 'rose', label: 'Rose', c: '#ff6fae', c2: '#ffa96f', tone: '#120a0f' },
+  { id: 'forest', label: 'Floresta', c: '#43e08a', c2: '#a9e04b', tone: '#071410' },
+  { id: 'amber', label: 'Âmbar', c: '#ffbd45', c2: '#ff7a45', tone: '#100c06' },
+  { id: 'crimson', label: 'Crimson', c: '#ff526f', c2: '#ff8a4c', tone: '#11070a' },
+  { id: 'graphite', label: 'Grafite', c: '#b8c4d1', c2: '#6fdaff', tone: '#090b0e' },
+  { id: 'light', label: 'Claro', c: '#0bb3a0', c2: '#2f7cf6', tone: '#f2f5f9' },
 ];
 
 export function setTheme(id) {
+  if (!THEMES.some((t) => t.id === id)) id = 'aqua';
   document.documentElement.setAttribute('data-theme', id);
   localStorage.setItem('aila-theme', id);
   $$('.swatch').forEach((s) => s.classList.toggle('active', s.dataset.id === id));
+}
+
+function applyAppearancePrefs() {
+  const root = document.documentElement;
+  root.dataset.uiDensity = localStorage.getItem('aila.ui.density') || 'confortável';
+  root.dataset.uiGlow = localStorage.getItem('aila.ui.glow') || 'normal';
+  root.dataset.uiScanlines = localStorage.getItem('aila.ui.scanlines') ?? 'true';
 }
 
 let _settingsFocus = null;
@@ -458,12 +473,18 @@ export function initSettings() {
   const box = byId('themes');
   if (box) {
     THEMES.forEach((t) => {
-      const s = document.createElement('div');
-      s.className = 'swatch'; s.dataset.id = t.id; s.style.background = t.c; s.title = t.id;
+      const s = document.createElement('button');
+      s.type = 'button'; s.className = 'swatch'; s.dataset.id = t.id; s.title = `Tema ${t.label}`;
+      s.style.setProperty('--swatch-a', t.c); s.style.setProperty('--swatch-b', t.c2); s.style.setProperty('--swatch-bg', t.tone);
+      s.innerHTML = `<i></i><span>${t.label}</span>`;
       s.onclick = () => setTheme(t.id); box.appendChild(s);
     });
   }
   setTheme(localStorage.getItem('aila-theme') || 'aqua');
+  applyAppearancePrefs();
+  window.addEventListener('aila:pref', (e) => {
+    if (String(e.detail?.key || '').startsWith('aila.ui.')) applyAppearancePrefs();
+  });
 
   // fechar clicando fora
   byId('settings-overlay').addEventListener('click', (e) => { if (e.target.id === 'settings-overlay') closeSettings(); });

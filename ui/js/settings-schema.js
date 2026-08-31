@@ -15,6 +15,14 @@ const EMBED_MODELS = ['nomic-embed-text', 'mxbai-embed-large', 'all-minilm', 'bg
 export const CATEGORIES = [
   { id: 'aparencia', icon: '🎨', label: 'Aparência', blocks: [
     { title: 'Tema', custom: 'themes' },
+    { title: 'Interface', pref: [
+      { key: 'aila.ui.density', type: 'select', options: ['confortável', 'compacta'], default: 'confortável',
+        label: 'Densidade', hint: 'Compacta reduz espaçamentos nos painéis e listas para mostrar mais informações.' },
+      { key: 'aila.ui.glow', type: 'select', options: ['normal', 'reduzido', 'desligado'], default: 'normal',
+        label: 'Intensidade do brilho', hint: 'Reduza os efeitos luminosos para melhorar legibilidade ou desempenho.' },
+      { key: 'aila.ui.scanlines', type: 'toggle', default: true,
+        label: 'Linhas holográficas', hint: 'Exibe a textura horizontal sutil da interface holográfica.' },
+    ] },
     { title: 'Visualização do grafo (subconsciente)', pref: [
       { key: 'aila.graph.mode', type: 'select', options: ['2d', '3d'], default: '2d',
         label: 'Modo de visualização', hint: '3D = grafo dentro de um cubo que você gira com o mouse (mais bonito, usa a GPU).' },
