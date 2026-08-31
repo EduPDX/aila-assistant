@@ -3,7 +3,6 @@
 import * as THREE from 'three';
 import { HOLO, fillMat, glowMat, textPlane, disposeObject } from './primitives.js';
 
-const STATUS_COLOR = { active: 0x64ffd8, ready: HOLO.blue, offline: 0x46536b };
 const MAX_RACKS = 10;
 const ACTIVITY_COLORS = [
   new THREE.Color(0x36ff9a), // tráfego normal
@@ -11,6 +10,17 @@ const ACTIVITY_COLORS = [
   new THREE.Color(0xff4d5e), // alerta breve
   new THREE.Color(0x061018), // pulso apagado
 ];
+
+function themed(material, role) {
+  material.userData._holoThemeRole = role;
+  return material;
+}
+
+function statusColor(status) {
+  if (status === 'active') return HOLO.teal;
+  if (status === 'ready') return HOLO.blue;
+  return 0x46536b;
+}
 
 function rackLabel(raw) {
   const s = String(raw || 'MODELO');
@@ -30,14 +40,14 @@ function createRack(data, index) {
   const scale = Math.max(0.82, Math.min(1.34, Number(data.scale) || 1));
   // Mantém proporção por capacidade, mas dentro de dimensões de um rack 19".
   const w = 0.82 * (0.92 + scale * 0.08), h = 1.76 * scale, d = 0.64;
-  const color = STATUS_COLOR[data.status] ?? HOLO.blue;
+  const color = statusColor(data.status);
 
-  const cabinetMat = new THREE.MeshBasicMaterial({
+  const cabinetMat = themed(new THREE.MeshBasicMaterial({
     color: 0x071421, transparent: true, opacity: data.status === 'offline' ? 0.22 : 0.48,
     // A carcaça é só o volume holográfico: não bloqueia os componentes que
     // ficam dentro dela, mas todos continuam respeitando o avatar à frente.
     depthWrite: false, side: THREE.DoubleSide,
-  });
+  }), 'surface');
   const shell = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cabinetMat);
   root.add(shell);
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(shell.geometry), new THREE.LineBasicMaterial({
@@ -62,7 +72,7 @@ function createRack(data, index) {
   // Porta frontal rebaixada + marcações das unidades do rack.
   const door = new THREE.Mesh(
     new THREE.PlaneGeometry(w * 0.86, h * 0.82),
-    new THREE.MeshBasicMaterial({ color: 0x091c2c, transparent: true, opacity: 0.72, depthWrite: false }),
+    themed(new THREE.MeshBasicMaterial({ color: 0x091c2c, transparent: true, opacity: 0.72, depthWrite: false }), 'surface2'),
   );
   door.position.set(0, -h * 0.025, d * 0.532); root.add(door);
   const pts = [];
@@ -88,9 +98,9 @@ function createRack(data, index) {
 
   // Servidores 1U/2U, gavetas, puxadores e grelhas de ventilação.
   const moduleGeo = new THREE.BoxGeometry(w * 0.67, h * 0.052, d * 0.035);
-  const modules = new THREE.InstancedMesh(moduleGeo, new THREE.MeshBasicMaterial({
+  const modules = new THREE.InstancedMesh(moduleGeo, themed(new THREE.MeshBasicMaterial({
     color: data.status === 'active' ? 0x174f59 : 0x10283d, transparent: true, opacity: 0.92,
-  }), 10);
+  }), 'surface2'), 10);
   const handleGeo = new THREE.BoxGeometry(w * 0.07, h * 0.012, d * 0.018);
   const handles = new THREE.InstancedMesh(handleGeo, glowMat(color, 0.46), 20);
   const mm = new THREE.Matrix4();
@@ -118,9 +128,9 @@ function createRack(data, index) {
 
   // Quatro baias hot-swap com recorte, trava e LED próprio.
   const driveGeo = new THREE.BoxGeometry(w * 0.105, h * 0.105, d * 0.025);
-  const drives = new THREE.InstancedMesh(driveGeo, new THREE.MeshBasicMaterial({
+  const drives = new THREE.InstancedMesh(driveGeo, themed(new THREE.MeshBasicMaterial({
     color: 0x0b2130, transparent: true, opacity: 0.96,
-  }), 4);
+  }), 'surface2'), 4);
   const latchGeo = new THREE.BoxGeometry(w * 0.055, h * 0.009, d * 0.018);
   const latches = new THREE.InstancedMesh(latchGeo, glowMat(color, 0.38), 4);
   for (let i = 0; i < 4; i++) {
@@ -133,12 +143,12 @@ function createRack(data, index) {
 
   // Numeração das unidades e identificação do cluster na própria porta.
   const unitLabel = textPlane('18U  12U  06U  01U', {
-    width: w * 0.12, px: 256, size: 18, align: 'right', color: '#6387a0',
+    width: w * 0.12, px: 256, size: 18, align: 'right', color: HOLO.textDim,
   });
   unitLabel.mesh.rotation.z = Math.PI / 2;
   unitLabel.mesh.position.set(-w * 0.415, 0, d * 0.575); root.add(unitLabel.mesh);
   const clusterId = textPlane(`NODE ${String(index + 1).padStart(2, '0')}`, {
-    width: w * 0.25, px: 256, size: 22, align: 'center', color: '#85b9c8',
+    width: w * 0.25, px: 256, size: 22, align: 'center', color: HOLO.blue,
   });
   clusterId.mesh.position.set(0, -h * 0.405, d * 0.575); root.add(clusterId.mesh);
 
@@ -154,9 +164,9 @@ function createRack(data, index) {
   // Laterais ventiladas: ao orbitar a câmera o rack continua parecendo um
   // equipamento completo, em vez de perder todos os detalhes fora da frente.
   const sideVentGeo = new THREE.BoxGeometry(w * 0.018, h * 0.018, d * 0.42);
-  const sideVents = new THREE.InstancedMesh(sideVentGeo, new THREE.MeshBasicMaterial({
+  const sideVents = new THREE.InstancedMesh(sideVentGeo, themed(new THREE.MeshBasicMaterial({
     color: 0x173b50, transparent: true, opacity: 0.78,
-  }), 12);
+  }), 'blue'), 12);
   for (let side = 0; side < 2; side++) for (let row = 0; row < 6; row++) {
     const x = (side ? 1 : -1) * w * 0.508;
     const y = -h * 0.27 + row * h * 0.105;
@@ -175,7 +185,7 @@ function createRack(data, index) {
   title.mesh.position.set(0, h * 0.58, d * 0.53);
   root.add(title.mesh);
   const metaText = `${data.location === 'local' ? 'LOCAL' : 'CLOUD'} // ${(data.status || 'offline').toUpperCase()}`;
-  const meta = textPlane(metaText, { width: w, px: 384, size: 24, align: 'center', color: data.status === 'offline' ? '#738198' : '#9fd0c6' });
+  const meta = textPlane(metaText, { width: w, px: 384, size: 24, align: 'center', color: HOLO.textDim });
   meta.mesh.position.set(0, h * 0.49, d * 0.53);
   root.add(meta.mesh);
 

@@ -34,6 +34,8 @@ export function applyHoloTheme(root, palette = {}) {
     text: palette.text || HOLO.text,
     textDim: palette.muted || HOLO.textDim,
     amberText: palette.warn || HOLO.amberText,
+    surface: asHex(palette.bg2, HOLO.dim),
+    surface2: asHex(palette.panel, HOLO.dim),
   };
 
   root?.traverse?.((object) => {
@@ -41,7 +43,8 @@ export function applyHoloTheme(root, palette = {}) {
     for (const material of materials) {
       if (!material?.color) continue;
       const current = material.color.getHex();
-      const role = COLOR_ROLES.find((name) => previous[name] === current);
+      const role = material.userData?._holoThemeRole
+        || COLOR_ROLES.find((name) => previous[name] === current);
       if (role) {
         material.color.setHex(next[role]);
         material.userData._holoBlending ??= material.blending;
