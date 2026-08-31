@@ -21,11 +21,16 @@ function rackLabel(raw) {
 function createRack(data, index) {
   const root = new THREE.Group();
   root.name = `model-rack:${data.id}`;
-  const scale = Math.max(0.72, Math.min(1.48, Number(data.scale) || 1));
-  const w = 0.72 * scale, h = 1.76 * scale, d = 0.42 * scale;
+  const scale = Math.max(0.82, Math.min(1.34, Number(data.scale) || 1));
+  // Mantém proporção por capacidade, mas dentro de dimensões de um rack 19".
+  const w = 0.76 * (0.92 + scale * 0.08), h = 1.70 * scale, d = 0.58;
   const color = STATUS_COLOR[data.status] ?? HOLO.blue;
 
-  const shell = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), fillMat(color, data.status === 'offline' ? 0.035 : 0.075));
+  const cabinetMat = new THREE.MeshBasicMaterial({
+    color: 0x071421, transparent: true, opacity: data.status === 'offline' ? 0.22 : 0.48,
+    depthWrite: true, side: THREE.DoubleSide,
+  });
+  const shell = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cabinetMat);
   root.add(shell);
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(shell.geometry), new THREE.LineBasicMaterial({
     color, transparent: true, opacity: data.status === 'active' ? 0.42 : data.status === 'offline' ? 0.09 : 0.2,
@@ -34,50 +39,75 @@ function createRack(data, index) {
   root.add(edges);
 
   // Base, teto e trilhos dão leitura de rack de verdade, não apenas uma caixa.
-  const slabGeo = new THREE.BoxGeometry(w * 1.08, h * 0.035, d * 1.12);
+  const slabGeo = new THREE.BoxGeometry(w * 1.08, h * 0.035, d * 1.08);
   const slabMat = fillMat(color, data.status === 'offline' ? 0.05 : 0.14);
   const base = new THREE.Mesh(slabGeo, slabMat);
   base.position.y = -h * 0.482; root.add(base);
   const top = new THREE.Mesh(slabGeo, slabMat);
   top.position.y = h * 0.482; root.add(top);
-  const railGeo = new THREE.BoxGeometry(w * 0.035, h * 0.88, d * 0.025);
+  const railGeo = new THREE.BoxGeometry(w * 0.045, h * 0.91, d * 0.035);
   for (const x of [-w * 0.44, w * 0.44]) {
     const rail = new THREE.Mesh(railGeo, fillMat(color, 0.22));
-    rail.position.set(x, 0, d * 0.515); root.add(rail);
+    rail.position.set(x, 0, d * 0.525); root.add(rail);
   }
 
-  // Slots frontais em uma única geometria de linhas.
+  // Porta frontal rebaixada + marcações das unidades do rack.
+  const door = new THREE.Mesh(
+    new THREE.PlaneGeometry(w * 0.86, h * 0.82),
+    new THREE.MeshBasicMaterial({ color: 0x091c2c, transparent: true, opacity: 0.72, depthWrite: true }),
+  );
+  door.position.set(0, -h * 0.025, d * 0.532); root.add(door);
   const pts = [];
-  for (let i = 0; i < 14; i++) {
-    const y = -h * 0.39 + i * h * 0.058;
-    pts.push(-w * 0.38, y, d * 0.51, w * 0.38, y, d * 0.51);
+  const units = 18;
+  for (let i = 0; i <= units; i++) {
+    const y = -h * 0.41 + i * h * 0.82 / units;
+    pts.push(-w * 0.40, y, d * 0.538, w * 0.40, y, d * 0.538);
   }
   const slotGeo = new THREE.BufferGeometry();
   slotGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   root.add(new THREE.LineSegments(slotGeo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false })));
 
-  // LEDs: 12 instâncias, um draw call por rack.
-  const ledGeo = new THREE.PlaneGeometry(0.025 * scale, 0.009 * scale);
+  // LEDs: duas colunas de atividade, um draw call por rack.
+  const ledGeo = new THREE.PlaneGeometry(w * 0.025, h * 0.007);
   const ledMat = glowMat(color, data.status === 'offline' ? 0.12 : 0.8);
   const leds = new THREE.InstancedMesh(ledGeo, ledMat, 12);
   const matrix = new THREE.Matrix4();
   for (let i = 0; i < 12; i++) {
-    matrix.makeTranslation((i % 2 ? 1 : -1) * w * 0.3, -h * 0.34 + Math.floor(i / 2) * h * 0.12, d * 0.515);
+    matrix.makeTranslation((i % 2 ? 1 : -1) * w * 0.34, -h * 0.34 + Math.floor(i / 2) * h * 0.115, d * 0.548);
     leds.setMatrixAt(i, matrix);
   }
   root.add(leds);
 
-  // Módulos centrais e ventiladores: detalhes baratos, todos no painel frontal.
-  const bayGeo = new THREE.PlaneGeometry(w * 0.54, h * 0.035);
-  const bayMat = fillMat(color, 0.16);
-  for (let i = 0; i < 7; i++) {
-    const bay = new THREE.Mesh(bayGeo, bayMat);
-    bay.position.set(0, -h * 0.34 + i * h * 0.105, d * 0.522); root.add(bay);
+  // Servidores 1U/2U, gavetas, puxadores e grelhas de ventilação.
+  const moduleGeo = new THREE.BoxGeometry(w * 0.67, h * 0.052, d * 0.035);
+  const modules = new THREE.InstancedMesh(moduleGeo, new THREE.MeshBasicMaterial({
+    color: data.status === 'active' ? 0x174f59 : 0x10283d, transparent: true, opacity: 0.92,
+  }), 10);
+  const handleGeo = new THREE.BoxGeometry(w * 0.07, h * 0.012, d * 0.018);
+  const handles = new THREE.InstancedMesh(handleGeo, glowMat(color, 0.46), 20);
+  const mm = new THREE.Matrix4();
+  for (let i = 0; i < 10; i++) {
+    const y = -h * 0.35 + i * h * 0.071;
+    mm.makeTranslation(0, y, d * 0.548); modules.setMatrixAt(i, mm);
+    mm.makeTranslation(-w * 0.27, y, d * 0.57); handles.setMatrixAt(i * 2, mm);
+    mm.makeTranslation(w * 0.27, y, d * 0.57); handles.setMatrixAt(i * 2 + 1, mm);
   }
+  root.add(modules, handles);
+
+  // Ventilação superior e controlador/visor de status.
   const fanGeo = new THREE.RingGeometry(w * 0.055, w * 0.09, 18);
-  for (const x of [-w * 0.16, w * 0.16]) {
+  for (const x of [-w * 0.22, 0, w * 0.22]) {
     const fan = new THREE.Mesh(fanGeo, glowMat(color, 0.28));
-    fan.position.set(x, h * 0.34, d * 0.525); root.add(fan);
+    fan.position.set(x, h * 0.355, d * 0.55); root.add(fan);
+  }
+  const display = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.30, h * 0.035), glowMat(color, 0.34));
+  display.position.set(0, h * 0.265, d * 0.552); root.add(display);
+
+  // Parafusos nas quatro quinas da porta.
+  const screwGeo = new THREE.CircleGeometry(w * 0.009, 8);
+  for (const x of [-w * 0.405, w * 0.405]) for (const y of [-h * 0.405, h * 0.405]) {
+    const screw = new THREE.Mesh(screwGeo, glowMat(color, 0.7));
+    screw.position.set(x, y, d * 0.555); root.add(screw);
   }
 
   const title = textPlane(rackLabel(data.label), { width: w * 1.45, px: 512, size: 38, align: 'center' });
@@ -113,14 +143,14 @@ export function createServerHall() {
     if (!data.length) { group.visible = false; return; }
     group.visible = true;
     racks = data.map((item, i) => createRack(item, i));
-    const gap = 0.16;
+    const gap = 0.12;
     const total = racks.reduce((sum, rack) => sum + rack.userData.rackWidth, 0) + gap * (racks.length - 1);
     let cursor = -total / 2;
     racks.forEach((rack, i) => {
       cursor += rack.userData.rackWidth / 2;
       // Cada gabinete encosta no mesmo piso independentemente de sua escala.
-      rack.position.set(cursor, rack.userData.rackHeight / 2, -Math.abs(i - (data.length - 1) / 2) * 0.10);
-      rack.rotation.y = (i - (data.length - 1) / 2) * -0.045;
+      rack.position.set(cursor, rack.userData.rackHeight / 2, 0);
+      rack.rotation.set(0, 0, 0);
       group.add(rack);
       cursor += rack.userData.rackWidth / 2 + gap;
     });
