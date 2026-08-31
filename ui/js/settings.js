@@ -20,6 +20,22 @@ export function setTheme(id) {
 }
 
 let _settingsFocus = null;
+let _saveSeq = 0;
+const CATEGORY_DESCRIPTIONS = {
+  aparencia: 'Personalize o ambiente visual e o grafo cognitivo.',
+  geral: 'Defina o modo como Aila conversa e se apresenta.',
+  modelos: 'Gerencie modelos locais, provedores e roteamento cognitivo.',
+  voz: 'Configure fala, escuta, voz e processamento de áudio.',
+  avatar: 'Escolha o corpo virtual e sua expressão de repouso.',
+  memoria: 'Controle o que Aila guarda, recupera e relaciona.',
+  autonomia: 'Escolha até onde Aila pode agir por conta própria.',
+  agentes: 'Ative as capacidades e ferramentas disponíveis.',
+  seguranca: 'Revise proteções, confirmações e níveis de risco.',
+  rede: 'Controle quando dados podem usar serviços externos.',
+  tarefas: 'Ajuste limites que evitam loops e travamentos.',
+  sistema: 'Consulte o estado dos principais serviços da Aila.',
+  dev: 'Opções técnicas para diagnóstico e desenvolvimento.',
+};
 export const openSettings = () => {
   const overlay = byId('settings-overlay');
   _settingsFocus = document.activeElement;
@@ -86,11 +102,14 @@ function renderAgents() {
   box.innerHTML = '';
   KNOWN_AGENTS.forEach(([id, label, desc]) => {
     const on = enabled.has(id);
-    const t = el('div', { class: 'toggle' + (on ? ' on' : ''), onclick: () => {
+    const t = el('button', { class: 'toggle toggle-button' + (on ? ' on' : ''), type: 'button',
+      role: 'switch', 'aria-checked': String(on), 'aria-label': `${label}: ${on ? 'ativado' : 'desativado'}`, onclick: () => {
       const now = !t.classList.contains('on'); t.classList.toggle('on', now);
+      t.setAttribute('aria-checked', String(now));
+      t.setAttribute('aria-label', `${label}: ${now ? 'ativado' : 'desativado'}`);
       now ? enabled.add(id) : enabled.delete(id);
       commit('agents.enabled', [...enabled]); showRestart();
-    } }, el('div', { class: 'sw' }));
+    } }, el('span', { class: 'sw', 'aria-hidden': 'true' }));
     box.append(el('div', { class: 'agent-item' },
       el('div', { class: 'agent-info' },
         el('div', { class: 'agent-name' }, label),
@@ -100,9 +119,18 @@ function renderAgents() {
 }
 
 export function settingsTab(p) {
-  $$('.snav').forEach((b) => b.classList.toggle('active', b.dataset.p === p));
-  $$('.spane').forEach((s) => s.classList.toggle('active', s.id === 'sp-' + p));
+  $$('.snav').forEach((b) => {
+    const active = b.dataset.p === p;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-current', active ? 'page' : 'false');
+  });
+  $$('.spane').forEach((s) => {
+    const active = s.id === 'sp-' + p;
+    s.classList.toggle('active', active);
+    s.setAttribute('aria-hidden', String(!active));
+  });
   const cat = CATEGORIES.find((c) => c.id === p); if (!cat) return;
+  byId('settings-main')?.setAttribute('data-active-pane', p);
   for (const b of cat.blocks) if (b.custom && CUSTOM_RENDER[b.custom]) CUSTOM_RENDER[b.custom]();
 }
 
@@ -111,10 +139,29 @@ let _cfg = {};
 const getPath = (o, path) => path.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
 async function loadConfig() { try { _cfg = await api.config(); } catch { _cfg = {}; } }
 
-function commit(path, value) {
+function setSaveState(state, text) {
+  const status = byId('cfg-save-status');
+  if (!status) return;
+  status.dataset.state = state;
+  status.textContent = text;
+}
+
+async function commit(path, value) {
   const patch = {}; let cur = patch; const parts = path.split('.');
   parts.forEach((k, i) => { if (i === parts.length - 1) cur[k] = value; else cur = (cur[k] = {}); });
-  api.patchConfig(patch).catch(() => {});
+  const seq = ++_saveSeq;
+  setSaveState('saving', 'Salvando…');
+  try {
+    await api.patchConfig(patch);
+    let target = _cfg;
+    parts.forEach((k, i) => {
+      if (i === parts.length - 1) target[k] = value;
+      else target = (target[k] ||= {});
+    });
+    if (seq === _saveSeq) setSaveState('saved', '✓ Salvo');
+  } catch {
+    if (seq === _saveSeq) setSaveState('error', 'Falha ao salvar');
+  }
 }
 function showRestart() { byId('cfg-restart')?.classList.add('show'); }
 
@@ -122,7 +169,12 @@ function control(f) {
   const v = getPath(_cfg, f.path);
   const onChange = (val) => { commit(f.path, val); if (f.restart) showRestart(); };
   if (f.type === 'toggle') {
-    const t = el('div', { class: 'toggle' + (v ? ' on' : ''), onclick: () => { const on = !t.classList.contains('on'); t.classList.toggle('on', on); onChange(on); } }, el('div', { class: 'sw' }));
+    const t = el('button', { class: 'toggle toggle-button' + (v ? ' on' : ''), type: 'button',
+      role: 'switch', 'aria-checked': String(Boolean(v)), 'aria-label': f.label,
+      onclick: () => {
+        const on = !t.classList.contains('on');
+        t.classList.toggle('on', on); t.setAttribute('aria-checked', String(on)); onChange(on);
+      } }, el('span', { class: 'sw', 'aria-hidden': 'true' }));
     return t;
   }
   if (f.type === 'select') {
@@ -185,9 +237,11 @@ function renderPref(p) {
     ctl.value = cur; ctl.onchange = () => set(ctl.value);
   } else {
     const on = cur === 'true';
-    ctl = el('div', { class: 'toggle' + (on ? ' on' : ''), onclick: () => {
-      const now = !ctl.classList.contains('on'); ctl.classList.toggle('on', now); set(now);
-    } }, el('div', { class: 'sw' }));
+    ctl = el('button', { class: 'toggle toggle-button' + (on ? ' on' : ''), type: 'button',
+      role: 'switch', 'aria-checked': String(on), 'aria-label': p.label, onclick: () => {
+      const now = !ctl.classList.contains('on'); ctl.classList.toggle('on', now);
+      ctl.setAttribute('aria-checked', String(now)); set(now);
+    } }, el('span', { class: 'sw', 'aria-hidden': 'true' }));
   }
   return el('div', { class: 'cfg-row' },
     el('div', { class: 'cfg-meta' },
@@ -200,26 +254,39 @@ function renderPref(p) {
 function buildSettings() {
   const nav = byId('settings-nav'); const main = byId('settings-main');
   if (!nav || !main) return;
-  nav.innerHTML = '<div class="settings-title">⚙️ Configurações</div>';
-  main.innerHTML = '<div class="cfg-restart" id="cfg-restart">↻ Reinicie a Aila para aplicar algumas mudanças.</div>';
+  nav.innerHTML = '<div class="settings-brand"><div class="settings-title">AILA // AJUSTES</div>'
+    + '<div class="settings-subtitle">CENTRO DE CONTROLE</div></div>';
+  main.innerHTML = '<div class="settings-toolbar"><span id="cfg-save-status" class="cfg-save-status" data-state="idle">Tudo atualizado</span>'
+    + '<button class="settings-close-x" type="button" id="btn-settings-close-x" aria-label="Fechar configurações">×</button></div>'
+    + '<div class="cfg-restart" id="cfg-restart">↻ Reinicie a Aila para aplicar algumas mudanças.</div>';
 
   CATEGORIES.forEach((cat, idx) => {
     nav.append(el('button', { class: 'snav' + (idx === 0 ? ' active' : ''), 'data-p': cat.id,
+      'aria-current': idx === 0 ? 'page' : 'false',
       onclick: () => settingsTab(cat.id) }, `${cat.icon} ${cat.label}`));
 
-    const pane = el('section', { class: 'spane' + (idx === 0 ? ' active' : ''), id: 'sp-' + cat.id },
-      el('h3', {}, cat.label));
+    const pane = el('section', { class: 'spane' + (idx === 0 ? ' active' : ''), id: 'sp-' + cat.id,
+      'aria-hidden': String(idx !== 0) },
+      el('header', { class: 'settings-pane-head' },
+        el('div', { class: 'settings-pane-icon', 'aria-hidden': 'true' }, cat.icon),
+        el('div', {}, el('h3', {}, cat.label),
+          el('p', { class: 'settings-pane-desc' }, CATEGORY_DESCRIPTIONS[cat.id] || 'Configurações da Aila.'))));
     cat.blocks.forEach((b) => {
-      if (b.title) pane.append(el('div', { class: 'cfg-block-t' }, b.title));
-      if (b.fields) pane.append(el('div', { class: 'cfg-fields', 'data-fields': JSON.stringify(b.fields) }));
-      if (b.custom) pane.append(el('div', { class: 'html', html: CUSTOM_HTML[b.custom] || '' }));
-      if (b.pref) b.pref.forEach((p) => pane.append(renderPref(p)));
-      if (b.note) pane.append(el('p', { class: 'muted cfg-note' }, b.note));
+      const section = el('div', { class: 'cfg-section' + (b.note && !b.fields && !b.custom && !b.pref ? ' cfg-section-note' : '') });
+      if (b.title) section.append(el('div', { class: 'cfg-block-t' }, b.title));
+      if (b.fields) section.append(el('div', { class: 'cfg-fields', 'data-fields': JSON.stringify(b.fields) }));
+      if (b.custom) section.append(el('div', { class: 'html', html: CUSTOM_HTML[b.custom] || '' }));
+      if (b.pref) b.pref.forEach((p) => section.append(renderPref(p)));
+      if (b.note) section.append(el('p', { class: 'muted cfg-note' }, b.note));
+      pane.append(section);
     });
     main.append(pane);
   });
   nav.append(el('div', { class: 'spacer' }));
-  nav.append(el('button', { class: 'btn', id: 'btn-settings-close', onclick: closeSettings }, 'Fechar'));
+  nav.append(el('div', { class: 'settings-side-foot' },
+    el('span', {}, `${CATEGORIES.length} módulos`),
+    el('button', { class: 'btn', id: 'btn-settings-close', onclick: closeSettings }, 'Fechar')));
+  byId('btn-settings-close-x').onclick = closeSettings;
 }
 
 /* ---------- Memória (/api/memory — leitura) ---------- */
@@ -400,7 +467,16 @@ export function initSettings() {
 
   // fechar clicando fora
   byId('settings-overlay').addEventListener('click', (e) => { if (e.target.id === 'settings-overlay') closeSettings(); });
-  byId('settings-overlay').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSettings(); });
+  byId('settings-overlay').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeSettings(); return; }
+    if (e.key !== 'Tab') return;
+    const visible = [...byId('settings-overlay').querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((node) => !node.disabled && node.offsetParent !== null);
+    if (!visible.length) return;
+    const first = visible[0]; const last = visible[visible.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 
   // busca nas memórias (filtra a lista carregada)
   byId('mem-search')?.addEventListener('input', (e) => drawMemory(e.target.value));
