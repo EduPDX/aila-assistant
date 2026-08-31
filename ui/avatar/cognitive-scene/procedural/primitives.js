@@ -16,6 +16,51 @@ export const HOLO = {
   amberText: '#ffcf9a', // texto de atenção
 };
 
+const COLOR_ROLES = ['teal', 'blue', 'amber', 'dim'];
+const TEXT_ROLES = ['text', 'textDim', 'amberText'];
+
+function asHex(value, fallback) {
+  try { return new THREE.Color(value ?? fallback).getHex(); } catch (_) { return new THREE.Color(fallback).getHex(); }
+}
+
+/** Repinta a cena já construída sem recriar o VRM, geometrias ou texturas. */
+export function applyHoloTheme(root, palette = {}) {
+  const previous = Object.fromEntries(COLOR_ROLES.map((role) => [role, asHex(HOLO[role], 0xffffff)]));
+  const next = {
+    teal: asHex(palette.accent, HOLO.teal),
+    blue: asHex(palette.accent2, HOLO.blue),
+    amber: asHex(palette.warn, HOLO.amber),
+    dim: asHex(palette.id === 'light' ? palette.accent2 : palette.panel, HOLO.dim),
+    text: palette.text || HOLO.text,
+    textDim: palette.muted || HOLO.textDim,
+    amberText: palette.warn || HOLO.amberText,
+  };
+
+  root?.traverse?.((object) => {
+    const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
+    for (const material of materials) {
+      if (!material?.color) continue;
+      const current = material.color.getHex();
+      const role = COLOR_ROLES.find((name) => previous[name] === current);
+      if (role) {
+        material.color.setHex(next[role]);
+        material.userData._holoBlending ??= material.blending;
+        material.userData._holoOpacity ??= material.opacity;
+        material.blending = palette.id === 'light' ? THREE.NormalBlending : material.userData._holoBlending;
+        material.opacity = palette.id === 'light'
+          ? Math.min(1, material.userData._holoOpacity * 1.65)
+          : material.userData._holoOpacity;
+        material.needsUpdate = true;
+      }
+    }
+    const textRole = object.userData?._holoTextRole;
+    if (textRole && object.userData._setHoloTextColor) object.userData._setHoloTextColor(next[textRole]);
+  });
+
+  for (const role of COLOR_ROLES) HOLO[role] = next[role];
+  for (const role of TEXT_ROLES) HOLO[role] = next[role];
+}
+
 /** material de LINHA holográfica (aditivo, brilho sem bloom). */
 export function lineMat(color = HOLO.teal, opacity = 0.6) {
   return new THREE.LineBasicMaterial({
@@ -83,10 +128,12 @@ export function textPlane(text, { width = 1, px = 256, align = 'left', color = H
   const tx = align === 'center' ? cv.width / 2 : align === 'right' ? cv.width - 8 : 8;
   const maxW = cv.width - 16;
   let _last = null;
-  function draw(str) {
-    if (str === _last) return; _last = str;
+  let _color = color;
+  const textRole = TEXT_ROLES.find((role) => HOLO[role] === color) || null;
+  function draw(str, force = false) {
+    if (!force && str === _last) return; _last = str;
     ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.fillStyle = color; ctx.textBaseline = 'middle'; ctx.textAlign = align;
+    ctx.fillStyle = _color; ctx.textBaseline = 'middle'; ctx.textAlign = align;
     let fs = size; ctx.font = `${fs}px ${font}`;
     const w = ctx.measureText(str).width;         // auto-encolhe p/ caber
     if (w > maxW) { fs = Math.max(9, Math.floor(size * maxW / w)); ctx.font = `${fs}px ${font}`; }
@@ -99,6 +146,8 @@ export function textPlane(text, { width = 1, px = 256, align = 'left', color = H
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width * ratio), mat);
   mesh.userData._tex = tex;
+  mesh.userData._holoTextRole = textRole;
+  mesh.userData._setHoloTextColor = (value) => { _color = value; draw(_last, true); };
   return { mesh, texture: tex, canvas: cv, setText: draw };
 }
 

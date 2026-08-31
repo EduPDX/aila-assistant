@@ -6,10 +6,10 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self' data: blob: ws://127.0.0.1:* ws://localhost:* wss://127.0.0.1:* wss://localhost:*; worker-src 'self' blob:; object-src 'none'; base-uri 'self'" />
 <title>Aila — Avatar 3D</title>
 <style>
-  :root { --accent:#35d0ba; --bg:#0a0e14; --panel:#0f1620; --border:#1e2a3a; --muted:#6b7c93; }
+  :root { --accent:#35d0ba; --accent-2:#7ab8ff; --bg:#0a0e14; --bg-2:#16202c; --panel:#0f1620; --border:#1e2a3a; --text:#d7e0ea; --muted:#6b7c93; }
   * { box-sizing:border-box; margin:0; }
-  html,body { height:100%; background:radial-gradient(circle at 50% 30%, #16202c, var(--bg)); overflow:hidden;
-    font-family:"Segoe UI",system-ui,sans-serif; color:#d7e0ea; }
+  html,body { height:100%; background:radial-gradient(circle at 50% 30%, var(--bg-2), var(--bg)); overflow:hidden;
+    font-family:"Segoe UI",system-ui,sans-serif; color:var(--text); transition:background .25s ease; }
   #app { position:fixed; inset:0; }
   #canvas { width:100%; height:100%; display:block; }
   /* overlay ocultado: o espaço superior-esquerdo é do mini-subconsciente; a
@@ -79,6 +79,7 @@ import { AnimationController } from './avatar/animation-controller.js';
 import { AvatarDebug } from './avatar/debug.js';
 import { SceneManager } from './avatar/cognitive-scene/scene-manager.js';   // Cognitive Scene (Fase 1)
 import { loadSceneDef, applySceneDef } from './avatar/cognitive-scene/scene-loader.js';  // Fase 7: JSON declarativo
+import { applyHoloTheme } from './avatar/cognitive-scene/procedural/primitives.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -120,6 +121,16 @@ controls.update();
 // Flag localStorage 'aila.scene'='off' desliga tudo (avatar volta ao normal).
 const sceneManager = new SceneManager(scene, camera, controls);
 window.ailaScene = sceneManager;   // console: ailaScene.setEnabled(false)
+let _activeTheme = null;
+
+function applyTheme(payload = {}) {
+  _activeTheme = payload;
+  const root = document.documentElement;
+  const vars = { accent:'--accent', accent2:'--accent-2', bg:'--bg', bg2:'--bg-2', panel:'--panel', border:'--border', text:'--text', muted:'--muted' };
+  for (const [key, cssVar] of Object.entries(vars)) if (payload[key]) root.style.setProperty(cssVar, payload[key]);
+  applyHoloTheme(sceneManager.root, payload);
+  if (scene.fog && payload.bg) scene.fog.color.set(payload.bg);
+}
 
 // Fase 7: carrega definição declarativa da cena (JSON). Assíncrono: se o JSON
 // não existir ou falhar, os defaults hardcoded são mantidos.
@@ -302,6 +313,7 @@ function loadVRM(url, revokeWhenDone = false) {
     clock.getDelta();                                          // zera o dt (evita saia "explodir")
     frameVRM();
     sceneManager.build();                                      // Cognitive Scene: chão + monitor (1x)
+    if (_activeTheme) applyTheme(_activeTheme);                 // repinta objetos criados após o load do iframe
     sceneManager.setController(controller);                    // Fase 3: IK aponta p/ a cena
     sceneManager.compose(vrm);                                 // posiciona monitor + diagonal + enquadra o palco
     $('loading').style.display = 'none';
@@ -443,6 +455,7 @@ addEventListener('message', (e) => {
   const d = e.data || {};
   switch (d.type) {
     case 'aila:reloadVRM': loadVRM('/static/models/avatar.vrm?t=' + Date.now()); break;
+    case 'aila:theme':     applyTheme(d.payload); break;
     case 'aila:emotion':   applyEmotion(d.value, d.gesture); if (d.state) $('state').textContent = d.state; break;
     case 'aila:behavior':  controller?.applyBehavior(d.spec); if (d.spec) { $('emotion').textContent = d.spec.emotion || 'neutral'; sceneManager.setState(d.spec.cognitive_ui || d.spec.intent, d.spec.interaction); } break;
     case 'aila:status':    applyStatus(d.value); break;

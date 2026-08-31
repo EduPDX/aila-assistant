@@ -14,6 +14,7 @@ export const avatarGesture = (name) => toAvatar({ type: 'aila:gesture', value: n
 export const avatarGestureSequence = (names) => toAvatar({ type: 'aila:gesture_seq', values: names });
 export const avatarMouth = (v) => toAvatar({ type: 'aila:mouth', value: v });
 export const avatarReload = () => toAvatar({ type: 'aila:reloadVRM' });
+export const avatarTheme = (payload) => toAvatar({ type: 'aila:theme', payload });
 // P8: pausa/retoma o render do avatar conforme ele está (ou não) na tela
 export const avatarShow = (on) => toAvatar({ type: on ? 'aila:show' : 'aila:hide' });
 // VRAM Fase 2: encaminha o estado (green/yellow/red) p/ o avatar degradar o pixelRatio

@@ -2,7 +2,7 @@
 // Autonomia · Rede & Privacidade · Sistema. Só o que o backend suporta.
 import { byId, $$, el } from './dom.js';
 import { State } from './state.js';
-import { avatarReload } from './avatar.js';
+import { avatarReload, avatarTheme } from './avatar.js';
 import { renderProviders } from './views/providers.js';
 import { api } from './core/api.js';
 import { confirmDialog } from './ui.js';
@@ -25,6 +25,24 @@ export function setTheme(id) {
   document.documentElement.setAttribute('data-theme', id);
   localStorage.setItem('aila-theme', id);
   $$('.swatch').forEach((s) => s.classList.toggle('active', s.dataset.id === id));
+  sendAvatarTheme();
+}
+
+function currentThemePayload() {
+  const css = getComputedStyle(document.documentElement);
+  const value = (name) => css.getPropertyValue(name).trim();
+  return {
+    id: document.documentElement.dataset.theme || 'aqua',
+    bg: value('--bg'), bg2: value('--bg-2'), panel: value('--panel'),
+    panel2: value('--panel-2'), border: value('--border'), text: value('--text'),
+    muted: value('--muted'), accent: value('--accent'), accent2: value('--accent-2'),
+    warn: value('--warn'),
+  };
+}
+
+function sendAvatarTheme() {
+  // Aguarda o style recalculado para color-mix e variáveis herdadas refletirem o tema.
+  requestAnimationFrame(() => avatarTheme(currentThemePayload()));
 }
 
 function applyAppearancePrefs() {
@@ -467,6 +485,7 @@ function bindStatusRows() {
 }
 
 export function initSettings() {
+  byId('avatar3d')?.addEventListener('load', sendAvatarTheme);
   buildSettings();     // gera nav + painéis a partir do schema
 
   // swatches de tema (o container #themes é gerado no bloco custom de "Geral")
