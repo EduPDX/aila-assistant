@@ -57,9 +57,9 @@ export class StageComposer {
     // Racks ao fundo: compõem o cenário sem entrar no cálculo da câmera e sem
     // competir visualmente com as telas de trabalho.
     if (infrastructureGroup) {
-      infrastructureGroup.position.set(c.x - h * 0.45, feetY, c.z - h * 2.28);
+      infrastructureGroup.position.set(c.x - h * 0.45, feetY, c.z - h * 2.38);
       infrastructureGroup.rotation.set(0, 0, 0);
-      infrastructureGroup.scale.setScalar(s * 0.82);
+      infrastructureGroup.scale.setScalar(s * 0.88);
     }
 
     // vira o corpo p/ as telas (diagonal sutil; olhos seguem o usuário via lookAt).

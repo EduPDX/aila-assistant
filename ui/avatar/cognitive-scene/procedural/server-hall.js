@@ -68,7 +68,7 @@ function createRack(data, index) {
   root.add(new THREE.LineSegments(slotGeo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false })));
 
   // LEDs: duas colunas de atividade, um draw call por rack.
-  const ledGeo = new THREE.PlaneGeometry(w * 0.025, h * 0.007);
+  const ledGeo = new THREE.BoxGeometry(w * 0.025, h * 0.007, d * 0.018);
   const ledMat = glowMat(color, data.status === 'offline' ? 0.12 : 0.8);
   const leds = new THREE.InstancedMesh(ledGeo, ledMat, 12);
   const matrix = new THREE.Matrix4();
@@ -96,7 +96,7 @@ function createRack(data, index) {
 
   // Malha perfurada nos módulos: 60 furos em um único draw call. É o detalhe
   // que faz a frente lembrar uma grade de ventilação de servidor real.
-  const holeGeo = new THREE.CircleGeometry(w * 0.006, 6);
+  const holeGeo = new THREE.BoxGeometry(w * 0.010, h * 0.006, d * 0.010);
   const holes = new THREE.InstancedMesh(holeGeo, new THREE.MeshBasicMaterial({
     color: 0x02070c, transparent: true, opacity: 0.95,
   }), 60);
@@ -113,7 +113,7 @@ function createRack(data, index) {
   const drives = new THREE.InstancedMesh(driveGeo, new THREE.MeshBasicMaterial({
     color: 0x0b2130, transparent: true, opacity: 0.96,
   }), 4);
-  const latchGeo = new THREE.PlaneGeometry(w * 0.055, h * 0.009);
+  const latchGeo = new THREE.BoxGeometry(w * 0.055, h * 0.009, d * 0.018);
   const latches = new THREE.InstancedMesh(latchGeo, glowMat(color, 0.38), 4);
   for (let i = 0; i < 4; i++) {
     const x = (i % 2 ? 1 : -1) * w * 0.075;
@@ -124,14 +124,14 @@ function createRack(data, index) {
   root.add(drives, latches);
 
   // Painel de rede/controle: portas RJ45, USB e botão de energia.
-  const portGeo = new THREE.PlaneGeometry(w * 0.045, h * 0.025);
+  const portGeo = new THREE.BoxGeometry(w * 0.045, h * 0.025, d * 0.018);
   const ports = new THREE.InstancedMesh(portGeo, new THREE.MeshBasicMaterial({ color: 0x02080d }), 6);
   for (let i = 0; i < 6; i++) {
     mm.makeTranslation(-w * 0.16 + i * w * 0.063, h * 0.285, d * 0.57);
     ports.setMatrixAt(i, mm);
   }
   root.add(ports);
-  const power = new THREE.Mesh(new THREE.RingGeometry(w * 0.014, w * 0.024, 14), glowMat(color, 0.9));
+  const power = new THREE.Mesh(new THREE.TorusGeometry(w * 0.019, w * 0.006, 6, 14), glowMat(color, 0.9));
   power.position.set(w * 0.30, h * 0.285, d * 0.575); root.add(power);
 
   // Numeração das unidades e identificação do cluster na própria porta.
@@ -146,7 +146,7 @@ function createRack(data, index) {
   clusterId.mesh.position.set(0, -h * 0.405, d * 0.575); root.add(clusterId.mesh);
 
   // Ventilação superior e controlador/visor de status.
-  const fanGeo = new THREE.RingGeometry(w * 0.055, w * 0.09, 18);
+  const fanGeo = new THREE.TorusGeometry(w * 0.072, w * 0.014, 6, 18);
   for (const x of [-w * 0.22, 0, w * 0.22]) {
     const fan = new THREE.Mesh(fanGeo, glowMat(color, 0.28));
     fan.position.set(x, h * 0.355, d * 0.55); root.add(fan);
@@ -187,6 +187,13 @@ function createRack(data, index) {
   root.traverse((obj) => {
     obj.renderOrder = -20;
     if (obj.isMesh && obj.material) obj.material.side = THREE.DoubleSide;
+    // Elementos luminosos e linhas técnicas não participam da profundidade da
+    // carcaça translúcida. Assim continuam legíveis de cima, de baixo e de lado.
+    if (obj.material && (obj.material.blending === THREE.AdditiveBlending || obj.isLine)) {
+      obj.material.depthTest = false;
+      obj.material.depthWrite = false;
+      obj.renderOrder = -10;
+    }
   });
   // A carcaça é desenhada primeiro; porta, módulos e indicadores ficam acima
   // dela e não somem por ordenação de transparência em ângulos oblíquos.
