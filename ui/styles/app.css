@@ -285,6 +285,21 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .settings-toolbar { position: sticky; z-index: 5; top: 0; height: 46px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; background: linear-gradient(var(--glass-bg) 72%, transparent); backdrop-filter: blur(10px); }
 .settings-close-x { width: 30px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--muted); background: var(--panel-2); cursor: pointer; font-size: 20px; line-height: 1; }
 .settings-close-x:hover { color: var(--text); border-color: var(--hud-line); }
+/* Ícones desenhados geometricamente: os glifos ×/＋ das fontes do sistema têm
+   caixas assimétricas e parecem deslocados mesmo com flex centralizado. */
+.settings-close-x, .mind-close, .task-new { position: relative; overflow: hidden; text-indent: -999px; white-space: nowrap; }
+.settings-close-x::before, .settings-close-x::after,
+.mind-close::before, .mind-close::after,
+.task-new::before, .task-new::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 1.5px;
+  border-radius: 2px; background: currentColor; transform-origin: center;
+}
+.settings-close-x::before, .mind-close::before { transform: translate(-50%, -50%) rotate(45deg); }
+.settings-close-x::after, .mind-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.task-new::before { transform: translate(-50%, -50%); }
+.task-new::after { transform: translate(-50%, -50%) rotate(90deg); }
+.settings-close-x:hover, .settings-close-x:focus-visible,
+.mind-close:hover, .mind-close:focus-visible { color: var(--text); }
 .cfg-save-status { font: 10px var(--font-mono); letter-spacing: .7px; color: var(--muted); transition: color var(--dur-1); }
 .cfg-save-status[data-state="saving"] { color: var(--warn); }
 .cfg-save-status[data-state="saved"] { color: var(--ok); }
@@ -557,7 +572,7 @@ body[data-drawer="open"] .statuspanel.inspector {
 
 /* ---------- Task Center ---------- */
 .task-new { background: none; border: 1px solid var(--border); color: var(--accent); cursor: pointer;
-  width: 24px; height: 24px; border-radius: var(--r-sm); font-size: 15px; line-height: 1; transition: border-color var(--dur-1), background var(--dur-1); }
+  width: 24px; height: 24px; padding: 0; border-radius: var(--r-sm); font-size: 15px; line-height: 1; transition: border-color var(--dur-1), background var(--dur-1); }
 .task-new:hover { border-color: var(--glass-border); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .task-note { display: none; font-size: var(--fs-xs); color: var(--warn); padding: 6px 8px; border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--warn) 12%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border)); }
