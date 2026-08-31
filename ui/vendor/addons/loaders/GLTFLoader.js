@@ -2597,7 +2597,11 @@ class GLTFParser {
 
 		}
 
-		if ( typeof createImageBitmap === 'undefined' || ( isSafari && safariVersion < 17 ) || ( isFirefox && firefoxVersion < 98 ) ) {
+		// Electron desta aplicação expõe createImageBitmap(), mas falha ao
+		// decodificar as texturas PNG embutidas de alguns VRMs. O caminho clássico
+		// por HTMLImageElement é mais compatível e ocorre apenas ao trocar o avatar.
+		const preferCompatibleTextureLoader = true;
+		if ( preferCompatibleTextureLoader || typeof createImageBitmap === 'undefined' || ( isSafari && safariVersion < 17 ) || ( isFirefox && firefoxVersion < 98 ) ) {
 
 			this.textureLoader = new TextureLoader( this.options.manager );
 
@@ -2607,7 +2611,9 @@ class GLTFParser {
 
 		}
 
-		this.textureLoader.setCrossOrigin( this.options.crossOrigin );
+		// Data URIs do VRM são locais ao documento; `anonymous` faz algumas
+		// versões do Electron rejeitarem até PNGs válidos de 8x8.
+		this.textureLoader.setCrossOrigin( preferCompatibleTextureLoader ? '' : this.options.crossOrigin );
 		this.textureLoader.setRequestHeader( this.options.requestHeader );
 
 		this.fileLoader = new FileLoader( this.options.manager );
@@ -3331,7 +3337,7 @@ class GLTFParser {
 
 		} ).catch( function ( error ) {
 
-			console.error( 'THREE.GLTFLoader: Couldn\'t load texture', sourceURI );
+			console.error( 'THREE.GLTFLoader: Couldn\'t load texture', sourceURI, error );
 			throw error;
 
 		} );

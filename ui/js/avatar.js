@@ -21,6 +21,7 @@ export const avatarVramPressure = (state) => toAvatar({ type: 'aila:vram-pressur
 // Cognitive Scene: métricas REAIS (GPU/CPU/VRAM/modelo/tokens) → tela de STATUS
 export const avatarMetrics = (payload) => toAvatar({ type: 'aila:metrics', payload });
 export const avatarInfrastructure = (payload) => toAvatar({ type: 'aila:infrastructure', payload });
+export const avatarTelemetry = (payload) => toAvatar({ type: 'aila:telemetry', payload });
 // Cognitive Scene: RESUMO curto que a Aila fala → balão holográfico (Jarvis)
 export const avatarSay = (text) => toAvatar({ type: 'aila:say', text });
 

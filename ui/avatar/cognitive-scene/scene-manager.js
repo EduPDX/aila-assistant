@@ -125,6 +125,9 @@ export class SceneManager {
   /** alimenta a tela de STATUS com o snapshot real de /api/metrics (+ estado). */
   setMetrics(m) { this.status?.setMetrics(m); }
 
+  /** Telemetria real resumida para a tela cognitiva principal. */
+  setTelemetry(m) { this.monitor?.setTelemetry?.(m); }
+
   /** Inventário seguro de modelos locais e APIs configuradas. */
   setInfrastructure(payload) { this.infrastructure?.setData(payload); }
 

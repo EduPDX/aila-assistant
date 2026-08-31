@@ -448,6 +448,7 @@ addEventListener('message', (e) => {
     case 'aila:gesture_seq': playGestureSequence(d.values); break;
     case 'aila:vram-pressure': applyVramPressure(d.state); break;
     case 'aila:metrics':   sceneManager.setMetrics(d.payload); break;   // dados reais → tela de STATUS
+    case 'aila:telemetry': sceneManager.setTelemetry(d.payload); break; // dados reais → tela PRINCIPAL
     case 'aila:infrastructure': sceneManager.setInfrastructure(d.payload); break;
     case 'aila:say':       sceneManager.showMessage(d.text); break;     // resumo → balão holográfico
     case 'aila:interaction': sceneManager.interact(d.spec); break;      // {type,target} → aponta (IK)

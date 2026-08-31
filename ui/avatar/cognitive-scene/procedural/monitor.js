@@ -113,7 +113,8 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
   const fill = new THREE.Mesh(new THREE.PlaneGeometry(barW, 0.03), glowMat(HOLO.teal, 0.85));
   const setConfidence = (v) => { const c = Math.max(0, Math.min(1, v)); fill.scale.x = c || 1e-3; fill.position.set(barX - barW / 2 + (barW * c) / 2, barY, 0.007); };
   group.add(fill); setConfidence(0.87);
-  at(textPlane('CONFIDENCE 87%', { width: W * 0.26, px: 448, size: 26, color: HOLO.text }).mesh, barX - W * 0.06, barY + 0.05, 0.007);
+  const pressureText = textPlane('PRESSURE —', { width: W * 0.26, px: 448, size: 26, color: HOLO.text });
+  at(pressureText.mesh, barX - W * 0.06, barY + 0.05, 0.007);
   reg('confidence', fill);
 
   // ---- MODO por intent (Fase 2): a interface representa o que a Aila faz ----
@@ -131,6 +132,21 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
     conversation:   { nav: 'graph',   verb: 'READY' },
   };
   let verb = 'PROCESSING';
+  const history = new Float32Array(60);
+  function setTelemetry(v) {
+    const telemetry = v || null;
+    if (!telemetry) return;
+    history.copyWithin(0, 1); history[history.length - 1] = Math.max(0, Math.min(1, (telemetry.cpu || 0) / 100));
+    wave.set((u) => history[Math.min(history.length - 1, Math.floor(u * history.length))]);
+    const cpu = (telemetry.cpu || 0) / 100, gpu = (telemetry.gpu || 0) / 100;
+    const ram = (telemetry.ram || 0) / 100, vram = (telemetry.vram || 0) / 100;
+    bars.set([cpu, gpu, ram, vram, cpu, gpu, ram, vram, cpu, gpu, ram, vram]);
+    stream.setLines(telemetry.lines || []);
+    const pressure = String(telemetry.pressure || 'green').toUpperCase();
+    pressureText.setText(`PRESSURE ${pressure}`);
+    setConfidence(1 - Math.max(cpu, gpu, ram, vram));
+    readout.setText(`MEM ${telemetry.memories || 0}    MODELS ${telemetry.models || 0}    TPS ${Number(telemetry.tps || 0).toFixed(1)}`);
+  }
   let _intensity = 0.6;
   let _stateVisual = null;
   function setMode(intent) {
@@ -142,7 +158,7 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
   function applyStateVisuals(sv) { _stateVisual = sv; }
 
   // ---- animação ----
-  let t = 0, tRead = 0, tDots = 0, dots = 0;
+  let t = 0, tDots = 0, dots = 0;
   function update(dt) {
     t += dt;
     const sv = _stateVisual;
@@ -151,17 +167,9 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
     scanTex.offset.y = (scanTex.offset.y - dt * scanSpd) % 1;
     scan.material.opacity = (0.36 + Math.sin(t * 2.1) * 0.05) * (_intensity / 0.6) * glow;
     cluster.update(t);
-    stream.update(dt);
-    wave.set((u) => 0.5 + Math.sin(u * 12 + t * 3) * 0.28 * Math.sin(u * Math.PI) + Math.sin(u * 30 + t * 5) * 0.06);
-    const bh = []; for (let i = 0; i < 12; i++) bh.push(0.22 + Math.abs(Math.sin(t * 2 + i * 0.6)) * 0.72); bars.set(bh);
-    tRead += dt; if (tRead > 0.4) {
-      tRead = 0;
-      const nodes = 880 + ((Math.random() * 8) | 0), tok = 1240 + ((Math.random() * 60) | 0), lat = 320 + ((Math.random() * 50) | 0);
-      readout.setText(`NODES ${nodes}    TOKENS ${tok}    LAT ${lat}ms`);
-    }
     tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText((sv ? sv.verb : verb) + '.'.repeat(dots)); }
   }
 
   function dispose() { disposeObject(group); scanTex.dispose(); }
-  return { group, anchors, update, dispose, setConfidence, setMode, setIntensity, applyStateVisuals };
+  return { group, anchors, update, dispose, setConfidence, setTelemetry, setMode, setIntensity, applyStateVisuals };
 }

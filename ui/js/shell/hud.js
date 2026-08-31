@@ -8,7 +8,7 @@
 // ============================================================
 import { State, STATUS_LABEL } from '../state.js';
 import { api } from '../core/api.js';
-import { avatarVramPressure, avatarMetrics, avatarInfrastructure } from '../avatar.js';
+import { avatarVramPressure, avatarMetrics, avatarInfrastructure, avatarTelemetry } from '../avatar.js';
 
 const R = 26;
 const C = 2 * Math.PI * R;
@@ -84,7 +84,19 @@ export function initHud() {
 
 async function pollInfrastructure() {
   if (document.hidden) return;
-  try { avatarInfrastructure(await api.infrastructure()); }
+  try {
+    const [infra, status, events] = await Promise.all([api.infrastructure(), api.status(), api.events(4)]);
+    avatarInfrastructure(infra);
+    const m = State.get().metrics || {};
+    const g = m.gpu || {};
+    avatarTelemetry({
+      cpu: m.cpu || 0, gpu: g.util || 0, ram: m.ram?.percent || 0,
+      vram: g.vram_total_mb ? g.vram_used_mb / g.vram_total_mb * 100 : 0,
+      pressure: g.state || 'green', tps: m.tps || 0,
+      memories: status.memory_count || 0, models: infra.racks?.length || 0,
+      lines: (events.events || []).map((e) => `${String(e.type || 'EVENT').toUpperCase()}  ${String(e.label || e.status || e.state || 'OK').toUpperCase()}`),
+    });
+  }
   catch (e) { /* mantém o último inventário durante indisponibilidade */ }
 }
 

@@ -135,7 +135,6 @@ export function barMeter(count, w, h, mat) {
 export function dataStream(nRows, w, { color = HOLO.textDim, size = 28, rowH = 0.058, hz = 1.6 } = {}) {
   const g = new THREE.Group();
   const rows = [];
-  const TAGS = ['MEM', 'CTX', 'TOK', 'VEC', 'GRAPH', 'EMB', 'LLM', 'IO', 'NODE', 'ATTN'];
   for (let i = 0; i < nRows; i++) {
     const tp = textPlane('', { width: w, px: 640, size, align: 'left', color });
     tp.mesh.position.y = -i * rowH;
@@ -143,18 +142,15 @@ export function dataStream(nRows, w, { color = HOLO.textDim, size = 28, rowH = 0
     g.add(tp.mesh); rows.push(tp);
   }
   const texts = new Array(nRows).fill('');
-  const gen = () => {
-    const t = TAGS[(Math.random() * TAGS.length) | 0];
-    const hex = Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
-    return `${t.padEnd(5)} 0x${hex}  ${(Math.random() * 100).toFixed(1)}%`;
+  const setLines = (values = []) => {
+    const clean = values.slice(-nRows).map((v) => String(v || '').slice(0, 54));
+    while (clean.length < nRows) clean.unshift('');
+    for (let i = 0; i < nRows; i++) {
+      texts[i] = clean[i];
+      rows[i].setText(clean[i]);
+    }
   };
-  let acc = 0;
-  const update = (dt) => {
-    acc += dt; if (acc < 1 / hz) return; acc = 0;
-    texts.shift(); texts.push(gen());
-    for (let i = 0; i < nRows; i++) rows[i].setText(texts[i]);
-  };
-  return { group: g, update };
+  return { group: g, update() {}, setLines };
 }
 
 /** BARRA horizontal (fundo + preenchimento). set(0..1) escala o preenchimento. */
