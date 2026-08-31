@@ -20,9 +20,10 @@ export function initInspector() {
   const box = byId('statuspanel');
   if (!box) return;
   box.classList.add('inspector');
+  box.setAttribute('aria-label', 'Atividade e estado da Aila');
   box.innerHTML = `
-    <div class="insp-tabs" id="insp-tabs">
-      ${TABS.map((t, i) => `<button class="insp-tab${i === 0 ? ' active' : ''}" data-p="${t.id}">${t.label}</button>`).join('')}
+    <div class="insp-tabs" id="insp-tabs" role="tablist">
+      ${TABS.map((t, i) => `<button class="insp-tab${i === 0 ? ' active' : ''}" role="tab" aria-selected="${i === 0}" aria-controls="insp-${t.id}" data-p="${t.id}">${t.label}</button>`).join('')}
     </div>
     <div class="insp-body">
       <div class="insp-pane active" id="insp-activity"></div>
@@ -42,6 +43,10 @@ export function initInspector() {
 }
 
 function selectTab(p) {
-  byId('insp-tabs').querySelectorAll('.insp-tab').forEach((b) => b.classList.toggle('active', b.dataset.p === p));
+  byId('insp-tabs').querySelectorAll('.insp-tab').forEach((b) => {
+    const active = b.dataset.p === p;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-selected', String(active));
+  });
   document.querySelectorAll('.insp-pane').forEach((s) => s.classList.toggle('active', s.id === 'insp-' + p));
 }

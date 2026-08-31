@@ -1078,6 +1078,12 @@ body[data-tab="chat"] .subc { display: none; }           /* na aba Conversa: só
 /* MOBILE: o drawer no fluxo espremeria o palco → volta a SOBREPOR (fixed).
    (vem depois da regra dos colchetes p/ vencer o position:relative dela) */
 @media (max-width: 860px) {
+  /* deve vir depois do skin HUD: evita a regra genérica position:relative
+     empurrar toda a aplicação 300px para a direita. */
+  .sidebar {
+    position: fixed;
+    margin-left: 0;
+  }
   .statuspanel.inspector {
     position: fixed; top: 0; right: 0; bottom: 0; z-index: 45;
     width: min(320px, 86vw) !important;   /* vence a largura 0/320 do fluxo */
@@ -1086,6 +1092,15 @@ body[data-tab="chat"] .subc { display: none; }           /* na aba Conversa: só
   }
   .statuspanel.inspector > * { width: min(320px, 86vw); }
   body[data-drawer="open"] .statuspanel.inspector { transform: translateX(0); }
+
+  .settings { flex-direction: column; width: min(94vw, 560px); height: min(92vh, 680px); }
+  .settings-side { width: 100%; max-height: 150px; flex-direction: row; flex-wrap: wrap;
+    overflow-y: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: var(--s-2); }
+  .settings-title { width: 100%; margin: 0; }
+  .snav { padding: 7px 9px; }
+  .settings-main { padding: var(--s-3); }
+  .cfg-row { align-items: flex-start; flex-direction: column; gap: 7px; }
+  .cfg-ctl, .cfg-input, .cfg-range { width: 100%; max-width: none; }
 }
 
 /* ── Recursos (R11): diagnóstico de Resource Intelligence ─────────────── */

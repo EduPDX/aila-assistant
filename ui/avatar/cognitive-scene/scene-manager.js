@@ -18,6 +18,7 @@ import { StageComposer } from './stage-composer.js';
 import { STATE_VISUALS, DEFAULT_STATE_VISUAL } from './state-visuals.js';
 import { preloadAssets, getAsset, cloneAsset } from './scene-assets.js';
 import { createThinkingPanel } from './procedural/thinking-panel.js';
+import { createServerHall } from './procedural/server-hall.js';
 
 // intent → âncora que a Aila aponta (Fase 3)
 const POINT_TARGET = { analysis: 'panel_analysis', coding: 'panel_analysis', reading: 'panel_analysis', search: 'panel_memory', thinking: 'panel_memory' };
@@ -85,6 +86,10 @@ export class SceneManager {
     this.thinking.group.visible = false;
     this.root.add(this.thinking.group);
 
+    // Infraestrutura cognitiva: racks reais, discretos e atrás da Aila.
+    this.infrastructure = createServerHall();
+    this.root.add(this.infrastructure.group);
+
     // Fase 8: tenta carregar assets GLB (async, não bloqueia).
     // Se existirem, substitui os elementos procedurais por meshes.
     this._loadAssets();
@@ -114,11 +119,14 @@ export class SceneManager {
   /** posiciona as telas relativo ao avatar + compõe a câmera diagonal. */
   compose(vrm) {
     if (!this.enabled || !this._built || !vrm) return;
-    this.composer.compose(vrm, this.monitor.group, this._ring, this.status.group, this.message.group);
+    this.composer.compose(vrm, this.monitor.group, this._ring, this.status.group, this.message.group, this.infrastructure?.group);
   }
 
   /** alimenta a tela de STATUS com o snapshot real de /api/metrics (+ estado). */
   setMetrics(m) { this.status?.setMetrics(m); }
+
+  /** Inventário seguro de modelos locais e APIs configuradas. */
+  setInfrastructure(payload) { this.infrastructure?.setData(payload); }
 
   /** mostra o RESUMO curto da resposta da Aila no balão holográfico (Jarvis). */
   showMessage(text) { this.message?.show(text); }
@@ -247,6 +255,7 @@ export class SceneManager {
     this.status?.update(dt);
     this.message?.update(dt);
     this.thinking?.update(dt);
+    this.infrastructure?.update(dt);
     this.interactions.update(dt);
     if (this._pointCooldown > 0) this._pointCooldown -= dt;
     if (this._ring) this._ring.rotation.z += dt * this._ringSpeed;   // giro lento do anel

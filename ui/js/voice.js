@@ -2,7 +2,7 @@
 import { byId } from './dom.js';
 import { avatarMouth } from './avatar.js';
 
-let ttsAudio, lipCtx, lipAnalyser, lipBuf;
+let ttsAudio, ttsObjectUrl, lipCtx, lipAnalyser, lipBuf;
 let _onTranscript = () => {};
 export function setTranscriptHandler(fn) { _onTranscript = fn; }
 
@@ -15,7 +15,9 @@ export async function speak(text) {
     if (!r.ok) return;
     const blob = await r.blob();
     if (ttsAudio) { try { ttsAudio.pause(); } catch (e) {} }
-    ttsAudio = new Audio(URL.createObjectURL(blob));
+    if (ttsObjectUrl) URL.revokeObjectURL(ttsObjectUrl);
+    ttsObjectUrl = URL.createObjectURL(blob);
+    ttsAudio = new Audio(ttsObjectUrl);
     lipCtx = lipCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (lipCtx.state === 'suspended') await lipCtx.resume();
     const src = lipCtx.createMediaElementSource(ttsAudio);
@@ -23,7 +25,7 @@ export async function speak(text) {
     lipBuf = new Uint8Array(lipAnalyser.fftSize);
     src.connect(lipAnalyser); lipAnalyser.connect(lipCtx.destination);
     _driveMouth();
-    ttsAudio.onended = () => { lipAnalyser = null; avatarMouth(0); _speaking(false); };
+    ttsAudio.onended = () => { lipAnalyser = null; avatarMouth(0); _speaking(false); releaseAudioUrl(); };
     _speaking(true);
     await ttsAudio.play();
   } catch (e) { _speaking(false); /* voz indisponível: silencioso */ }
@@ -35,6 +37,11 @@ export function stopSpeaking() {
   lipAnalyser = null;
   avatarMouth(0);
   _speaking(false);
+  releaseAudioUrl();
+}
+
+function releaseAudioUrl() {
+  if (ttsObjectUrl) { URL.revokeObjectURL(ttsObjectUrl); ttsObjectUrl = null; }
 }
 
 function _speaking(on) { byId('btn-stop')?.classList.toggle('show', on); }

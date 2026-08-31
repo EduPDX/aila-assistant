@@ -18,7 +18,7 @@ export class StageComposer {
 
   /** posiciona as telas LADO A LADO + gira o avatar + enquadra a câmera a NÍVEL
    *  DOS OLHOS (nada de câmera de cima; nada de uma tela atrás da outra). */
-  compose(vrm, monitorGroup, ring, statusGroup, messageGroup) {
+  compose(vrm, monitorGroup, ring, statusGroup, messageGroup, infrastructureGroup) {
     if (!vrm) return;
     const box0 = new THREE.Box3().setFromObject(vrm.scene);
     if (box0.isEmpty()) return;
@@ -52,6 +52,14 @@ export class StageComposer {
       messageGroup.position.set(c.x + h * 1.02, eyeY + h * 0.02, c.z + h * 0.30);
       messageGroup.rotation.set(0, -0.26, 0);
       messageGroup.scale.setScalar(s * 0.92);
+    }
+
+    // Racks ao fundo: compõem o cenário sem entrar no cálculo da câmera e sem
+    // competir visualmente com as telas de trabalho.
+    if (infrastructureGroup) {
+      infrastructureGroup.position.set(c.x - h * 0.45, feetY, c.z - h * 2.05);
+      infrastructureGroup.rotation.set(0, 0, 0);
+      infrastructureGroup.scale.setScalar(s * 0.76);
     }
 
     // vira o corpo p/ as telas (diagonal sutil; olhos seguem o usuário via lookAt).

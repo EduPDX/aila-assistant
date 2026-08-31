@@ -42,6 +42,7 @@ function openGraph(kind) {
 
 /* ---------- permissão ---------- */
 let permId = null;
+let permFocus = null;
 function showPerm(m) {
   permId = m.id;
   const risk = (m.risk || 'review').toLowerCase();
@@ -54,11 +55,16 @@ function showPerm(m) {
   badge.dataset.risk = risk;
   byId('perm-modal').dataset.risk = risk;
   byId('perm-allow').className = 'btn ' + (risk === 'danger' ? 'danger' : 'accent');
-  byId('perm-overlay').classList.add('show');
+  const overlay = byId('perm-overlay');
+  permFocus = document.activeElement;
+  overlay.classList.add('show'); overlay.setAttribute('aria-hidden', 'false');
+  byId('perm-modal').focus();
 }
 function respondPerm(ok) {
   wsSend({ type: 'permission.response', id: permId, approved: ok });
-  byId('perm-overlay').classList.remove('show');
+  const overlay = byId('perm-overlay');
+  overlay.classList.remove('show'); overlay.setAttribute('aria-hidden', 'true');
+  permFocus?.focus?.(); permFocus = null;
   State.set({ pendingPermission: null });   // sai do estado WAITING_PERMISSION
 }
 

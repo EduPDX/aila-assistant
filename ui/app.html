@@ -69,7 +69,7 @@
 
     <div class="content stage">
       <section id="pane-avatar" class="pane active">
-        <iframe id="avatar3d" src="/static/avatar3d.html"></iframe>
+        <iframe id="avatar3d" src="/static/avatar3d.html" title="Corpo virtual 3D da Aila"></iframe>
       </section>
 
       <section id="pane-chat" class="pane">
@@ -120,20 +120,20 @@
   <aside class="statuspanel" id="statuspanel"></aside>
 
   <!-- ========== CONFIGURAÇÕES (⚙️) ========== -->
-  <div class="overlay" id="settings-overlay">
-    <div class="settings">
+  <div class="overlay" id="settings-overlay" aria-hidden="true">
+    <div class="settings" role="dialog" aria-modal="true" aria-label="Configurações da Aila" tabindex="-1">
       <div class="settings-side" id="settings-nav"></div>
       <div class="settings-main" id="settings-main"></div>
     </div>
   </div>
 
   <!-- ========== MODAL DE PERMISSÃO ========== -->
-  <div class="overlay" id="perm-overlay">
-    <div class="modal perm" id="perm-modal">
+  <div class="overlay" id="perm-overlay" aria-hidden="true">
+    <div class="modal perm" id="perm-modal" role="dialog" aria-modal="true" aria-labelledby="perm-title" tabindex="-1">
       <div class="perm-head">
         <span class="perm-icon">🔒</span>
         <div class="perm-headtext">
-          <h3>A Aila pediu permissão</h3>
+          <h3 id="perm-title">A Aila pediu permissão</h3>
           <div class="perm-human" id="perm-human"></div>
         </div>
         <span class="perm-risk" id="perm-risk"></span>

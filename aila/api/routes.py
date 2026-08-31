@@ -468,6 +468,21 @@ async def resources(request: Request) -> dict:
     }
 
 
+@router.get("/cognitive-infrastructure")
+async def cognitive_infrastructure(request: Request) -> dict:
+    """Inventário visual seguro da infraestrutura cognitiva da Aila."""
+    from aila.core.infrastructure import build_infrastructure_snapshot
+    from aila.core.models import ModelManager, roles_from_settings
+
+    engine = request.app.state.engine
+    inventory = await ModelManager(
+        roles_from_settings(engine.settings), engine.settings.llm.base_url,
+    ).inventory()
+    tracker = getattr(request.app.state, "events", None)
+    active = tracker.provider if tracker else "local"
+    return build_infrastructure_snapshot(engine, inventory, active_provider=active)
+
+
 @router.get("/audit")
 async def audit(request: Request, n: int = 50) -> dict:
     engine = request.app.state.engine

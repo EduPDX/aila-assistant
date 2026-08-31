@@ -275,7 +275,7 @@ function disposeVRM() {
   vrm = null; window.vrm = null;
 }
 
-function loadVRM(url) {
+function loadVRM(url, revokeWhenDone = false) {
   currentModelUrl = url;
   $('err').classList.remove('show');
   $('loading').style.display = 'flex';
@@ -300,10 +300,12 @@ function loadVRM(url) {
     sceneManager.setController(controller);                    // Fase 3: IK aponta p/ a cena
     sceneManager.compose(vrm);                                 // posiciona monitor + diagonal + enquadra o palco
     $('loading').style.display = 'none';
+    if (revokeWhenDone) URL.revokeObjectURL(url);
   }, undefined, (e) => {
     $('loading').style.display = 'none';
     $('err').classList.add('show');
     $('errdetail').textContent = 'tentei carregar: ' + url + '  ·  ' + (e?.message || e);
+    if (revokeWhenDone) URL.revokeObjectURL(url);
   });
 }
 
@@ -411,7 +413,7 @@ function applyVramPressure(state) {
 }
 
 // ---------------- Aila: WebSocket (standalone) ----------------
-let ws, ttsAudio, lipCtx, lipAnalyser, lipBuf;
+let ws, ttsAudio, ttsObjectUrl, lipCtx, lipAnalyser, lipBuf;
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onmessage = (ev) => {
@@ -446,6 +448,7 @@ addEventListener('message', (e) => {
     case 'aila:gesture_seq': playGestureSequence(d.values); break;
     case 'aila:vram-pressure': applyVramPressure(d.state); break;
     case 'aila:metrics':   sceneManager.setMetrics(d.payload); break;   // dados reais → tela de STATUS
+    case 'aila:infrastructure': sceneManager.setInfrastructure(d.payload); break;
     case 'aila:say':       sceneManager.showMessage(d.text); break;     // resumo → balão holográfico
     case 'aila:interaction': sceneManager.interact(d.spec); break;      // {type,target} → aponta (IK)
     case 'aila:thinking.step': sceneManager.showThinking(d.text || '...'); break;
@@ -462,7 +465,9 @@ async function speak(text) {
     if (!r.ok) return;
     const blob = await r.blob();
     if (ttsAudio) { try{ttsAudio.pause();}catch(e){} }
-    ttsAudio = new Audio(URL.createObjectURL(blob));
+    if (ttsObjectUrl) URL.revokeObjectURL(ttsObjectUrl);
+    ttsObjectUrl = URL.createObjectURL(blob);
+    ttsAudio = new Audio(ttsObjectUrl);
     lipCtx = lipCtx || new (window.AudioContext||window.webkitAudioContext)();
     if (lipCtx.state === 'suspended') await lipCtx.resume();
     const src = lipCtx.createMediaElementSource(ttsAudio);
@@ -470,7 +475,10 @@ async function speak(text) {
     lipBuf = new Uint8Array(lipAnalyser.fftSize);
     src.connect(lipAnalyser); lipAnalyser.connect(lipCtx.destination);
     driveMouth();
-    ttsAudio.onended = () => { controller?.setMouth(0); lipAnalyser = null; };
+    ttsAudio.onended = () => {
+      controller?.setMouth(0); lipAnalyser = null;
+      if (ttsObjectUrl) { URL.revokeObjectURL(ttsObjectUrl); ttsObjectUrl = null; }
+    };
     await ttsAudio.play();
   } catch(e) {}
 }
@@ -487,7 +495,7 @@ $('pick').addEventListener('click', () => $('vrmfile').click());
 $('vrmfile').addEventListener('change', async (ev) => {
   const file = ev.target.files[0]; if (!file) return;
   $('vrmnote').textContent = 'carregando…';
-  loadVRM(URL.createObjectURL(file));
+  loadVRM(URL.createObjectURL(file), true);
   try {
     const fd = new FormData(); fd.append('file', file, file.name);
     const r = await fetch('/api/avatar/vrm', { method:'POST', body:fd });

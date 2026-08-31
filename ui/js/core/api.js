@@ -18,6 +18,7 @@ export const api = {
   status: () => j('/api/status'),                     // app/llm/model/providers/network_mode/autonomy_level/agent_state…
   metrics: () => j('/api/metrics'),                   // cpu/ram/gpu/vram/tps/uptime
   resources: () => j('/api/resources'),               // R11: pressão(R2)+inventário(R3)+saúde(R4)+telemetria(R8)
+  infrastructure: () => j('/api/cognitive-infrastructure'), // racks seguros da Cognitive Scene
   events: (n = 40) => j(`/api/events?n=${n}`),         // atividade recente (redigida) + state + provider
   cognition: (n = 20) => j(`/api/cognition?n=${n}`),   // feed do subconsciente: {totals, recent}
   graph: (kind = 'code', limit = 1500, project = null) =>                // {nodes,edges,communities}

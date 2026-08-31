@@ -8,7 +8,7 @@
 // ============================================================
 import { State, STATUS_LABEL } from '../state.js';
 import { api } from '../core/api.js';
-import { avatarVramPressure, avatarMetrics } from '../avatar.js';
+import { avatarVramPressure, avatarMetrics, avatarInfrastructure } from '../avatar.js';
 
 const R = 26;
 const C = 2 * Math.PI * R;
@@ -78,6 +78,14 @@ export function initHud() {
   render(State.get());
   poll();
   setInterval(poll, 2000);
+  pollInfrastructure();
+  setInterval(pollInfrastructure, 10000);
+}
+
+async function pollInfrastructure() {
+  if (document.hidden) return;
+  try { avatarInfrastructure(await api.infrastructure()); }
+  catch (e) { /* mantém o último inventário durante indisponibilidade */ }
 }
 
 function setText(id, txt) { const n = document.getElementById(id); if (n) n.textContent = txt; }

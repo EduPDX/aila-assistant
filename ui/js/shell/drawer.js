@@ -15,8 +15,16 @@ export function initDrawer() {
 
   let lastMode = null;
   State.on((s, patch) => {
+    const panel = byId('statuspanel');
     document.body.dataset.drawer = s.drawerOpen ? 'open' : 'closed';
-    if (toggle) toggle.classList.toggle('active', !!s.drawerOpen);
+    if (toggle) {
+      toggle.classList.toggle('active', !!s.drawerOpen);
+      toggle.setAttribute('aria-expanded', String(!!s.drawerOpen));
+    }
+    if (panel) {
+      panel.inert = !s.drawerOpen;
+      panel.setAttribute('aria-hidden', String(!s.drawerOpen));
+    }
     // ao ENTRAR em working, revela a atividade (só na transição, não em loop)
     if (patch && patch.uiMode) {
       if (patch.uiMode === 'working' && lastMode !== 'working') set(true);
@@ -24,6 +32,9 @@ export function initDrawer() {
     }
   });
   document.body.dataset.drawer = 'closed';
+  const panel = byId('statuspanel');
+  if (panel) { panel.inert = true; panel.setAttribute('aria-hidden', 'true'); }
+  if (toggle) toggle.setAttribute('aria-expanded', 'false');
 }
 
 export function closeDrawer() { set(false); }

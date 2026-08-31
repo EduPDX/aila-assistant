@@ -19,8 +19,19 @@ export function setTheme(id) {
   $$('.swatch').forEach((s) => s.classList.toggle('active', s.dataset.id === id));
 }
 
-export const openSettings = () => { byId('settings-overlay').classList.add('show'); loadConfig().then(renderAllFields); };
-export const closeSettings = () => byId('settings-overlay').classList.remove('show');
+let _settingsFocus = null;
+export const openSettings = () => {
+  const overlay = byId('settings-overlay');
+  _settingsFocus = document.activeElement;
+  overlay.classList.add('show'); overlay.setAttribute('aria-hidden', 'false');
+  overlay.querySelector('.settings')?.focus();
+  loadConfig().then(renderAllFields);
+};
+export const closeSettings = () => {
+  const overlay = byId('settings-overlay');
+  overlay.classList.remove('show'); overlay.setAttribute('aria-hidden', 'true');
+  _settingsFocus?.focus?.(); _settingsFocus = null;
+};
 
 // renderers dos blocos "custom" (widgets já prontos), por nome
 const CUSTOM_RENDER = {
@@ -389,6 +400,7 @@ export function initSettings() {
 
   // fechar clicando fora
   byId('settings-overlay').addEventListener('click', (e) => { if (e.target.id === 'settings-overlay') closeSettings(); });
+  byId('settings-overlay').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSettings(); });
 
   // busca nas memórias (filtra a lista carregada)
   byId('mem-search')?.addEventListener('input', (e) => drawMemory(e.target.value));
