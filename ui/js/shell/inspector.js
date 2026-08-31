@@ -10,10 +10,10 @@ import { initResources } from '../views/resources.js';
 import { initStatusPanel } from '../statuspanel.js';
 
 const TABS = [
-  { id: 'activity', label: 'Atividade' },
-  { id: 'tasks', label: 'Tarefas' },
-  { id: 'resources', label: 'Recursos' },
-  { id: 'system', label: 'Sistema' },
+  { id: 'activity', label: 'Atividade', icon: '⌁' },
+  { id: 'tasks', label: 'Tarefas', icon: 'ϟ' },
+  { id: 'resources', label: 'Recursos', icon: '▥' },
+  { id: 'system', label: 'Sistema', icon: '◇' },
 ];
 
 export function initInspector() {
@@ -22,8 +22,9 @@ export function initInspector() {
   box.classList.add('inspector');
   box.setAttribute('aria-label', 'Atividade e estado da Aila');
   box.innerHTML = `
+    <div class="insp-brand"><span><i></i> AILA // TELEMETRIA</span><b>LIVE</b></div>
     <div class="insp-tabs" id="insp-tabs" role="tablist">
-      ${TABS.map((t, i) => `<button class="insp-tab${i === 0 ? ' active' : ''}" role="tab" aria-selected="${i === 0}" aria-controls="insp-${t.id}" data-p="${t.id}">${t.label}</button>`).join('')}
+      ${TABS.map((t, i) => `<button class="insp-tab${i === 0 ? ' active' : ''}" role="tab" aria-selected="${i === 0}" aria-controls="insp-${t.id}" data-p="${t.id}"><i aria-hidden="true">${t.icon}</i><span>${t.label}</span></button>`).join('')}
     </div>
     <div class="insp-body">
       <div class="insp-pane active" id="insp-activity"></div>
