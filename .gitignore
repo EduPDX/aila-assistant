@@ -9,6 +9,7 @@ dist/
 venv/
 env/
 .pytest_cache/
+.pytest-tmp/
 .mypy_cache/
 .ruff_cache/
 
@@ -59,6 +60,10 @@ Thumbs.db
 
 # config de ferramentas de CLI/agente (pessoal, não versionar)
 .codex/
+.claude/
+
+# relatório legado da CLI; o cache oficial vive em data/benchmark.json
+/benchmark.json
 
 # workspace do usuário (não versionar conteúdo)
 workspace/**

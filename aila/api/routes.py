@@ -7,10 +7,14 @@ import time
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
+from aila.api.uploads import read_limited
+
 router = APIRouter(prefix="/api")
 
 _IMG_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 _MAX_UPLOAD_MB = 10   # limite de upload (MB) — previne OOM
+_MAX_FILE_MB = 50
+_MAX_VRM_MB = 100
 
 
 @router.get("/status")
@@ -512,10 +516,11 @@ async def rename_session(request: Request, session_id: int, body: RenameBody) ->
 @router.delete("/sessions/{session_id}")
 async def delete_session(request: Request, session_id: int) -> dict:
     engine = request.app.state.engine
-    if engine.store is not None:
-        engine.store.delete_session(session_id)
-        if getattr(engine, "session_id", None) == session_id:
-            engine.session_id = None  # a sessão ativa foi apagada
+    async with engine.turn_lock:
+        if engine.store is not None:
+            engine.store.delete_session(session_id)
+            if getattr(engine, "session_id", None) == session_id:
+                engine.session_id = None  # a sessão ativa foi apagada
     return {"ok": True}
 
 
@@ -529,10 +534,7 @@ async def upload(request: Request, file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail=f"Extensão não suportada: {ext}")
 
     # Limite de tamanho: previne OOM com arquivos enormes
-    data = await file.read()
-    max_bytes = _MAX_UPLOAD_MB * 1024 * 1024
-    if len(data) > max_bytes:
-        raise HTTPException(status_code=413, detail=f"Arquivo excede {_MAX_UPLOAD_MB}MB.")
+    data = await read_limited(file, _MAX_UPLOAD_MB)
     if not data:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
 
@@ -564,7 +566,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)) -> dict:
 
     engine = request.app.state.engine
     sandbox = engine.agents.deps.sandbox
-    data = await file.read()
+    data = await read_limited(file, _MAX_FILE_MB)
     if not data:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
     name = _Path(file.filename or "arquivo").name  # sem diretórios (anti-traversal)
@@ -588,7 +590,7 @@ async def upload_vrm(request: Request, file: UploadFile = File(...)) -> dict:
 
     if not (file.filename or "").lower().endswith(".vrm"):
         raise HTTPException(status_code=400, detail="Envie um arquivo .vrm")
-    data = await file.read()
+    data = await read_limited(file, _MAX_VRM_MB)
     if len(data) < 1000:
         raise HTTPException(status_code=400, detail="Arquivo VRM inválido.")
     dest = DATA_ROOT / "ui" / "models" / "avatar.vrm"
@@ -662,17 +664,18 @@ async def reset(request: Request) -> dict:
     Conhecimento e conversas — para recomeçar do zero. NÃO afeta o código da
     Aila nem o grafo de Código."""
     engine = request.app.state.engine
-    if engine.memory is not None:
-        engine.memory.clear()
-    kg = getattr(engine, "kgraph", None)
-    if kg is not None:
-        kg.conn.execute("DELETE FROM kg_edge")
-        kg.conn.execute("DELETE FROM kg_node")
-        kg.conn.commit()
-        kg._loaded = False
-    if engine.store is not None:
-        for s in engine.store.list_sessions():
-            engine.store.delete_session(s["id"])
-    engine.session_id = None
-    engine.context.clear()
+    async with engine.turn_lock:
+        if engine.memory is not None:
+            engine.memory.clear()
+        kg = getattr(engine, "kgraph", None)
+        if kg is not None:
+            kg.conn.execute("DELETE FROM kg_edge")
+            kg.conn.execute("DELETE FROM kg_node")
+            kg.conn.commit()
+            kg._loaded = False
+        if engine.store is not None:
+            for s in engine.store.list_sessions():
+                engine.store.delete_session(s["id"])
+        engine.session_id = None
+        engine.context.clear()
     return {"ok": True}

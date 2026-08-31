@@ -10,6 +10,7 @@ import { api } from '../core/api.js';
 
 const PRESS_LABEL = { normal: 'NORMAL', elevated: 'ELEVADA', high: 'ALTA', critical: 'CRÍTICA' };
 const HEALTH_LABEL = { closed: 'ok', open: 'em cooldown', half_open: 'testando' };
+let pollTimer = null;
 
 export function initResources(mount) {
   mount.innerHTML = '';
@@ -19,7 +20,7 @@ export function initResources(mount) {
       el('div', { class: 'act-empty' }, 'Medindo…')),
   );
   poll();
-  setInterval(poll, 3000);
+  if (pollTimer === null) pollTimer = setInterval(poll, 3000);
 }
 
 async function poll() {

@@ -12,6 +12,8 @@ import { promptDialog } from '../ui.js';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 const openIds = new Set();
+let pollTimer = null;
+let stateBound = false;
 
 export function initTasks(mount) {
   mount.innerHTML = '';
@@ -29,8 +31,11 @@ export function initTasks(mount) {
   // Tarefas em background (via REST) publicam no Event Bus, que NÃO é ponte p/ o
   // WebSocket — então fazemos poll do /api/tasks (barato, lista em memória).
   // O ingest de task.* (core/events.js) cobre o caso de eventos que cheguem via WS.
-  setInterval(() => seed().catch(() => {}), 4000);
-  State.on((_s, patch) => { if (patch && (patch.taskUpserted || patch.tasks)) render(); });
+  if (pollTimer === null) pollTimer = setInterval(() => seed().catch(() => {}), 4000);
+  if (!stateBound) {
+    State.on((_s, patch) => { if (patch && (patch.taskUpserted || patch.tasks)) render(); });
+    stateBound = true;
+  }
 }
 
 async function seed() {

@@ -13,7 +13,9 @@ este módulo não conhece a interface — apenas orquestra a decisão.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+import contextvars
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 
 from aila.core.config import SecurityConfig
 from aila.core.logging import get_logger
@@ -24,6 +26,14 @@ log = get_logger("permissions")
 
 # Função que pergunta ao usuário e resolve True/False.
 ConfirmFn = Callable[[str, dict], Awaitable[bool]]
+
+# O handler pertence ao TURNO/conexão que iniciou a ação. Um atributo global no
+# PermissionManager permite que uma segunda aba substitua a confirmação da
+# primeira (e é especialmente perigoso com WebSocket). ContextVar acompanha a
+# task asyncio e também é herdada pelas subtasks criadas dentro daquele turno.
+_confirm_context: contextvars.ContextVar[ConfirmFn | None] = contextvars.ContextVar(
+    "aila_confirm_handler", default=None
+)
 
 
 class PermissionDenied(Exception):
@@ -38,8 +48,17 @@ class PermissionManager:
         self._confirm: ConfirmFn | None = None
 
     def set_confirm_handler(self, fn: ConfirmFn) -> None:
-        """Registra o callback que pede confirmação ao usuário."""
+        """Registra o fallback legado. Prefira ``confirm_context`` por turno."""
         self._confirm = fn
+
+    @contextmanager
+    def confirm_context(self, fn: ConfirmFn) -> Iterator[None]:
+        """Vincula a confirmação somente à task/conexão atual."""
+        token = _confirm_context.set(fn)
+        try:
+            yield
+        finally:
+            _confirm_context.reset(token)
 
     def is_write_action(self, action: str) -> bool:
         return not self.policy.is_read(action)
@@ -73,10 +92,11 @@ class PermissionManager:
         needs_confirm = (level == DANGER and self.cfg.confirm_destructive) or \
                         (level == REVIEW and self.cfg.confirm_review)
         if needs_confirm:
-            if self._confirm is None:
+            confirm = _confirm_context.get() or self._confirm
+            if confirm is None:
                 self._deny(action, agent, params, "blocked:no_confirm_handler",
                            f"Ação '{action}' ({level}) requer confirmação, mas não há handler.")
-            if not await self._confirm(action, params):
+            if not await confirm(action, params):
                 self._deny(action, agent, params, "denied:user",
                            f"Usuário recusou a ação '{action}'.")
 

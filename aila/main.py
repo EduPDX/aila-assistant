@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, WebSocket
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from aila.api.routes import router as api_router
@@ -35,6 +35,25 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(settings.log_level)
     log = get_logger("main")
+    boot_tasks: set[asyncio.Task] = set()
+
+    def _spawn(coro, name: str) -> asyncio.Task:  # noqa: ANN001
+        task = asyncio.create_task(coro, name=f"aila:boot:{name}")
+        boot_tasks.add(task)
+
+        def _done(done: asyncio.Task) -> None:
+            boot_tasks.discard(done)
+            if done.cancelled():
+                return
+            try:
+                exc = done.exception()
+            except asyncio.CancelledError:
+                return
+            if exc is not None:
+                log.error(f"task de boot '{name}' falhou: {exc!r}")
+
+        task.add_done_callback(_done)
+        return task
 
     llm = get_backend(settings.llm)
     online = await llm.health()
@@ -83,7 +102,7 @@ async def lifespan(app: FastAPI):
                 )
             else:
                 log.info("plano de VRAM: nvidia-smi indisponível (medidor desligado)")
-    asyncio.create_task(_vram_plan())
+    _spawn(_vram_plan(), "vram-plan")
 
     # Warm-up (NÃO bloqueia o boot): pré-carrega o modelo de chat E o de
     # embeddings no Ollama. Sem isso, a PRIMEIRA mensagem paga o cold-start dos
@@ -100,7 +119,7 @@ async def lifespan(app: FastAPI):
                 with contextlib.suppress(Exception):
                     await llm.embed(["aquecimento"], model=settings.memory.embed_model)
             log.info(f"warm-up concluído (chat: {eff} · embed: {settings.memory.embed_model})")
-        asyncio.create_task(_warmup())
+        _spawn(_warmup(), "warmup")
 
     # Benchmark da escada de modelos (R12) no boot: background + cache. Só mede de
     # fato se o cache estiver velho/desatualizado e a VRAM não estiver apertada —
@@ -112,7 +131,7 @@ async def lifespan(app: FastAPI):
 
                 await boot_benchmark(
                     llm, settings, max_age_days=settings.llm.benchmark_max_age_days)
-        asyncio.create_task(_boot_bench())
+        _spawn(_boot_bench(), "benchmark")
 
     # Event Bus como backbone: logging estruturado + tracker de estado/atividade.
     from aila.core.event_bus import bus as event_bus
@@ -148,8 +167,13 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    for task in list(boot_tasks):
+        task.cancel()
+    if boot_tasks:
+        await asyncio.gather(*boot_tasks, return_exceptions=True)
     if app.state.mcp is not None:
         await app.state.mcp.close_all()
+    await engine.aclose()
     await llm.aclose()
 
 
@@ -163,7 +187,24 @@ def create_app() -> FastAPI:
         # A UI (HTML/JS/CSS) NÃO pode ser cacheada de forma "esperta" pelo
         # Chromium do Electron, senão após um update ele serve os módulos ES
         # antigos. Força revalidação (ETag do StaticFiles cuida do 304).
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            from aila.security.origin import local_origin_allowed
+
+            client_host = request.client.host if request.client else None
+            if not local_origin_allowed(
+                request.headers.get("origin"), request.headers.get("host", ""), client_host
+            ):
+                return JSONResponse({"detail": "origem não autorizada"}, status_code=403)
         resp = await call_next(request)
+        resp.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; "
+            "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; media-src 'self' blob:; "
+            "connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-src 'self'",
+        )
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("Referrer-Policy", "no-referrer")
         p = request.url.path
         if p == "/" or p.startswith("/static"):
             resp.headers["Cache-Control"] = "no-cache, must-revalidate"

@@ -13,6 +13,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from aila.api.uploads import read_limited
 from aila.core.logging import get_logger
 
 log = get_logger("voice_api")
@@ -61,7 +62,7 @@ async def status(request: Request) -> dict:
 @router.post("/transcribe")
 async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResponse:
     voice = _voice(request)
-    data = await file.read()
+    data = await read_limited(file, 25)
     if not data:
         raise HTTPException(status_code=400, detail="Áudio vazio.")
     suffix = "." + (file.filename or "audio.webm").rsplit(".", 1)[-1]

@@ -93,7 +93,7 @@ class LLMConfig(BaseModel):
     # Benchmark da "escada" de modelos (R12): roda no boot, em BACKGROUND e com
     # cache — só re-mede se o cache passar de `benchmark_max_age_days` ou os
     # modelos mudarem, e nunca sob pressão alta. Desligue com benchmark_on_boot=false.
-    benchmark_on_boot: bool = True
+    benchmark_on_boot: bool = False
     benchmark_max_age_days: float = 7.0
 
 

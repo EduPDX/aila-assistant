@@ -346,7 +346,7 @@ function reportBody() {
   const sig = JSON.stringify(rep);
   if (sig === _bodyLast) return;                  // só quando MUDA
   _bodyLast = sig;
-  try { parent.postMessage({ type: 'body.report', body: rep }, '*'); } catch (e) {}
+  try { parent.postMessage({ type: 'body.report', body: rep }, location.origin); } catch (e) {}
 }
 
 function readBodyState() {
@@ -432,6 +432,7 @@ if (!EMBEDDED) connect();
 if (EMBEDDED) { const c = $('controls'); if (c) c.style.display = 'none'; }
 
 addEventListener('message', (e) => {
+  if (EMBEDDED && (e.origin !== location.origin || e.source !== parent)) return;
   const d = e.data || {};
   switch (d.type) {
     case 'aila:reloadVRM': loadVRM('/static/models/avatar.vrm?t=' + Date.now()); break;

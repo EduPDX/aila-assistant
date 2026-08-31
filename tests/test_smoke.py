@@ -2957,6 +2957,81 @@ def test_boot_benchmark_caches_and_skips_when_fresh(monkeypatch, tmp_path):
     asyncio.run(go())
 
 
+def test_websocket_origin_is_restricted_to_local_same_port():
+    """Uma página externa não pode assumir o WebSocket local da Aila."""
+    from types import SimpleNamespace
+
+    from aila.api.websocket import websocket_origin_allowed
+
+    def ws(origin: str | None, client: str = "127.0.0.1"):
+        headers = {"host": "127.0.0.1:8770"}
+        if origin is not None:
+            headers["origin"] = origin
+        return SimpleNamespace(headers=headers, client=SimpleNamespace(host=client))
+
+    assert websocket_origin_allowed(ws("http://127.0.0.1:8770"))
+    assert websocket_origin_allowed(ws("http://localhost:8770"))
+    assert websocket_origin_allowed(ws(None))             # cliente local não-browser
+    assert not websocket_origin_allowed(ws("https://evil.example"))
+    assert not websocket_origin_allowed(ws("http://127.0.0.1:9999"))
+    assert not websocket_origin_allowed(ws(None, "10.0.0.8"))
+
+
+def test_upload_reader_stops_at_limit_before_unbounded_read():
+    from io import BytesIO
+
+    from fastapi import HTTPException, UploadFile
+
+    from aila.api.uploads import read_limited
+
+    async def go():
+        ok = UploadFile(filename="ok.bin", file=BytesIO(b"x" * 1024))
+        assert len(await read_limited(ok, 1)) == 1024
+        large = UploadFile(filename="large.bin", file=BytesIO(b"x" * (1024 * 1024 + 1)))
+        with pytest.raises(HTTPException) as exc:
+            await read_limited(large, 1)
+        assert exc.value.status_code == 413
+
+    asyncio.run(go())
+
+
+def test_permission_confirmation_is_scoped_per_async_context(tmp_path):
+    """Duas conexões não podem substituir/aprovar a confirmação uma da outra."""
+    from aila.security.audit import AuditLog
+    from aila.security.permissions import PermissionDenied, PermissionManager
+
+    s = get_settings()
+    s.security.confirm_destructive = True
+    pm = PermissionManager(s.security, AuditLog(tmp_path / "audit.jsonl"))
+
+    async def answer(value):
+        async def _handler(_action, _params):
+            await asyncio.sleep(0)
+            return value
+        try:
+            with pm.confirm_context(_handler):
+                await pm.check("file.delete", "test", {"path": "x"})
+            return "allowed"
+        except PermissionDenied:
+            return "denied"
+
+    async def go():
+        return await asyncio.gather(answer(True), answer(False))
+
+    assert asyncio.run(go()) == ["allowed", "denied"]
+
+
+def test_default_write_roots_are_personal_folders_not_whole_drives():
+    from pathlib import Path
+
+    from aila.core.engine import _default_writable_roots
+
+    roots = [Path(p) for p in _default_writable_roots()]
+    assert roots
+    assert all(p.anchor != str(p) for p in roots)
+    assert Path.home() not in roots
+
+
 def test_engine_resource_aware_behavior():
     """R10: a Aila fica ciente de recurso. Sob pressão alta, _under_pressure=True →
     a consolidação de fundo é ADIADA sem avançar o contador (retoma ao respirar);

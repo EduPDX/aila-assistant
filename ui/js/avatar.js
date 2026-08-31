@@ -3,7 +3,7 @@ import { byId } from './dom.js';
 
 export function toAvatar(msg) {
   const f = byId('avatar3d');
-  if (f && f.contentWindow) f.contentWindow.postMessage(msg, '*');
+  if (f && f.contentWindow) f.contentWindow.postMessage(msg, location.origin);
 }
 export const avatarEmotion = (emotion, state, gesture) =>
   toAvatar({ type: 'aila:emotion', value: emotion, state, gesture });
@@ -28,6 +28,8 @@ export const avatarSay = (text) => toAvatar({ type: 'aila:say', text });
 // o app manda ao backend. É isto que permite a Aila dizer "estou com a mão
 // levantada" em vez de "o avatar está com a mão levantada".
 addEventListener('message', (e) => {
+  const frame = byId('avatar3d');
+  if (e.origin !== location.origin || !frame || e.source !== frame.contentWindow) return;
   const m = e && e.data;
   if (!m || m.type !== 'body.report') return;
   import('./ws.js').then(({ wsSend }) => wsSend({ type: 'body.report', body: m.body }))

@@ -145,6 +145,7 @@ class AilaEngine:
             default=llm, providers=providers, config=settings.routing, network=network,
             health=self.health,
         )
+        self._external_providers = list((providers or {}).values())
         self.agents = agents
         self.store = store
         self.memory = memory                          # store (count / MemoryAgent)
@@ -171,6 +172,10 @@ class AilaEngine:
         self._consolidating = False
         self._turns = 0
         self._bg_tasks: set[asyncio.Task] = set()   # referências de tasks background (previne exception loss)
+        # A conversa/histórico ainda vive nesta engine compartilhada. Serializar
+        # turnos evita que duas abas misturem mensagens, ferramentas e gestos.
+        # O WebSocket restaura a sessão pertencente à conexão antes de entrar.
+        self.turn_lock = asyncio.Lock()
         self.emotions = EmotionEngine()
         # Guardrails (Fase 7): trilho de saída — redige segredos antes de
         # exibir/falar/gravar. Complementa authorize()/policy/injection.
@@ -190,9 +195,6 @@ class AilaEngine:
         # gesto pedido pela IA (AvatarAgent) durante o turno atual
         self.pending_gesture: str | None = None
         self.pending_gesture_sequence: list[str] | None = None
-        # confirmações de permissão pendentes (id -> Future). Vive no engine (não
-        # na conexão WS) p/ sobreviver a reconexões: qualquer conexão resolve.
-        self.perm_pending: dict[str, Any] = {}
         self.context = ConversationContext(
             system_prompt=self._system_prompt(),
             max_turns=settings.context.max_turns,
@@ -209,6 +211,49 @@ class AilaEngine:
             self.self_model.bind_capabilities(self.agents.registry)
         except Exception as exc:  # noqa: BLE001 - autoconhecimento é informativo
             log.debug(f"bind_capabilities falhou: {exc!r}")
+
+    def spawn_background(self, coro, *, name: str) -> asyncio.Task:  # noqa: ANN001
+        """Cria e rastreia uma task; exceções nunca somem silenciosamente."""
+        task = asyncio.create_task(coro, name=f"aila:{name}")
+        self._bg_tasks.add(task)
+
+        def _done(done: asyncio.Task) -> None:
+            self._bg_tasks.discard(done)
+            if done.cancelled():
+                return
+            try:
+                exc = done.exception()
+            except asyncio.CancelledError:
+                return
+            if exc is not None:
+                log.error(f"task background '{name}' falhou: {exc!r}")
+
+        task.add_done_callback(_done)
+        return task
+
+    async def aclose(self) -> None:
+        """Encerra tasks, clientes externos e bancos em ordem determinística."""
+        running = list(self._bg_tasks)
+        for task in running:
+            task.cancel()
+        if running:
+            await asyncio.gather(*running, return_exceptions=True)
+
+        seen: set[int] = {id(self.llm)}
+        for backend in self._external_providers:
+            if id(backend) in seen:
+                continue
+            seen.add(id(backend))
+            try:
+                await backend.aclose()
+            except Exception as exc:  # noqa: BLE001 - shutdown best-effort
+                log.warning(f"falha ao fechar provedor {backend.name}: {exc!r}")
+        for resource in (self.kgraph, self.memory, self.store):
+            if resource is not None:
+                try:
+                    resource.close()
+                except Exception as exc:  # noqa: BLE001 - shutdown best-effort
+                    log.warning(f"falha ao fechar recurso: {exc!r}")
 
     # ------------------------------------------------------------------ #
     def _system_prompt(self) -> str:
@@ -621,9 +666,7 @@ class AilaEngine:
                 self._consolidating = False
 
         try:
-            task = asyncio.create_task(_run())
-            self._bg_tasks.add(task)
-            task.add_done_callback(self._bg_tasks.discard)
+            self.spawn_background(_run(), name="memory-consolidation")
         except RuntimeError:           # sem event loop (ex.: testes síncronos)
             self._consolidating = False
 
@@ -677,9 +720,7 @@ class AilaEngine:
                 log.debug(f"refino de entidades falhou: {exc!r}")
 
         try:
-            task = asyncio.create_task(_run())
-            self._bg_tasks.add(task)
-            task.add_done_callback(self._bg_tasks.discard)
+            self.spawn_background(_run(), name="entity-refinement")
         except RuntimeError:           # sem event loop (ex.: testes síncronos)
             pass
 
@@ -1383,7 +1424,7 @@ class AilaEngine:
                 "Ajuste em security.autonomy_level ou POST /api/autonomy."
             )
         task = await self.tasks.create(goal)
-        asyncio.create_task(self.run_task(task, emit or self._noop_emit))
+        self.spawn_background(self.run_task(task, emit or self._noop_emit), name=f"task-{task.id}")
         return task
 
     async def start_dev_task(self, goal: str, emit: Emit | None = None):
@@ -1412,7 +1453,9 @@ class AilaEngine:
             "code.write_file, valide com code.test; se falhar, corrija. Não "
             "invente — baseie-se no código real.]"
         )
-        asyncio.create_task(self.run_task(task, emit or self._noop_emit))
+        self.spawn_background(
+            self.run_task(task, emit or self._noop_emit), name=f"dev-task-{task.id}"
+        )
         return task
 
     async def run_task(self, task, emit: Emit, max_replans: int = 2) -> None:
@@ -1464,6 +1507,10 @@ class AilaEngine:
                     f"[{s.description}]\n{s.result}" for s in done_steps
                 )[:2000]
                 await self.tasks.set_state(task, TaskState.COMPLETED)
+        except asyncio.CancelledError:
+            task.cancelled = True
+            await self.tasks.set_state(task, TaskState.CANCELLED)
+            raise
         except Exception as exc:  # noqa: BLE001
             self.tasks.log(task, f"erro fatal: {exc}")
             await self.tasks.set_state(task, TaskState.FAILED, error=str(exc))
@@ -1486,10 +1533,9 @@ def build_engine(
     audit = AuditLog(_resolve(settings.security.audit_log))
     permissions = PermissionManager(settings.security, audit)
     sandbox = PathSandbox(settings.sandbox_path())
-    # Acesso a arquivos: por PADRÃO a Aila pode escrever nas pastas do usuário
-    # (home + drives fixos) — "faça isso nessa pasta" funciona sem configurar.
-    # Caminhos de sistema/credenciais ficam SEMPRE protegidos (sandbox.protected)
-    # e ações destrutivas pedem confirmação. Restrinja em security.write_roots.
+    # Acesso a arquivos: por padrão cobre as pastas pessoais usuais. Outras
+    # árvores precisam ser autorizadas explicitamente em security.write_roots;
+    # nunca libera uma unidade inteira só por ela existir.
     for _wr in (settings.security.write_roots or _default_writable_roots()):
         try:
             sandbox.add_write_root(_wr)
@@ -1562,22 +1608,17 @@ def build_engine(
 
 
 def _default_writable_roots() -> list[str]:
-    """Pastas graváveis por padrão: a home do usuário + a raiz de cada drive FIXO
-    (C:, D:, E:…). Cobre Documentos/Desktop/Downloads e projetos em outros discos.
-    A salvaguarda de caminhos protegidos (sandbox) bloqueia sistema/credenciais."""
-    from pathlib import Path
+    """Pastas pessoais graváveis sem configuração adicional.
 
-    roots = [str(Path.home())]
-    try:
-        import psutil
+    O workspace já pertence ao sandbox. Não inclui ``Path.home()`` nem raízes
+    de drives: isso transformaria qualquer erro do modelo em escrita quase
+    irrestrita no computador.
+    """
+    from aila.security.sandbox import user_folder
 
-        for part in psutil.disk_partitions(all=False):
-            opts = (part.opts or "").lower()
-            if part.mountpoint and "cdrom" not in opts and "removable" not in opts:
-                roots.append(part.mountpoint)
-    except Exception as exc:  # noqa: BLE001 - psutil opcional; home já cobre o essencial
-        log.warning(f"não listou drives p/ write_roots ({exc!r}); usando só a home")
-    return roots
+    return list(dict.fromkeys(str(user_folder(kind)) for kind in (
+        "documents", "desktop", "downloads"
+    )))
 
 
 def _resolve(path_str: str):

@@ -26,7 +26,9 @@ const PORT = process.env.AILA_PORT || 8770;
 const URL = `http://127.0.0.1:${PORT}/`;
 // git pull só faz sentido no modo dev (rodando do repositório); no .exe
 // empacotado a atualização é via electron-updater (futuro).
-const GIT_UPDATE = !app.isPackaged && process.env.AILA_NO_UPDATE !== '1';
+// Atualização de código é opt-in. Iniciar a aplicação nunca deve modificar o
+// repositório silenciosamente nem executar código recém-baixado sem revisão.
+const GIT_UPDATE = !app.isPackaged && process.env.AILA_AUTO_UPDATE === '1';
 
 // caminho do backend empacotado (dentro dos resources do app)
 function bundledBackend() {
@@ -86,7 +88,12 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200, height: 800, minWidth: 900, minHeight: 620,
     backgroundColor: '#0a0e14', title: 'Aila',
-    webPreferences: { contextIsolation: true, preload: path.join(__dirname, 'preload.js') },
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
+    },
   });
   win.removeMenu();
   // limpa qualquer cache antigo (de uma versão instalada antes) antes de carregar
