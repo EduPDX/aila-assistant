@@ -47,6 +47,14 @@ export function showProject(slug) {
   else openProject(slug);
 }
 
+/** abre a biblioteca de projetos sem selecionar um grafo específico. */
+export function showProjects() {
+  currentProject = null;
+  kind = 'project';
+  if (!built) build();
+  else { updateKindButtons(); refresh(); }
+}
+
 /** anexa um projeto pelo seletor NATIVO (sem depender da view do 🧠 estar aberta). */
 export async function addProject() {
   const path = await pickProjectSource();
@@ -54,7 +62,7 @@ export async function addProject() {
   try {
     const meta = await api.addProject(path, null);
     if (meta && !meta.nodes) window.alert(warnEmptyGraph(meta));
-    return true;
+    return meta;
   } catch (e) { window.alert('Não consegui anexar esse código.'); return false; }
 }
 
@@ -243,11 +251,13 @@ function cardHTML(p) {
   return `<div class="mind-card${active ? ' active' : ''}" data-slug="${esc(p.slug)}">
       <button class="mind-card-del" title="Remover projeto">✕</button>
       ${active ? '<div class="mind-card-badge">● trabalhando</div>' : ''}
+      <div class="mind-card-source">${p.source_type === 'file' ? 'ARQUIVO' : 'PASTA'}</div>
       <div class="mind-card-thumb"><img alt=""></div>
       <div class="mind-card-body">
         <div class="mind-card-name" title="${esc(p.name)}">${esc(p.name)}</div>
         <div class="mind-card-meta">${p.nodes || 0} nós · ${p.edges || 0} arestas · ${p.files || 0} arq.</div>
         <div class="mind-card-langs" title="${esc(languages)}">${esc(languages)}</div>
+        <div class="mind-card-path" title="${esc(p.path || '')}">${esc(p.path || '')}</div>
         <button class="mind-card-work${active ? ' stop' : ''}">${active ? 'Parar de trabalhar' : 'Trabalhar no projeto'}</button>
       </div>
     </div>`;
@@ -255,11 +265,16 @@ function cardHTML(p) {
 
 function renderCards() {
   const grid = $('mind-grid');
-  const add = '<div class="mind-addcard" id="mind-addproj">'
-    + '<div class="plus">+</div><div>Adicionar projeto</div>'
-    + '<div class="muted" style="font-size:11px">selecione uma pasta ou arquivo</div></div>';
-  grid.innerHTML = add + projectList.map(cardHTML).join('');
-  $('mind-addproj').onclick = addProjectFlow;
+  const totalNodes = projectList.reduce((sum, p) => sum + (p.nodes || 0), 0);
+  const head = `<header class="mind-projects-head">
+    <div><span class="mind-projects-kicker">CODE GRAPH // BIBLIOTECA</span>
+      <h2>Projetos mapeados</h2>
+      <p>Abra um grafo para explorar relações ou marque um projeto como contexto de trabalho.</p></div>
+    <div class="mind-projects-total"><b>${projectList.length}</b><span>projetos</span><b>${totalNodes}</b><span>nós</span></div>
+  </header>`;
+  const empty = '<div class="mind-projects-empty"><span>◇</span><b>Nenhum projeto mapeado</b>'
+    + '<p>Use “Adicionar projeto” na barra esquerda para selecionar uma pasta ou arquivo.</p></div>';
+  grid.innerHTML = head + (projectList.length ? projectList.map(cardHTML).join('') : empty);
   grid.querySelectorAll('.mind-card').forEach((cardEl) => {
     const slug = cardEl.dataset.slug;
     const p = projectList.find((x) => x.slug === slug) || {};
@@ -302,21 +317,6 @@ async function toggleWork(slug) {
   }
   try { await api.activateProject(slug); activeProject = slug; } catch (e) { /* ignora */ }
   openProject(slug);
-}
-
-async function addProjectFlow() {
-  const path = await pickProjectSource();
-  if (!path) return;
-  const add = $('mind-addproj');
-  if (add) add.innerHTML = '<div class="mind-card-building">construindo grafo…</div>';
-  try {
-    const meta = await api.addProject(path, null);
-    await showGrid();
-    if (meta && !meta.nodes) window.alert(warnEmptyGraph(meta));
-  } catch (e) {
-    window.alert('Não consegui anexar esse código. Verifique o caminho e a linguagem do arquivo.');
-    renderCards();
-  }
 }
 
 async function removeProjectFlow(slug, name) {

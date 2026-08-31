@@ -103,7 +103,6 @@ function wireUI() {
   byId('btn-settings').onclick = openSettings;
   byId('btn-settings-close').onclick = closeSettings;
   byId('settings-nav').querySelectorAll('.snav').forEach((b) => b.onclick = () => settingsTab(b.dataset.p));
-  byId('btn-new').onclick = () => { sidebar.newSession(); chat.clearChat(); showTab('chat'); };
   // histórico de conversas saiu da barra lateral → estes elementos podem não existir
   byId('btn-hamb').onclick = () => setDrawer(byId('drawer').classList.contains('collapsed'));
   byId('tab-avatar').onclick = () => showTab('avatar');

@@ -6,7 +6,6 @@
 import { byId } from './dom.js';
 import { api } from './core/api.js';
 import * as mind from './mind.js';
-import * as chat from './chat.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const goMind = () => { if (window.showTab) window.showTab('mind'); };
@@ -21,10 +20,11 @@ async function renderProjects() {
   const box = byId('cx-projects'); if (!box) return;
   let r; try { r = await api.projects(); } catch (e) { r = { projects: [] }; }
   const ps = r.projects || [], active = r.active;
-  if (!ps.length) { box.innerHTML = '<div class="cx-empty">nenhum projeto — clique ＋ para anexar uma pasta.</div>'; return; }
+  if (!ps.length) { box.innerHTML = '<div class="cx-empty">nenhum projeto adicionado.</div>'; return; }
   box.innerHTML = ps.map((p) =>
     `<div class="cx-item${p.slug === active ? ' cx-on' : ''}" data-slug="${esc(p.slug)}" title="${esc(p.name)} · ${p.nodes || 0} nós">
-       <span class="cx-item-t">🗂️ ${esc(p.name)}</span>
+       <span class="cx-project-icon">${p.source_type === 'file' ? '📄' : '📁'}</span>
+       <span class="cx-project-info"><span class="cx-item-t">${esc(p.name)}</span><small>${p.nodes || 0} nós · ${p.files || 0} arq.</small></span>
        ${p.slug === active ? '<span class="cx-badge">ativo</span>' : ''}
      </div>`).join('');
   box.querySelectorAll('.cx-item').forEach((el) => {
@@ -58,11 +58,14 @@ async function renderMemory() {
 
 // liga os botões/toggles da Central (uma vez, no boot)
 export function initCentral() {
-  const addp = byId('cx-addproj');
-  if (addp) addp.onclick = async (e) => { e.stopPropagation(); await mind.addProject(); renderProjects(); };
-
   const dir = byId('btn-attachdir-side');
-  if (dir) dir.onclick = () => { if (window.showTab) window.showTab('chat'); chat.attachFolder(); };
+  if (dir) dir.onclick = async () => {
+    if (await mind.addProject()) {
+      await renderProjects();
+      goMind();
+      mind.showProjects();
+    }
+  };
 
   loadCentral();
 }
