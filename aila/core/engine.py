@@ -468,10 +468,9 @@ class AilaEngine:
                     tcs = chunk.tool_calls
             if not tcs:
                 tcs = extract_text_tool_calls("".join(collected), self.agents.registry)
-            writes = [c for c in tcs if c.get("function", {}).get("name", "")
-                      in _VERIFY_WRITE_TOOLS]
+            writes = [c for c in tcs if c.get("function", {}).get("name", "") == "file.write"]
             if not writes:
-                return None
+                break
             msgs.append({"role": "assistant", "content": "",
                          "tool_calls": _normalize_tool_args(tcs)})
             for c in writes:
@@ -906,6 +905,9 @@ class AilaEngine:
         tools_used: list[str] = []   # ferramentas do turno (sinal p/ o Behavior Planner)
         wrote_ok = False             # alguma escrita REALMENTE deu certo neste turno
         generated_code = ""          # código produzido por code.generate (p/ salvar se preciso)
+        # Uma sobrescrita completa bem-sucedida por destino/turno. Correções após
+        # falha de sintaxe continuam permitidas via remoção da chave mais abaixo.
+        successful_full_writes: set[str] = set()
         # Model Router: cadeia de provedores (o 1º; os demais são fallback).
         chain = self.router.chain(task)
         backend = chain[0]
@@ -1110,7 +1112,8 @@ class AilaEngine:
                 # p/ salvar o arquivo pedido em vez de o usuário ficar sem nada.
                 for _k in ("code", "content"):
                     _v = args.get(_k)
-                    if isinstance(_v, str) and len(_v.strip()) > 40:
+                    if (isinstance(_v, str) and len(_v.strip()) > 40
+                            and len(_v) > len(generated_code)):
                         generated_code = _v
                         break
                 await emit("agent.invoked", {"tool": name, "args": args})
@@ -1136,22 +1139,38 @@ class AilaEngine:
                     name, result = res
                     await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                     self.context.add_tool(name, _safe_tool_context(name, result.content))
-                    if result.ok and name == "code.generate":   # guarda o código gerado
+                    if (result.ok and name == "code.generate"
+                            and len(result.content) > len(generated_code)):
                         generated_code = result.content
 
             # Executa escritas em série
             for name, args, _ in serial_batch:
+                raw_target = str(args.get("path", "")).strip()
+                target_key = re.sub(r"[\\/]+", "/", raw_target).casefold()
+                is_full_write = name in {"file.write", "code.write_file"} and bool(target_key)
+                if is_full_write and target_key in successful_full_writes:
+                    msg = (
+                        "Sobrescrita repetida recusada: esse arquivo já foi salvo com "
+                        "sucesso neste turno. Não regenere o arquivo; conclua a resposta."
+                    )
+                    await emit("agent.result", {"tool": name, "ok": False, "content": msg})
+                    self.context.add_tool(name, msg)
+                    continue
                 await emit("aila.state", {"status": _tool_status(name), "tool": name})
                 result = await self.agents.registry.execute(name, args)
                 await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                 self.context.add_tool(name, _safe_tool_context(name, result.content))
                 if result.ok and name in _WRITE_OK_TOOLS:   # escrita que REALMENTE deu certo
                     wrote_ok = True
+                    if is_full_write:
+                        successful_full_writes.add(target_key)
                 # Auto-verificação (o "verifica" do loop, garantido): sintaxe + lint
                 # do arquivo recém-escrito → realimenta o erro no contexto p/ o modelo
                 # se auto-corrigir na próxima iteração, mesmo que esqueça de verificar.
                 check = await self._post_write_check(name, args, result)
                 if check:
+                    if is_full_write:
+                        successful_full_writes.discard(target_key)
                     await emit("agent.result", {"tool": "auto.verify", "ok": False, "content": check})
                     self.context.add_tool("auto.verify", check)
 

@@ -71,9 +71,10 @@ def data_path(rel: str) -> Path:
 class AppConfig(BaseModel):
     name: str = "Aila"
     persona: str = "Você é a Aila, uma assistente de IA local."
-    # Ao abrir: começar com o chat VAZIO (True) ou RETOMAR a última conversa
-    # (False). Vazio evita que um histórico antigo/confuso contamine o modelo.
-    fresh_chat_on_start: bool = True
+    # Ao abrir/recarregar: RETOMAR a última conversa por padrão. O histórico
+    # continua fora da barra lateral, mas não desaparece ao pressionar F5.
+    # Defina True somente para instalações que desejem uma sessão descartável.
+    fresh_chat_on_start: bool = False
 
 
 class LLMConfig(BaseModel):

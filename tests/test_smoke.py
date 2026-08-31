@@ -23,6 +23,23 @@ def test_config_loads():
     assert s.llm.backend in {"ollama", "llamacpp"}
 
 
+def test_chat_resumes_by_default_after_reload():
+    """F5 não deve criar uma conversa vazia; a lateral não precisa mostrar histórico."""
+    from aila.core.config import AppConfig
+
+    assert AppConfig().fresh_chat_on_start is False
+
+
+def test_code_write_payload_rejects_fake_success_but_accepts_real_code():
+    """Uma confirmação não pode substituir o código real no arquivo solicitado."""
+    from aila.core.verify import _validate_write_payload
+
+    fake = "print('Jogo salvo com sucesso!')"
+    assert _validate_write_payload("game.py", fake)
+    assert _validate_write_payload("game.py", "import turtle\n\nturtle.done()\n") is None
+    assert _validate_write_payload("nota.txt", "Salvo com sucesso") is None
+
+
 def test_sandbox_blocks_escape(tmp_path: Path):
     sb = PathSandbox(tmp_path)
     inside = sb.resolve("sub/file.txt")

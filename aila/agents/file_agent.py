@@ -13,6 +13,7 @@ import shutil
 
 from aila.agents.base import AgentDeps, BaseAgent
 from aila.core.logging import get_logger
+from aila.core.verify import _validate_write_payload
 from aila.tools.schema import Tool, ToolParam, ToolResult
 
 log = get_logger("file_agent")
@@ -45,7 +46,11 @@ class FileAgent(BaseAgent):
             ),
             Tool(
                 name="file.write",
-                description="Cria ou sobrescreve um arquivo de texto.",
+                description=(
+                    "Cria ou sobrescreve um arquivo do USUÁRIO. Use esta ferramenta "
+                    "para Documentos/Desktop/Downloads e caminhos absolutos; envie o "
+                    "conteúdo COMPLETO, nunca uma frase dizendo que salvou."
+                ),
                 params=[
                     ToolParam("path", "string", "Caminho relativo ao workspace"),
                     ToolParam("content", "string", "Conteúdo a escrever"),
@@ -167,6 +172,9 @@ class FileAgent(BaseAgent):
 
     async def _write(self, args: dict) -> ToolResult:
         path = self.sandbox.resolve(args["path"])
+        invalid = _validate_write_payload(str(path), args.get("content"))
+        if invalid:
+            return ToolResult.error(invalid)
         action = "file.overwrite" if path.exists() else "file.write"
         await self.authorize(action, args)
         path.parent.mkdir(parents=True, exist_ok=True)

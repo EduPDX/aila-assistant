@@ -110,11 +110,11 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         await session.emit("aila.capabilities",
                            {"items": engine.self_model.state().capabilities})
 
-    # Ao conectar: começar VAZIO (padrão) evita contaminar o modelo com um
-    # histórico antigo/confuso; ou retomar a última conversa se configurado.
-    # O histórico anterior continua salvo e acessível pela barra lateral.
+    # Ao conectar/recarregar: retoma a conversa mais recente por padrão. Isso
+    # mantém a aba Conversa contínua mesmo sem exibir histórico na lateral.
+    # Uma instalação ainda pode optar por chat descartável na configuração.
     async with engine.turn_lock:
-        if getattr(engine.settings.app, "fresh_chat_on_start", True):
+        if getattr(engine.settings.app, "fresh_chat_on_start", False):
             session.session_id = engine.new_session()
             await session.emit("session.changed", {"id": session.session_id})
         else:

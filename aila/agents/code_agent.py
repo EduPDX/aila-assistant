@@ -14,6 +14,7 @@ from pathlib import Path
 from aila.agents.base import AgentDeps, BaseAgent
 from aila.core.config import PROJECT_ROOT, data_path
 from aila.core.logging import get_logger
+from aila.core.verify import _validate_write_payload
 from aila.tools.schema import Tool, ToolParam, ToolResult
 
 log = get_logger("code_agent")
@@ -205,8 +206,9 @@ class CodeAgent(BaseAgent):
             Tool(
                 name="code.write_file",
                 description=(
-                    "ESCREVE um arquivo no repositório (auto-modificação; faz backup .bak). "
-                    "Exige autonomia L5 (self-improve)."
+                    "ESCREVE somente no repositório DA AILA (auto-modificação; backup .bak; "
+                    "exige L5). NÃO use para arquivos pessoais ou código solicitado pelo "
+                    "usuário: para Documentos/Desktop/Downloads use file.write (L2)."
                 ),
                 params=[
                     ToolParam("path", "string", "caminho relativo à raiz do repo"),
@@ -571,6 +573,9 @@ class CodeAgent(BaseAgent):
     async def _write_file(self, args: dict) -> ToolResult:
         path_arg = str(args.get("path", ""))
         content = args.get("content", "")
+        invalid = _validate_write_payload(path_arg, content)
+        if invalid:
+            return ToolResult.error(invalid)
         # Caminho de PASTA DO USUÁRIO (apelido Documents/… ou ~/… ou absoluto fora
         # do repo)? Então NÃO é auto-código: escreve via sandbox (escrita de usuário,
         # L2 + salvaguardas), em vez de gravar no repositório (L5). Assim "salve em

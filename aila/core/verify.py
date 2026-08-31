@@ -20,6 +20,48 @@ _WRITE_TOOLS = {
 # (usado p/ decidir se a rede de segurança precisa salvar por conta própria).
 _WRITE_OK_TOOLS = _VERIFY_WRITE_TOOLS | {"file.copy", "file.move", "file.mkdir"}
 
+_CODE_FILE_SUFFIXES = {
+    ".py", ".pyw", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx",
+    ".go", ".rs", ".java", ".c", ".h", ".cpp", ".hpp", ".cs", ".rb",
+    ".php", ".swift", ".kt", ".kts", ".dart", ".lua", ".sh", ".ps1",
+}
+
+
+def _validate_write_payload(path: str, content: object) -> str | None:
+    """Rejeita falsos arquivos de código produzidos por modelos pequenos.
+
+    O caso observado era ``game.py`` contendo apenas
+    ``print('Jogo salvo com sucesso!')``: sintaticamente válido, mas claramente
+    uma confirmação transformada em arquivo. A regra é deliberadamente estreita
+    para não impedir scripts curtos legítimos.
+    """
+    import re
+    from pathlib import Path
+
+    if not isinstance(content, str):
+        return "Conteúdo do arquivo deve ser texto."
+    if Path(path).suffix.lower() not in _CODE_FILE_SUFFIXES:
+        return None
+    body = content.strip()
+    if not body:
+        return "Arquivo de código vazio recusado. Envie o conteúdo completo."
+    placeholder = re.fullmatch(
+        r"(?:<[^>]+>|\[(?:insert|your|coloque|c[oó]digo)[^]]*\])", body,
+        flags=re.IGNORECASE,
+    )
+    fake_confirmation = (
+        len(body.splitlines()) <= 2
+        and len(body) < 120
+        and re.search(r"\b(salv[oa]|criad[oa]|gravado)\b", body, re.IGNORECASE)
+        and re.search(r"\b(sucesso|pronto|corretamente)\b", body, re.IGNORECASE)
+    )
+    if placeholder or fake_confirmation:
+        return (
+            "Conteúdo recusado: isso parece um placeholder/aviso de sucesso, não "
+            "o código solicitado. Gere e envie o arquivo completo."
+        )
+    return None
+
 
 def _verr(lang: str, name: str, detail: str) -> str:
     """Mensagem padrão de falha de sintaxe (o prefixo ❌ VERIFICAÇÃO é o gancho que
