@@ -34,7 +34,9 @@ function createRack(data, index) {
 
   const cabinetMat = new THREE.MeshBasicMaterial({
     color: 0x071421, transparent: true, opacity: data.status === 'offline' ? 0.22 : 0.48,
-    depthWrite: true, side: THREE.DoubleSide,
+    // A carcaça é só o volume holográfico: não bloqueia os componentes que
+    // ficam dentro dela, mas todos continuam respeitando o avatar à frente.
+    depthWrite: false, side: THREE.DoubleSide,
   });
   const shell = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), cabinetMat);
   root.add(shell);
@@ -60,7 +62,7 @@ function createRack(data, index) {
   // Porta frontal rebaixada + marcações das unidades do rack.
   const door = new THREE.Mesh(
     new THREE.PlaneGeometry(w * 0.86, h * 0.82),
-    new THREE.MeshBasicMaterial({ color: 0x091c2c, transparent: true, opacity: 0.72, depthWrite: true }),
+    new THREE.MeshBasicMaterial({ color: 0x091c2c, transparent: true, opacity: 0.72, depthWrite: false }),
   );
   door.position.set(0, -h * 0.025, d * 0.532); root.add(door);
   const pts = [];
@@ -182,10 +184,10 @@ function createRack(data, index) {
   root.traverse((obj) => {
     obj.renderOrder = -20;
     if (obj.isMesh && obj.material) obj.material.side = THREE.DoubleSide;
-    // Elementos luminosos e linhas técnicas não participam da profundidade da
-    // carcaça translúcida. Assim continuam legíveis de cima, de baixo e de lado.
+    // A carcaça não escreve profundidade, então os detalhes permanecem legíveis
+    // sem precisar atravessar objetos mais próximos, como o corpo da Aila.
     if (obj.material && (obj.material.blending === THREE.AdditiveBlending || obj.isLine)) {
-      obj.material.depthTest = false;
+      obj.material.depthTest = true;
       obj.material.depthWrite = false;
       obj.renderOrder = -10;
     }

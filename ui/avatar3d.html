@@ -284,7 +284,12 @@ function loadVRM(url, revokeWhenDone = false) {
     if (controller) { try { scene.remove(controller.rig.gazeTarget); } catch(e){} }  // limpa alvo antigo
     vrm = gltf.userData.vrm;
     if (vrm.meta?.metaVersion === '0') VRMUtils.rotateVRM0(vrm);  // VRM0 encara a câmera
-    vrm.scene.traverse((o) => { o.frustumCulled = false; });
+    vrm.scene.traverse((o) => {
+      o.frustumCulled = false;
+      // O corpo é a camada principal do palco e deve cobrir corretamente a
+      // infraestrutura holográfica posicionada atrás dele.
+      if (o.isMesh || o.isSkinnedMesh) o.renderOrder = 20;
+    });
     scene.add(vrm.scene);
     window.vrm = vrm;
     controller = new AnimationController(vrm, scene, camera);   // ← animação em camadas
