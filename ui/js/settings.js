@@ -291,7 +291,9 @@ function buildSettings() {
     + '<div class="settings-subtitle">CENTRO DE CONTROLE</div></div>';
   main.innerHTML = '<div class="settings-toolbar"><span id="cfg-save-status" class="cfg-save-status" data-state="idle">Tudo atualizado</span>'
     + '<button class="settings-close-x" type="button" id="btn-settings-close-x" aria-label="Fechar configurações">×</button></div>'
-    + '<div class="cfg-restart" id="cfg-restart">↻ Reinicie a Aila para aplicar algumas mudanças.</div>';
+    + '<div class="settings-scroll" id="settings-scroll">'
+    + '<div class="cfg-restart" id="cfg-restart">↻ Reinicie a Aila para aplicar algumas mudanças.</div></div>';
+  const scroll = byId('settings-scroll');
 
   CATEGORIES.forEach((cat, idx) => {
     nav.append(el('button', { class: 'snav' + (idx === 0 ? ' active' : ''), 'data-p': cat.id,
@@ -313,7 +315,7 @@ function buildSettings() {
       if (b.note) section.append(el('p', { class: 'muted cfg-note' }, b.note));
       pane.append(section);
     });
-    main.append(pane);
+    scroll.append(pane);
   });
   nav.append(el('div', { class: 'spacer' }));
   nav.append(el('div', { class: 'settings-side-foot' },

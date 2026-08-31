@@ -332,8 +332,15 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .snav.active { background: color-mix(in srgb, var(--accent) 13%, transparent); border-color: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--accent); font-weight: 600; }
 .settings-side-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 4px 0; color: var(--muted); font: 10px var(--font-mono); border-top: 1px solid var(--border); }
 .settings-side-foot .btn { width: auto; min-width: 82px; }
-.settings-main { position: relative; flex: 1; padding: 0 var(--s-5) var(--s-5); overflow-y: auto; scrollbar-gutter: stable; }
-.settings-toolbar { position: sticky; z-index: 5; top: 0; height: 46px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; background: linear-gradient(var(--glass-bg) 72%, transparent); backdrop-filter: blur(10px); }
+.settings-main { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.settings-toolbar { position: relative; z-index: 5; flex: 0 0 46px; height: 46px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 18px 0 var(--s-5); background: linear-gradient(var(--glass-bg) 72%, transparent); backdrop-filter: blur(10px); }
+.settings-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-gutter: stable; margin: 0 9px 9px 0; padding: 0 15px var(--s-5) var(--s-5); }
+.settings-scroll { scrollbar-color: color-mix(in srgb, var(--accent) 48%, var(--border)) color-mix(in srgb, var(--panel) 72%, transparent); }
+.settings-scroll::-webkit-scrollbar { width: 7px; }
+.settings-scroll::-webkit-scrollbar-track { background: color-mix(in srgb, var(--panel) 72%, transparent); border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
+.settings-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 48%, var(--border)); border: 2px solid transparent; background-clip: padding-box; }
+.settings-scroll::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 72%, var(--border)); background-clip: padding-box; }
 .settings-close-x { width: 30px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm); color: var(--muted); background: var(--panel-2); cursor: pointer; font-size: 20px; line-height: 1; }
 .settings-close-x:hover { color: var(--text); border-color: var(--hud-line); }
 /* Ícones desenhados geometricamente: os glifos ×/＋ das fontes do sistema têm
@@ -1282,7 +1289,7 @@ body[data-tab="chat"] .subc { display: none; }           /* na aba Conversa: só
     overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px; }
   .settings-brand, .settings-side .spacer, .settings-side-foot { display: none; }
   .snav { flex: 0 0 auto; padding: 9px 11px; }
-  .settings-main { padding: 0 var(--s-3) var(--s-3); }
+  .settings-scroll { margin-right: 6px; padding: 0 10px var(--s-3) var(--s-3); }
   .settings-toolbar { height: 42px; }
   .settings-pane-head { padding-bottom: 14px; }
   .cfg-section { padding: 0 13px; }
