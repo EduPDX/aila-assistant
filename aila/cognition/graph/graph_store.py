@@ -154,10 +154,11 @@ class GraphStore:
         )
         self.conn.commit()
         if self._loaded:                      # mantém o índice incremental
-            self._out.setdefault(source, [])
-            self._in.setdefault(target, [])
-            if not any(e[3] == eid for e in self._out[source]):
-                self._add_adj(source, target, relation, weight, eid)
+            # Um upsert também pode ALTERAR o peso. Substituir a entrada evita
+            # que related() continue usando o valor antigo até reiniciar o app.
+            self._out[source] = [e for e in self._out.get(source, []) if e[3] != eid]
+            self._in[target] = [e for e in self._in.get(target, []) if e[3] != eid]
+            self._add_adj(source, target, relation, weight, eid)
         return eid
 
     # ----------------------------- leitura ----------------------------- #

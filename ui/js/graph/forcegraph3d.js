@@ -61,10 +61,14 @@ export class ForceGraph3D {
     this.nodes = (data.nodes || []).map((n) => ({
       ...n,
       x: (Math.random() - 0.5) * S, y: (Math.random() - 0.5) * S, z: (Math.random() - 0.5) * S,
-      vx: 0, vy: 0, vz: 0, r: Math.max(3.4, Math.min(15, 3.4 + Math.sqrt(n.degree || 0) * 2.1)),
+      vx: 0, vy: 0, vz: 0, r: Math.max(3.7, Math.min(17, 3.7 + Math.sqrt(n.degree || 0) * 1.9
+        + Math.max(0, Number(n.importance) || 0) * 3.5)),
     }));
     this.byId = new Map(this.nodes.map((n) => [n.id, n]));
-    this.links = (data.edges || []).map((e) => ({ s: this.byId.get(e.source), t: this.byId.get(e.target) }))
+    this.links = (data.edges || []).map((e) => ({
+      s: this.byId.get(e.source), t: this.byId.get(e.target), rel: e.relation,
+      weight: Number(e.weight) || 1, confidence: Number(e.confidence) || 0,
+    }))
       .filter((l) => l.s && l.t);
     this._presettle();          // assenta EM MEMÓRIA → aparece quase estável (sem os 8s de colapso)
     this._buildMeshes();

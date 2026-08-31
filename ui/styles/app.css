@@ -1100,7 +1100,22 @@ body[data-tab="chat"] .subc { display: none; }           /* na aba Conversa: só
 .mind-ni-name { font-weight: 600; color: var(--accent); word-break: break-all; margin-bottom: 6px; }
 .mind-ni-k { color: var(--muted); font-size: var(--fs-xs); }
 .mind-ni-k b { color: var(--text); font-weight: 500; }
+.mind-ni-meter { height: 3px; margin: 3px 0 6px; overflow: hidden;
+  background: rgba(92, 150, 190, 0.14); }
+.mind-ni-meter i { display: block; height: 100%; max-width: 100%;
+  background: linear-gradient(90deg, var(--accent), #79e8ff); box-shadow: 0 0 8px var(--accent); }
 .mind-ni-h { margin-top: 8px; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.mind-overview-k { color: var(--accent); font: 9px/1.2 var(--font-mono);
+  letter-spacing: 1.5px; margin-bottom: 8px; }
+.mind-overview-grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px;
+  align-items: baseline; padding: 8px; border: 1px solid var(--border); background: var(--panel-2); }
+.mind-overview-grid b { color: var(--accent); font: 600 15px/1 var(--font-mono); }
+.mind-overview-grid span { color: var(--muted); font-size: var(--fs-xs); }
+.mind-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.mind-pills span { padding: 3px 5px; border: 1px solid var(--border); color: var(--muted);
+  background: rgba(41, 214, 214, 0.035); font: 9px/1.2 var(--font-mono); }
+.mind-pills b { color: var(--text); font-weight: 500; }
+.mind-overview-help { margin: 10px 0 0; font-size: 10px; line-height: 1.4; }
 .mind-nbs { max-height: 150px; overflow-y: auto; margin-top: 4px; }
 .mind-nb { display: flex; align-items: center; gap: 6px; padding: 3px 4px; cursor: pointer; font-size: var(--fs-xs); }
 .mind-nb:hover { background: var(--panel-2); }

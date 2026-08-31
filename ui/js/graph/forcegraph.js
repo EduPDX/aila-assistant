@@ -49,13 +49,15 @@ export class ForceGraph {
       const a = 2 * Math.PI * Math.random(), rr = Math.min(W, H) * 0.35 * spread0 * Math.sqrt(Math.random());
       const node = {
         ...n, x: W / 2 + Math.cos(a) * rr, y: H / 2 + Math.sin(a) * rr, vx: 0, vy: 0,
-        r: Math.max(2.5, Math.min(11, 2.5 + Math.sqrt(n.degree || 0) * 1.4)),
+        r: Math.max(2.8, Math.min(13, 2.8 + Math.sqrt(n.degree || 0) * 1.3
+          + Math.max(0, Number(n.importance) || 0) * 3)),
       };
       this.byId.set(n.id, node);
       return node;
     });
     this.links = (data.edges || []).map((e) => ({
       s: this.byId.get(e.source), t: this.byId.get(e.target), rel: e.relation,
+      weight: Number(e.weight) || 1, confidence: Number(e.confidence) || 0,
     })).filter((l) => l.s && l.t);
     this.selected = null;
     this._fitted = false;
@@ -202,8 +204,8 @@ export class ForceGraph {
     const shown = (n) => !vis || vis.has(n.community);
     // arestas — coloridas (cor do nó de origem) ou cinza, conforme preferência
     const colored = (localStorage.getItem('aila.graph.edges') || 'coloridas') !== 'cinza';
-    ctx.lineWidth = 0.6 / k;
     for (const l of this.links) {
+      ctx.lineWidth = Math.min(2.2, 0.55 + Math.log2(1 + l.weight) * 0.28) / k;
       if (!shown(l.s) || !shown(l.t)) continue;
       const hot = this.selected && (l.s === this.selected || l.t === this.selected);
       if (hot) { ctx.globalAlpha = 0.7; ctx.strokeStyle = '#8fd0ff'; }

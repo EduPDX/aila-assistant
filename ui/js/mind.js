@@ -22,6 +22,7 @@ let built = false;
 let currentProject = null;   // slug do projeto aberto (só quando kind='project')
 let projectList = [];        // cache dos projetos (nome/contagens p/ a grade)
 let activeProject = null;    // slug do projeto em que a Aila está "trabalhando"
+let currentGraphData = null;
 
 export function showMind(on) {
   if (on) {
@@ -163,6 +164,7 @@ async function load(k) {
       : await api.graph(k, 1500);
   } catch (e) { data = { nodes: [], edges: [], communities: [] }; }
   communities = data.communities || [];
+  currentGraphData = data;
   visible = null;
   const empty = $('mind-empty');
   if (!data.nodes || !data.nodes.length) {
@@ -180,7 +182,7 @@ async function load(k) {
   empty.hidden = true;
   fg.setData(data);
   renderCommunities();
-  renderNodeInfo(null);
+  renderOverview(data);
   const c = data.counts || {};
   $('mind-stats').textContent = `${c.nodes || 0} nós · ${c.edges || 0} arestas · ${c.communities || 0} comunidades`;
   if ($('mind-all')) $('mind-all').checked = true;
@@ -210,19 +212,45 @@ function renderCommunities() {
 function renderNodeInfo(node, neighbors = []) {
   const box = $('mind-nodeinfo'); if (!box) return;
   if (!node) {
-    box.innerHTML = '<div class="muted">clique num nó para ver detalhes</div>';
+    renderOverview(currentGraphData);
     return;
   }
+  const community = communities.find((c) => c.id === node.community);
+  const relevance = Math.round((Number(node.importance) || 0) * 100);
+  const confidence = Math.round((Number(node.confidence) || 0) * 100);
   const nb = neighbors.slice(0, 30).map((n) =>
     `<div class="mind-nb" data-id="${esc(n.id)}"><span class="mind-dot" style="background:${fg.color.get(n.community) || '#8aa'}"></span>${esc(n.label)}</div>`).join('');
   box.innerHTML =
     `<div class="mind-ni-name">${esc(node.label)}</div>
      <div class="mind-ni-k">tipo <b>${esc(node.type || '—')}</b></div>
-     <div class="mind-ni-k">comunidade <b>${esc(node.community || '—')}</b></div>
+     <div class="mind-ni-k">tema <b>${esc(community?.label || node.community || '—')}</b></div>
      <div class="mind-ni-k">grau <b>${node.degree || 0}</b></div>
+     <div class="mind-ni-k">relevância <b>${relevance}%</b></div>
+     <div class="mind-ni-meter"><i style="width:${relevance}%"></i></div>
+     <div class="mind-ni-k">confiança <b>${confidence}%</b></div>
      <div class="mind-ni-h">Vizinhos (${neighbors.length})</div>
      <div class="mind-nbs">${nb || '<span class="muted">nenhum</span>'}</div>`;
   box.querySelectorAll('.mind-nb').forEach((el) => { el.onclick = () => fg.selectById(el.dataset.id); });
+}
+
+function renderOverview(data) {
+  const box = $('mind-nodeinfo'); if (!box) return;
+  if (!data?.counts) {
+    box.innerHTML = '<div class="muted">clique num nó para ver detalhes</div>';
+    return;
+  }
+  const counts = data.counts;
+  const relations = Object.entries(counts.relations || {}).sort((a, b) => b[1] - a[1]);
+  const types = Object.entries(counts.types || {}).sort((a, b) => b[1] - a[1]);
+  box.innerHTML = `<div class="mind-overview">
+    <div class="mind-overview-k">${data.kind === 'knowledge' ? 'CONHECIMENTO' : 'ESTRUTURA DO GRAFO'}</div>
+    <div class="mind-overview-grid"><b>${counts.nodes || 0}</b><span>nós</span>
+      <b>${counts.edges || 0}</b><span>relações</span>
+      <b>${counts.communities || 0}</b><span>temas</span></div>
+    ${types.length ? `<div class="mind-ni-h">Tipos</div><div class="mind-pills">${types.map(([k, v]) => `<span>${esc(k)} <b>${v}</b></span>`).join('')}</div>` : ''}
+    ${relations.length ? `<div class="mind-ni-h">Relações</div><div class="mind-pills">${relations.map(([k, v]) => `<span>${esc(k)} <b>${v}</b></span>`).join('')}</div>` : ''}
+    <p class="muted mind-overview-help">Clique em um nó para ver relevância, confiança e conexões.</p>
+  </div>`;
 }
 
 function doSearch(q) {

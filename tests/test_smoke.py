@@ -550,6 +550,11 @@ def test_graph_store(tmp_path: Path):
     assert g.counts()["edges"] == 5
     assert g.get_edge(same).confidence == 0.97
 
+    # o índice em memória também recebe o novo peso sem exigir reinício
+    g.related("ModelRouter")
+    g.upsert_edge("Aila", "Gemini", "uses", weight=4.0)
+    assert g.related("Aila")[0]["id"] == "Gemini"
+
     # vizinhança de Aila (depth 1): user (in), ModelRouter, Gemini (out)
     nb = g.neighborhood("Aila", depth=1)
     ids = {n["id"] for n in nb["nodes"]}
@@ -1471,6 +1476,21 @@ def test_graph_view_for_subconscious(tmp_path: Path):
     # arestas só entre nós presentes
     ids = {n["id"] for n in view["nodes"]}
     assert all(e["source"] in ids and e["target"] in ids for e in view["edges"])
+    assert view["counts"]["types"] and view["counts"]["relations"]
+    assert all("importance" in n and "confidence" in n for n in view["nodes"])
+    assert all("weight" in e and "confidence" in e for e in view["edges"])
+
+    # conhecimento é agrupado por ilhas temáticas, não apenas pelo tipo genérico
+    knowledge = GraphStore(tmp_path / "knowledge.db")
+    for nid in ("Gemini", "Router", "Python", "Pytest"):
+        knowledge.upsert_node(nid, "concept", nid)
+    knowledge.upsert_edge("Gemini", "Router", "relates_to", weight=3)
+    knowledge.upsert_edge("Python", "Pytest", "relates_to", weight=2)
+    knowledge_view = to_view(knowledge, "knowledge")
+    assert knowledge_view["counts"]["communities"] == 2
+    assert {c["label"] for c in knowledge_view["communities"]} <= {
+        "Gemini", "Router", "Python", "Pytest",
+    }
 
     # knowledge vazio (ainda não populado) → estrutura válida, sem quebrar
     empty = to_view(GraphStore(tmp_path / "kg.db"), "knowledge")
