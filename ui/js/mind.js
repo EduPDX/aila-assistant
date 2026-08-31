@@ -6,7 +6,7 @@
 // ============================================================
 import { api } from './core/api.js';
 import { pickFilePath, pickFolderPath } from './core/folder.js';
-import { choiceDialog } from './ui.js';
+import { choiceDialog, confirmDialog } from './ui.js';
 import { ForceGraph } from './graph/forcegraph.js';
 import { ForceGraph3D } from './graph/forcegraph3d.js';
 import { graphThumbnail } from './graph/thumbnail.js';
@@ -320,7 +320,14 @@ async function toggleWork(slug) {
 }
 
 async function removeProjectFlow(slug, name) {
-  if (!window.confirm(`Remover o projeto "${name || slug}"?\nO grafo dele será apagado — a pasta original NÃO é tocada.`)) return;
+  const confirmed = await confirmDialog({
+    title: `Remover “${name || slug}”?`,
+    body: 'O grafo e a entrada deste projeto serão removidos da Aila. '
+      + 'A pasta ou arquivo original continuará intacto no computador.',
+    confirmLabel: 'Remover projeto',
+    danger: true,
+  });
+  if (!confirmed) return;
   try { await api.removeProject(slug); } catch (e) { /* ignora */ }
   await showGrid();
 }
