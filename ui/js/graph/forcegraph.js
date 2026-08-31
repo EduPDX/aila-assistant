@@ -204,11 +204,12 @@ export class ForceGraph {
     const shown = (n) => !vis || vis.has(n.community);
     // arestas — coloridas (cor do nó de origem) ou cinza, conforme preferência
     const colored = (localStorage.getItem('aila.graph.edges') || 'coloridas') !== 'cinza';
+    const selectedColor = this.selected ? this.colorOf(this.selected) : null;
     for (const l of this.links) {
       ctx.lineWidth = Math.min(2.2, 0.55 + Math.log2(1 + l.weight) * 0.28) / k;
       if (!shown(l.s) || !shown(l.t)) continue;
       const hot = this.selected && (l.s === this.selected || l.t === this.selected);
-      if (hot) { ctx.globalAlpha = 0.7; ctx.strokeStyle = '#8fd0ff'; }
+      if (hot) { ctx.globalAlpha = 0.82; ctx.strokeStyle = selectedColor; }
       else if (colored) { ctx.globalAlpha = this.selected ? 0.12 : 0.24; ctx.strokeStyle = this.colorOf(l.s); }
       else { ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(150,170,200,.14)'; }
       ctx.beginPath(); ctx.moveTo(l.s.x, l.s.y); ctx.lineTo(l.t.x, l.t.y); ctx.stroke();

@@ -313,8 +313,8 @@ export class ForceGraph3D {
     if (!this._nodeMesh || !this._edgeLines) return;
     const sel = this.selected, nbr = this._nbr;
     const white = this._white || (this._white = new THREE.Color(0xffffff));
-    const hot = this._hot || (this._hot = new THREE.Color(0x9fd8ff));
     const tmp = this._tmp || (this._tmp = new THREE.Color());
+    const selectedColor = sel ? (this._colHex.get(sel.community) || white) : white;
     this.nodes.forEach((n, i) => {
       tmp.copy(this._colHex.get(n.community) || white);
       if (sel && n !== sel && !nbr.has(n.id)) tmp.multiplyScalar(0.16);   // apaga não-vizinhos
@@ -324,7 +324,7 @@ export class ForceGraph3D {
     const col = this._edgeLines.geometry.getAttribute('color');
     this.links.forEach((l, i) => {
       if (!sel) tmp.copy(this._colHex.get(l.s.community) || white);
-      else if (l.s === sel || l.t === sel) tmp.copy(hot);                // acende as ligações do nó
+      else if (l.s === sel || l.t === sel) tmp.copy(selectedColor);      // usa a cor semântica do nó
       else tmp.copy(this._colHex.get(l.s.community) || white).multiplyScalar(0.1);
       col.setXYZ(i * 2, tmp.r, tmp.g, tmp.b); col.setXYZ(i * 2 + 1, tmp.r, tmp.g, tmp.b);
     });
