@@ -230,13 +230,13 @@ class CodeAgent(BaseAgent):
             Tool(
                 name="project.add",
                 description=(
-                    "Anexa uma PASTA de projeto e constrói o Code Graph dela (aparece na "
+                    "Anexa uma pasta ou arquivo e constrói o Code Graph (aparece na "
                     "aba Projetos). Use quando o usuário pedir para 'salvar o projeto', "
                     "'adicionar aos projetos' ou analisar uma pasta a fundo. Mapeia "
-                    "Python, JavaScript/TypeScript, Go e Rust. Passe o caminho da pasta."
+                    "Python, JS/TS, Go, Rust, C/C++, Java, C#, PHP, Ruby, Kotlin e Swift."
                 ),
                 params=[
-                    ToolParam("path", "string", "caminho da pasta do projeto"),
+                    ToolParam("path", "string", "caminho da pasta ou arquivo de código"),
                     ToolParam("name", "string", "nome do projeto (opcional)", required=False),
                 ],
                 handler=self._project_add,
@@ -688,8 +688,8 @@ class CodeAgent(BaseAgent):
         from aila.cognition.graph.projects import get_registry
 
         p = Path(str(args.get("path", ""))).expanduser()
-        if not p.exists() or not p.is_dir():
-            return ToolResult.error(f"Não é uma pasta válida: {args.get('path')}")
+        if not p.exists() or not (p.is_dir() or p.is_file()):
+            return ToolResult.error(f"Não é uma pasta ou arquivo válido: {args.get('path')}")
         try:
             meta = get_registry().add(str(p), args.get("name"))
         except Exception as exc:  # noqa: BLE001
@@ -698,11 +698,11 @@ class CodeAgent(BaseAgent):
         if not meta.get("nodes"):
             return ToolResult.success(
                 f"Projeto '{meta['name']}' anexado, mas o grafo saiu com 0 nós — o "
-                f"construtor hoje mapeia só Python (.py). {meta.get('files', 0)} arquivos varridos.",
+                f"nenhuma definição reconhecida. {meta.get('files', 0)} arquivos varridos.",
                 **keep)
         return ToolResult.success(
             f"Projeto '{meta['name']}' anexado: {meta['nodes']} nós, {meta['edges']} arestas "
-            f"({meta.get('files', 0)} arquivos .py). Aparece na aba Projetos.", **keep)
+            f"({meta.get('files', 0)} arquivos). Aparece na aba Projetos.", **keep)
 
     async def _project_list(self, args: dict) -> ToolResult:
         from aila.cognition.graph.projects import get_registry

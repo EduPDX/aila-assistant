@@ -33,6 +33,7 @@ export const api = {
   memory: (n = 20) => j(`/api/memory?n=${n}`),         // { enabled, count, recent }
   deleteMemory: (id) => j(`/api/memory/${id}`, { method: 'DELETE' }),   // esquecer uma memória
   pickFolder: () => jsonPost('/api/pick-folder', {}),                  // diálogo NATIVO de pasta (backend, do fonte)
+  pickFile: () => jsonPost('/api/pick-file', {}),                      // diálogo NATIVO de arquivo (backend, do fonte)
   attachFolder: (path) => jsonPost('/api/attach/folder', { path }),    // pasta → raiz de leitura (sem upload)
   reset: () => j('/api/reset', { method: 'POST' }),                     // apagar memória+conhecimento+conversas
   rebuildKnowledge: () => j('/api/knowledge/rebuild', { method: 'POST' }), // repovoar grafo de conhecimento (backfill)

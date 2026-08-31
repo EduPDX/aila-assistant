@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld('aila', {
   // seletor NATIVO de pasta → devolve o caminho absoluto (sem upload). A Aila lê
   // a pasta direto do disco (via file.list/read). Retorna null se cancelar.
   pickFolder: () => ipcRenderer.invoke('aila:pick-folder'),
+  pickFile: () => ipcRenderer.invoke('aila:pick-file'),
 });

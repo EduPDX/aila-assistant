@@ -4,9 +4,8 @@ Cada projeto que o usuário anexa (uma pasta local) ganha:
   - data/projects/<slug>/code_graph.db  → o Code Graph daquele projeto
   - uma entrada em data/projects/index.json com os metadados
 
-Local-first: o backend LÊ a pasta local direto (mesma máquina) e só varre .py —
-nunca escreve no projeto do usuário. O construtor é o mesmo CodeGraph da Aila,
-que já aceita um root arbitrário.
+Local-first: o backend LÊ uma pasta ou arquivo local direto e nunca escreve no
+projeto do usuário. Python usa ``ast``; demais linguagens usam tree-sitter.
 """
 
 from __future__ import annotations
@@ -105,19 +104,21 @@ class ProjectRegistry:
 
     # ------------------------------------------------------------- add/build
     def add(self, path: str, name: str | None = None) -> dict:
-        """Valida a pasta, constrói o Code Graph e registra. Idempotente por
-        caminho: reanexar a MESMA pasta reconstrói o grafo do projeto existente."""
+        """Valida pasta/arquivo, constrói o Code Graph e registra. Idempotente
+        por caminho: reanexar a mesma origem reconstrói o grafo existente."""
         from aila.cognition.graph import CodeGraph, GraphStore
 
         src = Path(path).expanduser()
-        if not src.exists() or not src.is_dir():
-            raise NotADirectoryError(f"não é uma pasta válida: {path}")
+        if not src.exists() or not (src.is_dir() or src.is_file()):
+            raise FileNotFoundError(f"não é uma pasta ou arquivo válido: {path}")
         src = src.resolve()
+        source_file = src if src.is_file() else None
+        scan_root = src.parent if source_file else src
 
         items = self._load()
         existing = next((p for p in items if p.get("path") == str(src)), None)
         slug = existing["slug"] if existing else \
-            self._unique_slug(_slugify(name or src.name), items)
+            self._unique_slug(_slugify(name or (src.stem if source_file else src.name)), items)
 
         proj_dir = self.root / slug
         proj_dir.mkdir(parents=True, exist_ok=True)
@@ -132,7 +133,7 @@ class ProjectRegistry:
 
         st = GraphStore(db)
         t0 = time.time()
-        rep = CodeGraph(st, src).build()                 # Python (ast) — preciso
+        rep = CodeGraph(st, scan_root).build(file=source_file)  # Python (ast) — preciso
         files = rep.get("files", 0)
         langs: dict[str, int] = {"python": files} if files else {}
         # Multi-linguagem (JS/TS/Go/Rust) via tree-sitter — ADITIVO e OPCIONAL:
@@ -141,7 +142,7 @@ class ProjectRegistry:
             from aila.cognition.graph.treesitter_graph import TreeSitterGraph, available
 
             if available():
-                rep_ts = TreeSitterGraph(st, src).build()
+                rep_ts = TreeSitterGraph(st, scan_root).build(file=source_file)
                 files += rep_ts.get("files", 0)
                 for lang, n in (rep_ts.get("by_lang") or {}).items():
                     langs[lang] = n
@@ -153,8 +154,9 @@ class ProjectRegistry:
 
         meta = {
             "slug": slug,
-            "name": name or (existing or {}).get("name") or src.name,
+            "name": name or (existing or {}).get("name") or (src.stem if source_file else src.name),
             "path": str(src),
+            "source_type": "file" if source_file else "folder",
             "nodes": counts["nodes"],
             "edges": counts["edges"],
             "by_type": counts.get("by_type", {}),

@@ -411,6 +411,16 @@ body[data-mode="permission"] .sidebar { opacity: .45; }
 .modal pre { background: var(--panel-2); padding: 10px; border-radius: var(--r-sm); font-size: var(--fs-sm); color: var(--muted); overflow-x: auto; margin: var(--s-2) 0; }
 .modal-actions { display: flex; gap: var(--s-2); justify-content: flex-end; margin-top: var(--s-3); }
 .modal-actions .btn { width: auto; padding: 8px 18px; }
+.choice-list { display: grid; gap: 9px; margin-top: var(--s-4); }
+.choice-item { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 11px; width: 100%;
+  padding: 11px 12px; text-align: left; color: var(--text); background: var(--panel-2);
+  border: 1px solid var(--border); cursor: pointer; }
+.choice-item:hover, .choice-item:focus-visible { border-color: var(--hud-line); outline: none;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-2)); }
+.choice-icon { display: grid; place-items: center; width: 34px; height: 34px;
+  color: var(--accent); border: 1px solid var(--hud-line-soft); }
+.choice-item b, .choice-item small { display: block; }
+.choice-item small { margin-top: 3px; font-size: var(--fs-xs); font-weight: 400; }
 
 /* ---------- Permission Center ---------- */
 .modal.perm { width: 460px; border-color: var(--glass-border); }
@@ -1028,6 +1038,8 @@ body[data-tab="chat"] .subc { display: none; }           /* na aba Conversa: só
 .mind-card-name { font-size: var(--fs-sm); color: var(--text); font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mind-card-meta { font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+.mind-card-langs { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--accent); font: 9px var(--font-mono); text-transform: uppercase; letter-spacing: .6px; }
 .mind-card-work { margin-top: 6px; padding: 6px 8px; width: 100%; cursor: pointer;
   background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #04120f;
   border: none; font-size: var(--fs-sm); font-weight: 600; }

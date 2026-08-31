@@ -871,6 +871,27 @@ def test_project_registry(tmp_path: Path):
     assert reg.list() == []
 
 
+def test_project_registry_single_file(tmp_path: Path):
+    """Um arquivo isolado também vira projeto sem mapear os vizinhos da pasta."""
+    from aila.cognition.graph.projects import ProjectRegistry
+
+    source = tmp_path / "isolado.py"
+    source.write_text("def somente_este():\n    return 42\n", encoding="utf-8")
+    (tmp_path / "vizinho.py").write_text("def nao_mapear():\n    pass\n", encoding="utf-8")
+
+    reg = ProjectRegistry.__new__(ProjectRegistry)
+    reg.root = tmp_path / "reg-file"
+    reg.root.mkdir()
+    reg.index_path = reg.root / "index.json"
+    reg._stores = {}
+
+    meta = reg.add(str(source))
+    assert meta["source_type"] == "file" and meta["files"] == 1
+    labels = {row[0] for row in reg.store(meta["slug"]).conn.execute("SELECT label FROM kg_node")}
+    assert "somente_este" in labels and "nao_mapear" not in labels
+    reg.store(meta["slug"]).close()
+
+
 def test_code_agent_graph_tools(tmp_path: Path, monkeypatch):
     """Fase 6: o Code Agent usa o Code Graph (repo-map, definição, callers,
     impacto) — read-only (SAFE/L1). Ancorado no código da Aila quando não há
@@ -2329,7 +2350,7 @@ def test_registry_recovery_hints():
 def test_treesitter_graph_multilang(tmp_path: Path):
     """Code Graph multi-linguagem: extrai module/class/function + calls de JS/Go/
     Rust no MESMO schema do builder Python. Pulado se tree-sitter não instalado."""
-    from aila.cognition.graph.treesitter_graph import TreeSitterGraph, available
+    from aila.cognition.graph.treesitter_graph import _LANG_EXT, TreeSitterGraph, available
 
     if not available():
         import pytest
@@ -2355,6 +2376,7 @@ def test_treesitter_graph_multilang(tmp_path: Path):
         "SELECT 1 FROM kg_edge WHERE relation='defines' AND source LIKE '%Foo' AND target LIKE '%Foo.bar'"
     ).fetchall()
     assert method_edges
+    assert {"c", "cpp", "java", "c_sharp", "php", "ruby", "kotlin", "swift"} <= set(_LANG_EXT.values())
     st.close()
 
 

@@ -54,8 +54,9 @@ class CodeGraph:
         self.root = Path(root).resolve()
 
     # ------------------------------------------------------------------ #
-    def build(self, *, subdir: str | None = None) -> dict[str, Any]:
-        """Varre .py sob root (ou root/subdir), popula o grafo, retorna relatório."""
+    def build(self, *, subdir: str | None = None,
+              file: str | Path | None = None) -> dict[str, Any]:
+        """Varre Python sob ``root`` ou somente ``file``, quando informado."""
         base = self.root / subdir if subdir else self.root
         report = {"files": 0, "errors": 0, "modules": 0, "classes": 0,
                   "functions": 0, "defines": 0, "imports": 0, "calls": 0, "ambiguous_calls": 0}
@@ -63,7 +64,10 @@ class CodeGraph:
         callsites: list[tuple[str, str]] = []        # (caller_id, callee_simple_name)
         func_by_name: dict[str, list[str]] = defaultdict(list)  # simple name -> [node_id]
 
-        for f in sorted(base.rglob("*.py")):
+        target = Path(file).resolve() if file else None
+        python_files = [target] if target and target.suffix.lower() == ".py" else (
+            [] if target else sorted(base.rglob("*.py")))
+        for f in python_files:
             if any(part in _EXCLUDE for part in f.relative_to(self.root).parts):
                 continue
             try:

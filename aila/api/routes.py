@@ -109,8 +109,7 @@ class ProjectBody(BaseModel):
 
 @router.post("/projects")
 async def add_project(body: ProjectBody) -> dict:
-    """Anexa uma PASTA local: constrói o Code Graph do projeto e registra.
-    Local-first — o backend lê a pasta direto; só varre .py, nunca escreve nela."""
+    """Anexa pasta ou arquivo local e constrói seu Code Graph, sem escrever nele."""
     from aila.cognition.graph.projects import get_registry
 
     try:
@@ -181,6 +180,38 @@ async def pick_folder() -> dict:
 
     path = await asyncio.to_thread(_run)
     return {"path": path}
+
+
+@router.post("/pick-file")
+async def pick_file() -> dict:
+    """Abre o diálogo nativo para selecionar um único arquivo de código."""
+    import asyncio
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    if getattr(sys, "frozen", False):
+        return {"path": None, "native": False}
+    code = (
+        "import tkinter as tk;from tkinter import filedialog;"
+        "r=tk.Tk();r.withdraw();r.attributes('-topmost',True);"
+        "p=filedialog.askopenfilename(title='Escolha um arquivo de código');"
+        "r.destroy();print(p or '')"
+    )
+    pyw = Path(sys.executable).with_name("pythonw.exe")
+    exe = str(pyw) if pyw.exists() else sys.executable
+
+    def _run() -> str | None:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+        try:
+            result = subprocess.run([exe, "-c", code], capture_output=True, text=True,
+                                    timeout=300, creationflags=flags)
+            return (result.stdout or "").strip() or None
+        except Exception:  # noqa: BLE001
+            return None
+
+    return {"path": await asyncio.to_thread(_run)}
 
 
 class FolderBody(BaseModel):

@@ -20,3 +20,16 @@ export async function pickFolderPath() {
   const p = window.prompt('Caminho da pasta (a Aila lê direto do disco):');
   return (p || '').trim() || null;
 }
+
+export async function pickFilePath() {
+  if (window.aila && window.aila.pickFile) {
+    try { const p = await window.aila.pickFile(); return (p || '').trim() || null; }
+    catch (e) { /* sem bridge → tenta o backend */ }
+  }
+  try {
+    const r = await api.pickFile();
+    if (r && r.native !== false) return (r.path || '').trim() || null;
+  } catch (e) { /* endpoint indisponível → prompt */ }
+  const p = window.prompt('Caminho do arquivo de código (a Aila apenas lê):');
+  return (p || '').trim() || null;
+}

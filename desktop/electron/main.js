@@ -12,6 +12,17 @@ ipcMain.handle('aila:pick-folder', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
   return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
 });
+ipcMain.handle('aila:pick-file', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
+    filters: [{ name: 'Código-fonte', extensions: [
+      'py', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'go', 'rs', 'c', 'h',
+      'cc', 'cpp', 'cxx', 'hh', 'hpp', 'hxx', 'java', 'cs', 'php', 'rb', 'kt',
+      'kts', 'swift',
+    ] }, { name: 'Todos os arquivos', extensions: ['*'] }],
+  });
+  return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
+});
 const { spawn, execFile } = require('child_process');
 const path = require('path');
 const http = require('http');

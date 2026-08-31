@@ -5,7 +5,8 @@
 //  Fonte: GET /api/graph. Renderizador próprio (canvas, sem deps).
 // ============================================================
 import { api } from './core/api.js';
-import { pickFolderPath } from './core/folder.js';
+import { pickFilePath, pickFolderPath } from './core/folder.js';
+import { choiceDialog } from './ui.js';
 import { ForceGraph } from './graph/forcegraph.js';
 import { ForceGraph3D } from './graph/forcegraph3d.js';
 import { graphThumbnail } from './graph/thumbnail.js';
@@ -48,20 +49,33 @@ export function showProject(slug) {
 
 /** anexa um projeto pelo seletor NATIVO (sem depender da view do 🧠 estar aberta). */
 export async function addProject() {
-  const path = await pickFolderPath();   // cancelar = aborta (sem prompt)
+  const path = await pickProjectSource();
   if (!path) return false;
   try {
     const meta = await api.addProject(path, null);
     if (meta && !meta.nodes) window.alert(warnEmptyGraph(meta));
     return true;
-  } catch (e) { window.alert('Não consegui anexar essa pasta.'); return false; }
+  } catch (e) { window.alert('Não consegui anexar esse código.'); return false; }
 }
 
-// aviso quando o grafo sai vazio: hoje o construtor só entende Python (ast).
+async function pickProjectSource() {
+  const kind = await choiceDialog({
+    title: 'Adicionar ao Code Graph',
+    body: 'Escolha uma pasta inteira ou somente um arquivo de código.',
+    choices: [
+      { value: 'folder', icon: '📁', label: 'Selecionar pasta', hint: 'Mapeia o projeto e suas relações.' },
+      { value: 'file', icon: '📄', label: 'Selecionar arquivo', hint: 'Mapeia somente o arquivo escolhido.' },
+    ],
+  });
+  if (kind === 'folder') return pickFolderPath();
+  if (kind === 'file') return pickFilePath();
+  return null;
+}
+
 function warnEmptyGraph(meta) {
   return `Projeto "${meta.name}" anexado, mas o grafo saiu com 0 nós — o `
-    + `construtor de código hoje mapeia só arquivos .py (Python). Front-ends `
-    + `JS/TS ainda não são mapeados (${meta.files || 0} arquivos varridos).`;
+    + `arquivo pode não ser de uma linguagem suportada ou não conter definições `
+    + `mapeáveis (${meta.files || 0} arquivos reconhecidos).`;
 }
 
 // roteia a view conforme o `kind`: 'project' sem projeto aberto → grade;
@@ -225,6 +239,7 @@ async function showGrid() {
 
 function cardHTML(p) {
   const active = p.slug === activeProject;
+  const languages = Object.keys(p.languages || {}).join(', ') || 'sem linguagem detectada';
   return `<div class="mind-card${active ? ' active' : ''}" data-slug="${esc(p.slug)}">
       <button class="mind-card-del" title="Remover projeto">✕</button>
       ${active ? '<div class="mind-card-badge">● trabalhando</div>' : ''}
@@ -232,6 +247,7 @@ function cardHTML(p) {
       <div class="mind-card-body">
         <div class="mind-card-name" title="${esc(p.name)}">${esc(p.name)}</div>
         <div class="mind-card-meta">${p.nodes || 0} nós · ${p.edges || 0} arestas · ${p.files || 0} arq.</div>
+        <div class="mind-card-langs" title="${esc(languages)}">${esc(languages)}</div>
         <button class="mind-card-work${active ? ' stop' : ''}">${active ? 'Parar de trabalhar' : 'Trabalhar no projeto'}</button>
       </div>
     </div>`;
@@ -241,7 +257,7 @@ function renderCards() {
   const grid = $('mind-grid');
   const add = '<div class="mind-addcard" id="mind-addproj">'
     + '<div class="plus">+</div><div>Adicionar projeto</div>'
-    + '<div class="muted" style="font-size:11px">anexe uma pasta pra ela mapear</div></div>';
+    + '<div class="muted" style="font-size:11px">selecione uma pasta ou arquivo</div></div>';
   grid.innerHTML = add + projectList.map(cardHTML).join('');
   $('mind-addproj').onclick = addProjectFlow;
   grid.querySelectorAll('.mind-card').forEach((cardEl) => {
@@ -289,7 +305,7 @@ async function toggleWork(slug) {
 }
 
 async function addProjectFlow() {
-  const path = await pickFolderPath();   // nativo; cancelar = aborta (sem prompt)
+  const path = await pickProjectSource();
   if (!path) return;
   const add = $('mind-addproj');
   if (add) add.innerHTML = '<div class="mind-card-building">construindo grafo…</div>';
@@ -298,7 +314,7 @@ async function addProjectFlow() {
     await showGrid();
     if (meta && !meta.nodes) window.alert(warnEmptyGraph(meta));
   } catch (e) {
-    window.alert('Não consegui anexar essa pasta. Verifique se o caminho existe e tem código Python.');
+    window.alert('Não consegui anexar esse código. Verifique o caminho e a linguagem do arquivo.');
     renderCards();
   }
 }

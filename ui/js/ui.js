@@ -72,3 +72,18 @@ export function promptDialog({ title = 'Editar', value = '', placeholder = '' } 
       ));
   });
 }
+
+/** Escolha curta entre ações explícitas. Resolve o value escolhido ou null. */
+export function choiceDialog({ title = 'Escolha uma opção', body = '', choices = [] } = {}) {
+  return overlay((done) => el('div', { class: 'modal' },
+    el('h3', {}, title),
+    body ? el('p', { class: 'muted', style: 'margin-top:6px' }, body) : null,
+    el('div', { class: 'choice-list' }, ...choices.map((choice) => el('button', {
+      class: 'choice-item', onclick: () => done(choice.value),
+    }, el('span', { class: 'choice-icon', 'aria-hidden': 'true' }, choice.icon || '›'),
+    el('span', {}, el('b', {}, choice.label),
+      choice.hint ? el('small', { class: 'muted' }, choice.hint) : null)))),
+    el('div', { class: 'modal-actions' },
+      el('button', { class: 'btn', onclick: () => done(null) }, 'Cancelar')),
+  ));
+}

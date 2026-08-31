@@ -35,6 +35,10 @@ _LANG_EXT: dict[str, str] = {
     ".js": "javascript", ".mjs": "javascript", ".cjs": "javascript", ".jsx": "javascript",
     ".ts": "typescript", ".tsx": "tsx",
     ".go": "go", ".rs": "rust",
+    ".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp",
+    ".hh": "cpp", ".hpp": "cpp", ".hxx": "cpp",
+    ".java": "java", ".cs": "c_sharp", ".php": "php", ".rb": "ruby",
+    ".kt": "kotlin", ".kts": "kotlin", ".swift": "swift",
 }
 
 # tipos de nó que DEFINEM algo nomeado (via campo 'name') → nosso tipo
@@ -45,8 +49,13 @@ _DEF_TYPES: dict[str, str] = {
     "class_declaration": "class", "class_definition": "class",
     "struct_item": "class", "enum_item": "class", "trait_item": "class",
     "interface_declaration": "class", "type_spec": "class",   # Go: type X struct{}
+    "function_declarator": "function", "method": "function",
+    "singleton_method": "function", "constructor_declaration": "function",
+    "object_declaration": "class", "protocol_declaration": "class",
+    "module": "class",
 }
-_CALL_TYPES = {"call_expression", "call"}
+_CALL_TYPES = {"call_expression", "call", "method_invocation", "function_call_expression",
+               "member_call_expression", "command", "command_call"}
 _ARROW_VALUE = {"arrow_function", "function", "function_expression"}
 
 _parsers: dict[str, Any] = {}   # cache de parsers por linguagem
@@ -116,19 +125,18 @@ class TreeSitterGraph:
         self.graph = graph
         self.root = Path(root).resolve()
 
-    def build(self) -> dict[str, Any]:
-        """Varre fontes não-Python sob root, popula o grafo, devolve relatório."""
+    def build(self, *, file: str | Path | None = None) -> dict[str, Any]:
+        """Varre fontes não-Python sob root ou somente ``file``."""
         report: dict[str, Any] = {"files": 0, "errors": 0, "modules": 0, "classes": 0,
                                   "functions": 0, "defines": 0, "calls": 0,
                                   "ambiguous_calls": 0, "by_lang": {}}
         callsites: list[tuple[str, str]] = []
         func_by_name: dict[str, list[str]] = defaultdict(list)
 
-        files = [
-            f for f in sorted(self.root.rglob("*"))
-            if f.suffix.lower() in _LANG_EXT and f.is_file()
-            and not any(part in _EXCLUDE for part in f.relative_to(self.root).parts)
-        ]
+        target = Path(file).resolve() if file else None
+        candidates = [target] if target else sorted(self.root.rglob("*"))
+        files = [f for f in candidates if f and f.suffix.lower() in _LANG_EXT and f.is_file()
+                 and not any(part in _EXCLUDE for part in f.relative_to(self.root).parts)]
         for f in files:
             lang = _LANG_EXT[f.suffix.lower()]
             try:
