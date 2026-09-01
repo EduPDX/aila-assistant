@@ -183,7 +183,19 @@ class TextToSpeech:
                 timeout=120,
             )
             if proc.returncode != 0:
-                raise RuntimeError(proc.stderr.strip() or "falha no SAPI")
+                sapi_error = proc.stderr.strip() or "falha no SAPI"
+                if _module_available("edge_tts"):
+                    log.warning(
+                        "SAPI indisponível; tentando Edge-TTS automaticamente"
+                    )
+                    try:
+                        return self._edge(text, out)
+                    except Exception as edge_error:  # noqa: BLE001
+                        raise RuntimeError(
+                            f"SAPI indisponível ({sapi_error}); fallback Edge-TTS "
+                            f"também falhou: {edge_error}"
+                        ) from edge_error
+                raise RuntimeError(sapi_error)
         finally:
             Path(tf.name).unlink(missing_ok=True)
         return out

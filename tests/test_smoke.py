@@ -2454,8 +2454,19 @@ def test_treesitter_graph_multilang(tmp_path: Path):
         "SELECT 1 FROM kg_edge WHERE relation='defines' AND source LIKE '%Foo' AND target LIKE '%Foo.bar'"
     ).fetchall()
     assert method_edges
-    assert {"c", "cpp", "java", "c_sharp", "php", "ruby", "kotlin", "swift"} <= set(_LANG_EXT.values())
+    assert {"c", "cpp", "java", "c_sharp", "php", "ruby", "kotlin", "swift"} <= set(
+        _LANG_EXT.values()
+    )
     st.close()
+
+
+def test_treesitter_cache_fica_no_disco_do_projeto(monkeypatch, tmp_path: Path):
+    from aila.cognition.graph import treesitter_graph
+
+    cache = tmp_path / "ts-cache"
+    monkeypatch.setenv("AILA_TREE_SITTER_CACHE", str(cache))
+
+    assert treesitter_graph._language_pack_cache() == cache.resolve()
 
 
 def test_detect_test_runner(tmp_path: Path):

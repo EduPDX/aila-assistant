@@ -18,6 +18,7 @@ parse — pula e conta.
 
 from __future__ import annotations
 
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -59,6 +60,27 @@ _CALL_TYPES = {"call_expression", "call", "method_invocation", "function_call_ex
 _ARROW_VALUE = {"arrow_function", "function", "function_expression"}
 
 _parsers: dict[str, Any] = {}   # cache de parsers por linguagem
+_pack_configured = False
+
+
+def _language_pack_cache() -> Path:
+    """Cache local controlado pela Aila, sem depender do AppData do Windows."""
+    override = os.environ.get("AILA_TREE_SITTER_CACHE", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path(__file__).resolve().parents[3] / "data" / "tree-sitter-cache"
+
+
+def _configure_language_pack() -> None:
+    global _pack_configured
+    if _pack_configured:
+        return
+    from tree_sitter_language_pack import PackConfig, configure
+
+    cache = _language_pack_cache()
+    cache.mkdir(parents=True, exist_ok=True)
+    configure(PackConfig(cache_dir=str(cache)))
+    _pack_configured = True
 
 
 def available() -> bool:
@@ -73,6 +95,7 @@ def _parser(lang: str):
     if lang not in _parsers:
         from tree_sitter_language_pack import get_parser
 
+        _configure_language_pack()
         _parsers[lang] = get_parser(lang)
     return _parsers[lang]
 
