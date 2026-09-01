@@ -99,6 +99,11 @@ export class MotionScheduler {
   }
 
   owns(owner) { return this.active.get(owner) || null; }
+  has(id) {
+    if (!id) return false;
+    for (const motion of this.active.values()) if (motion.id === id) return true;
+    return false;
+  }
   snapshot() {
     const unique = new Map();
     for (const motion of this.active.values()) unique.set(motion.id, motion);

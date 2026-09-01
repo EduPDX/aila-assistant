@@ -76,6 +76,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 import { AnimationController } from './avatar/animation-controller.js';
+import { VRMALibrary } from './avatar/vrma-library.js';
 import { AvatarDebug } from './avatar/debug.js';
 import { SceneManager } from './avatar/cognitive-scene/scene-manager.js';   // Cognitive Scene (Fase 1)
 import { loadSceneDef, applySceneDef } from './avatar/cognitive-scene/scene-loader.js';  // Fase 7: JSON declarativo
@@ -216,44 +217,19 @@ clipLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
 const GESTURE_CLIPS = { wave: 'wave.vrma', nod: 'nod.vrma', shake: 'shake.vrma', point: 'point.vrma', shrug: 'shrug.vrma',
   talk1: 'talk1.vrma', talk2: 'talk2.vrma', talk3: 'talk3.vrma', talk4: 'talk4.vrma' };
 const TALK = ['talk1', 'talk2', 'talk3', 'talk4'];   // clips de "conversa" (gesticulação natural da fala)
-const clipCache = {};   // intenção -> AnimationClip | 'loading' | 'fail'
 const clipsEnabled = () => localStorage.getItem('aila.avatar.clips') !== 'false';
-
-async function probeGestureClips() {   // marca os que faltam como 'fail' → fallback limpo
-  for (const [g, file] of Object.entries(GESTURE_CLIPS)) {
-    try { const r = await fetch('/static/models/gestures/' + file, { method: 'HEAD' }); if (!r.ok) clipCache[g] = 'fail'; }
-    catch (e) { clipCache[g] = 'fail'; }
-  }
-}
+const vrmaLibrary = new VRMALibrary({ definitions: GESTURE_CLIPS, loader: clipLoader, retarget: createVRMAnimationClip });
+window.ailaVRMA = vrmaLibrary;
 
 // devolve true se um CLIP cobre a intenção (tocando ou carregando); false → procedural
-function playGestureClip(name) {
-  if (!clipsEnabled() || !vrm || !controller) return false;
-  const file = GESTURE_CLIPS[name];
-  if (!file) return false;
-  const c = clipCache[name];
-  if (c === 'fail') return false;
-  if (c === 'loading') return true;
-  if (c) { controller.playClip(c); return true; }
-  clipCache[name] = 'loading';
-  clipLoader.load('/static/models/gestures/' + file, (gltf) => {
-    const va = gltf.userData.vrmAnimations && gltf.userData.vrmAnimations[0];
-    if (!va) { clipCache[name] = 'fail'; return; }
-    const clip = createVRMAnimationClip(va, vrm);
-    // remove ROOT MOTION (faixas de posição, ex.: hips.position) — os .vrma de
-    // Mixamo deslocam o quadril e faziam o avatar "sumir pra baixo e voltar".
-    // Gesto fica NO LUGAR (só rotações + expressões/olhar).
-    clip.tracks = clip.tracks.filter((t) => !t.name.endsWith('.position'));
-    clipCache[name] = clip;
-    controller.playClip(clip);                      // toca assim que carrega (1ª vez)
-  }, undefined, () => { clipCache[name] = 'fail'; });
-  return true;
+function playGestureClip(name, motionId = 0) {
+  return clipsEnabled() && vrmaLibrary.play(name, motionId);
 }
 // gesticulação natural da FALA: toca um clip de "conversa" aleatório (o controller
 // chama isso em intervalos enquanto ela fala). Devolve true se há clips disponíveis.
 function playRandomTalkClip() {
   if (!clipsEnabled()) return false;
-  const avail = TALK.filter((t) => clipCache[t] !== 'fail');
+  const avail = TALK.filter((t) => vrmaLibrary.supports(t));
   if (!avail.length) return false;
   return playGestureClip(avail[Math.floor(Math.random() * avail.length)]);
 }
@@ -281,6 +257,7 @@ window.ailaPlaySequence = playGestureSequence;   // teste no console
 
 function disposeVRM() {
   if (!vrm) return;
+  vrmaLibrary.clearTarget();
   scene.remove(vrm.scene);
   try { VRMUtils.deepDispose?.(vrm.scene); } catch(e){}
   vrm = null; window.vrm = null;
@@ -304,6 +281,7 @@ function loadVRM(url, revokeWhenDone = false) {
     scene.add(vrm.scene);
     window.vrm = vrm;
     controller = new AnimationController(vrm, scene, camera);   // ← animação em camadas
+    vrmaLibrary.setTarget(vrm, controller);                     // retarget/cache vinculados a ESTE avatar
     controller.setVramState(vramState);                         // preserva pressão recebida antes do load
     window.ailaAnim = controller;                              // debug/console
     window.ailaMotion = controller.motionScheduler;            // ownership/fila p/ diagnóstico
@@ -313,7 +291,7 @@ function loadVRM(url, revokeWhenDone = false) {
     console.info('[avatar] rig profile', controller.rig.profile);
     controller.clipFor = playGestureClip;                      // P7: gestos por clip (fallback procedural)
     controller.playTalkClip = playRandomTalkClip;              // gesticulação natural da fala por clips
-    probeGestureClips();                                       // sabe quais .vrma existem
+    setTimeout(() => vrmaLibrary.preload(['wave', 'nod', 'point']), 250); // gestos frequentes sem atrasar o load
     debug.attach(controller);                                  // Debug Mode segue o VRM atual
     controller.rig.secondaryMotion.reset();                    // molas assentadas + telemetria
     clock.getDelta();                                          // zera o dt (evita saia "explodir")

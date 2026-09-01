@@ -89,6 +89,7 @@ export class AnimationController {
     this.layerW = new Map();                    // peso/fade por CAMADA (P5) — name -> {cur,target,k}
     this.mixer = null;                          // AnimationMixer p/ clips VRMA (P6, lazy)
     this._clipAction = null;                    // clip ativo (ou null)
+    this._clipFinish = null;                    // listener do clip atual (evita callbacks órfãos)
     this.clipFor = null;                        // resolvedor intenção→clip (P7; avatar3d o seta)
     this.playTalkClip = null;                   // toca um clip de "conversa" aleatório (fala)
     this._talkT = 0.5;                          // timer da gesticulação de fala
@@ -99,29 +100,41 @@ export class AnimationController {
    *  As camadas aditivas de expressão/olhar seguem funcionando (aplicadas no
    *  finalize, DEPOIS do mixer); o IK é pulado enquanto o clip toca (o clip dona
    *  os braços). LoopOnce por padrão → some sozinho ao terminar. (P6) */
-  playClip(clip, { loop = false, fade = 0.35 } = {}) {
+  playClip(clip, { loop = false, fade = 0.35, motionId = 0 } = {}) {
     if (!clip || !this.rig?.vrm) return;
     if (!this.mixer) this.mixer = new THREE.AnimationMixer(this.rig.vrm.scene);
+    if (this._clipFinish) {
+      this.mixer.removeEventListener('finished', this._clipFinish);
+      this._clipFinish = null;
+    }
     const action = this.mixer.clipAction(clip);
-    if (this._clipAction && this._clipAction !== action) this._clipAction.fadeOut(fade);
+    if (this._clipAction && this._clipAction !== action) {
+      const previous = this._clipAction;
+      previous.fadeOut(fade);
+      setTimeout(() => previous.stop(), fade * 1000 + 80);
+    }
     action.reset();
     action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
     action.clampWhenFinished = !loop;
     action.fadeIn(fade).play();
     this._clipAction = action;
+    this._clipMotionId = motionId;
     if (!loop) {
       const onFin = (e) => {
         if (e.action !== action) return;
         this.mixer.removeEventListener('finished', onFin);
+        if (this._clipFinish === onFin) this._clipFinish = null;
         action.fadeOut(fade);                                   // blend de volta às camadas
         setTimeout(() => {
+          action.stop();
           if (this._clipAction === action) {
-            action.stop(); this._clipAction = null;
+            this._clipAction = null;
             this.motionScheduler.release(this._clipMotionId);
             this._clipMotionId = 0;
           }
         }, fade * 1000 + 80);
       };
+      this._clipFinish = onFin;
       this.mixer.addEventListener('finished', onFin);
     }
   }
@@ -130,6 +143,10 @@ export class AnimationController {
   stopClip(fade = 0.3) {
     const a = this._clipAction;
     if (!a) return;
+    if (this._clipFinish) {
+      this.mixer?.removeEventListener('finished', this._clipFinish);
+      this._clipFinish = null;
+    }
     a.fadeOut(fade);
     this._clipAction = null;
     const motionId = this._clipMotionId;
@@ -193,14 +210,22 @@ export class AnimationController {
     }
     // P7: se houver um CLIP VRMA para esta intenção, ele cobre o gesto (autoral);
     // senão, cai no gesto PROCEDURAL de sempre (fallback gracioso).
-    if (this.clipFor && this.clipFor(name)) { this._clipMotionId = req.id; return true; }
+    if (this.clipFor && this.clipFor(name, req.id)) return true;
+    if (this._clipAction) this.stopClip(0.2); // gesto procedural explícito interrompe clip de fala
+    return this.playFallbackGesture(name, req.id, req.duration);
+  }
+
+  /** Inicia o fallback sem criar uma segunda requisição no scheduler. Usado
+   *  também quando o carregamento VRMA falha enquanto o token ainda é válido. */
+  playFallbackGesture(name, motionId, duration = GESTURE_HOLD) {
+    if (motionId && !this.motionScheduler.has(motionId)) return false;
     if (ANIM_GESTURES.has(name)) {          // gesto animado (cabeça): nod/shake
-      this.ctx.anim = { type: name, t: 0, dur: name === 'shake' ? 0.9 : 0.8, motionId: req.id };
+      this.ctx.anim = { type: name, t: 0, dur: name === 'shake' ? 0.9 : 0.8, motionId };
       return true;
     }
     this.ctx.gesture = name;                // gesto de pose (braço): wave/point/…
-    this._gestureTimer = req.duration || GESTURE_HOLD;
-    this._poseMotionId = req.id;
+    this._gestureTimer = duration || GESTURE_HOLD;
+    this._poseMotionId = motionId;
     return true;
   }
 

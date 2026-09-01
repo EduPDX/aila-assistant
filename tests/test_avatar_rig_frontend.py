@@ -158,3 +158,39 @@ def test_secondary_motion_substeps_long_frames_and_resets_after_pause():
         capture_output=True, text=True, timeout=10, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_vrma_library_caches_source_and_retargets_per_avatar():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js não disponível para testar biblioteca VRMA")
+    module_url = (ROOT / "ui/avatar/vrma-library.js").as_uri()
+    script = f"""
+      const {{ VRMALibrary }} = await import({module_url!r});
+      let loads=0, retargets=0, plays=[];
+      const source={{ id:'wave-source' }};
+      const loader={{ load:(url,ok)=>{{ loads++; queueMicrotask(()=>ok({{userData:{{vrmAnimations:[source]}}}})); }} }};
+      const retarget=(src,vrm)=>{{ retargets++; return {{tracks:[{{name:'hips.position'}},{{name:vrm.id+'.quaternion'}}]}}; }};
+      const scheduler={{ has:()=>true }};
+      const controller=(id)=>({{ motionScheduler:scheduler, playClip:(clip,opt)=>plays.push([id,clip,opt]) }});
+      const a={{id:'a'}}, b={{id:'b'}}, ca=controller('a'), cb=controller('b');
+      const lib=new VRMALibrary({{definitions:{{wave:'wave.vrma'}},loader,retarget}});
+      lib.setTarget(a,ca); lib.play('wave',1); await new Promise(r=>setTimeout(r,0));
+      lib.play('wave',2); await new Promise(r=>setTimeout(r,0));
+      lib.setTarget(b,cb); lib.play('wave',3); await new Promise(r=>setTimeout(r,0));
+      if(loads!==1) throw new Error('fonte carregada mais de uma vez');
+      if(retargets!==2) throw new Error('clip não foi retargeteado por avatar');
+      if(plays.length!==3 || plays.some(x=>x[1].tracks.some(t=>t.name.endsWith('.position'))))
+        throw new Error('play/root motion incorreto');
+      let stalePlays=0;
+      const slow={{load:(url,ok)=>setTimeout(()=>ok({{userData:{{vrmAnimations:[source]}}}}),5)}};
+      const stale=new VRMALibrary({{definitions:{{wave:'wave.vrma'}},loader:slow,retarget}});
+      stale.setTarget(a,{{motionScheduler:scheduler,playClip:()=>stalePlays++}});
+      stale.play('wave',4); stale.setTarget(b,cb); await new Promise(r=>setTimeout(r,10));
+      if(stalePlays!==0 || stale.stats.stale!==1) throw new Error('resultado atrasado tocou no avatar novo');
+    """
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script], cwd=ROOT,
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    assert result.returncode == 0, result.stderr
