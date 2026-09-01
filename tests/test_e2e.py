@@ -209,6 +209,71 @@ def test_e2e_tool_loop():
     asyncio.run(go())
 
 
+def test_e2e_personal_file_request_recovers_from_narration_without_writing():
+    """Pedido explícito de salvar não pode terminar em mera instrução ao usuário.
+
+    A primeira resposta narra; o engine dá um único lembrete; a segunda chama a
+    tool. O executor é substituído por stub para não tocar na pasta Documentos.
+    """
+    turns = 0
+    executed: list[tuple[str, dict]] = []
+
+    class NarrateThenWrite(LLMBackend):
+        name = "ollama"
+        default_model = "fake"
+
+        def capabilities(self, model=None):
+            return ModelCapabilities(local=True, tools=True)
+
+        async def chat(self, messages, **k):
+            nonlocal turns
+            turns += 1
+            if turns == 1:
+                yield ChatChunk(content="Aqui está o código; salve-o em Documentos.", done=True)
+            elif turns == 2:
+                yield ChatChunk(content="", done=True, tool_calls=[{
+                    "function": {
+                        "name": "file.write",
+                        "arguments": {"path": "Jogo.java", "content": "class Jogo {}"},
+                    }
+                }])
+            else:
+                yield ChatChunk(content="Pronto, salvei o arquivo.", done=True)
+
+        async def complete(self, messages, **k):
+            return "Pronto, salvei o arquivo."
+
+        async def list_models(self):
+            return ["fake"]
+
+        async def health(self):
+            return True
+
+    eng = build_engine(_base_settings(), NarrateThenWrite())
+
+    async def fake_execute(name: str, args: dict) -> ToolResult:
+        executed.append((name, args))
+        return ToolResult.success("arquivo salvo")
+
+    eng.agents.registry.execute = fake_execute
+
+    async def go():
+        out = await eng.process(
+            "Crie um jogo em Java e salve em Documentos como Jogo.java",
+            _collect_emit([]),
+            mode="auto",
+        )
+        assert "Pronto" in out
+        assert turns == 3
+        assert len(executed) == 1
+        assert executed[0][0] == "file.write"
+        assert executed[0][1]["path"].endswith("Documents\\Jogo.java") or executed[0][1][
+            "path"
+        ].endswith("Documentos\\Jogo.java")
+
+    asyncio.run(go())
+
+
 # --------------------------------------------------------------------------- #
 class _ToolThenText(LLMBackend):
     """Backend genérico: 1ª chamada pede ``tool_name``; depois responde ``final``."""

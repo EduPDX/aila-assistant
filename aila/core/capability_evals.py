@@ -88,22 +88,42 @@ async def evaluate_case(
     started = time.perf_counter()
     text_parts: list[str] = []
     calls: list[dict[str, Any]] = []
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": case.prompt},
+    ]
     try:
-        async for chunk in backend.chat(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": case.prompt},
-            ],
-            model=model,
-            stream=True,
-            tools=schemas,
-            temperature=0.1,
-            max_tokens=512,
-        ):
-            if chunk.content:
-                text_parts.append(chunk.content)
-            if chunk.tool_calls:
-                calls.extend(chunk.tool_calls)
+        for attempt in range(2):
+            text_parts = []
+            calls = []
+            async for chunk in backend.chat(
+                messages,
+                model=model,
+                stream=True,
+                tools=schemas,
+                temperature=0.1,
+                max_tokens=512,
+            ):
+                if chunk.content:
+                    text_parts.append(chunk.content)
+                if chunk.tool_calls:
+                    calls.extend(chunk.tool_calls)
+            attempt_text = "".join(text_parts).strip()
+            if not calls and attempt_text:
+                calls = extract_text_tool_calls(attempt_text, registry)
+            # Espelha a recuperação do engine: uma ação concreta que veio apenas
+            # como prosa recebe um único lembrete, ainda sem executar ferramenta.
+            if calls or not case.expected_tools or attempt == 1:
+                break
+            expected_name = case.expected_tools[0]
+            messages.extend([
+                {"role": "assistant", "content": attempt_text},
+                {"role": "system", "content": (
+                    "A ação concreta ainda não foi executada. Use agora a ferramenta "
+                    f"{expected_name} com argumentos completos. Não explique nem peça "
+                    "para o usuário fazer manualmente."
+                )},
+            ])
     except Exception as exc:  # noqa: BLE001 - falha do provedor vira resultado mensurável
         return CapabilityEvalResult(
             name=case.name,

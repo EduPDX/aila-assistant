@@ -203,6 +203,32 @@ def select_tool_schemas(registry, task: RouteTask, user_text: str) -> list[dict]
     ]
 
 
+def requires_concrete_tool_action(
+    task: RouteTask, user_text: str, schemas: list[dict] | None
+) -> bool:
+    """Detecta pedido que não pode ser concluído honestamente só com texto.
+
+    É intencionalmente conservador: cobre apenas criação/escrita explícita em
+    pasta pessoal. A execução ainda passa por autorização, política e sandbox.
+    """
+    if task.kind != "code" or not schemas:
+        return False
+    names = {
+        str(schema.get("function", {}).get("name", ""))
+        for schema in schemas
+        if isinstance(schema, dict)
+    }
+    return (
+        "file.write" in names
+        and bool(_PERSONAL_FOLDER_RX.search(user_text or ""))
+        and bool(re.search(
+            r"\b(salv\w*|cri\w*|escrev\w*|ger\w*)\b",
+            user_text or "",
+            re.IGNORECASE,
+        ))
+    )
+
+
 def _tool_status(tool_name: str) -> str:
     """Mapeia o nome da ferramenta para um estado global da Aila."""
     if tool_name.startswith("code."):

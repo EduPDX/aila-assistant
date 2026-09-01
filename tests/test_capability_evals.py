@@ -3,7 +3,11 @@ from __future__ import annotations
 import asyncio
 
 from aila.core.capability_evals import CapabilityEvalCase, evaluate_case
-from aila.core.turn import _classify_task, select_tool_schemas
+from aila.core.turn import (
+    _classify_task,
+    requires_concrete_tool_action,
+    select_tool_schemas,
+)
 from aila.llm.base import ChatChunk, LLMBackend
 from aila.tools.registry import ToolRegistry
 from aila.tools.schema import Tool, ToolResult
@@ -102,6 +106,22 @@ def test_tool_selector_removes_self_edit_for_personal_file():
     names = [schema["function"]["name"] for schema in schemas]
     assert use_tools is True
     assert names == ["file.write"]
+
+
+def test_personal_code_write_requires_concrete_tool_action():
+    prompt = "Crie um jogo em Java e salve em Documentos como Jogo.java"
+    task, use_tools = _classify_task(prompt, "auto")
+    schemas = [{"type": "function", "function": {"name": "file.write"}}]
+
+    assert use_tools is True
+    assert requires_concrete_tool_action(task, prompt, schemas) is True
+
+
+def test_casual_turn_never_requires_concrete_tool_action():
+    task, use_tools = _classify_task("Olá Aila, como vai?", "auto")
+
+    assert use_tools is False
+    assert requires_concrete_tool_action(task, "Olá Aila, como vai?", None) is False
 
 
 def test_tool_selector_limits_personal_folder_listing():

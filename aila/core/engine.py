@@ -54,6 +54,7 @@ from aila.core.turn import (  # classificação de turno (extraída na Fase 2; r
     _classify_task,
     _tool_status,
     normalize_user_write_call,
+    requires_concrete_tool_action,
     select_tool_schemas,
 )
 from aila.core.verify import (  # auto-verificação/lint + conjuntos de escrita (Fase 2)
@@ -1064,13 +1065,16 @@ class AilaEngine:
                 # Recuperação: o modelo DESCREVEU a ação mas não emitiu a tool-call?
                 # Dá UM empurrão (lembrete do formato) e deixa iterar de novo — em vez
                 # de encerrar o turno com a "narração" como se fosse a resposta final.
+                concrete_action = requires_concrete_tool_action(task, user_text, tools)
                 if (mode != "chat" and nudged < 1
-                        and _looks_like_missed_toolcall(text, self.agents.registry)):
+                        and (concrete_action
+                             or _looks_like_missed_toolcall(text, self.agents.registry))):
                     nudged += 1
                     self.context.add_assistant(text.strip())
                     self.context.add_tool(
                         "system.reminder",
-                        "Você DESCREVEU a ação mas não a EXECUTOU. Para agir de verdade, "
+                        "O pedido exige uma ação concreta e ela ainda não foi EXECUTADA. "
+                        "Para agir de verdade, "
                         "responda com UM único objeto JSON, sozinho, sem texto em volta: "
                         '{"tool": "<nome_exato>", "args": {...}}. '
                         "Se já concluiu e era só uma resposta, responda normalmente, sem JSON.",
