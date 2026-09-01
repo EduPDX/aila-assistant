@@ -53,6 +53,7 @@ from aila.core.turn import (  # classificação de turno (extraída na Fase 2; r
     _CODE_ACTION_RX,
     _classify_task,
     _tool_status,
+    normalize_user_write_call,
 )
 from aila.core.verify import (  # auto-verificação/lint + conjuntos de escrita (Fase 2)
     _VERIFY_WRITE_TOOLS,
@@ -888,7 +889,7 @@ class AilaEngine:
         (
             final_text, backend, generated_code, wrote_ok, tools_used,
         ) = await self._run_tool_loop(
-            task, use_tools, tools, opts, mem_block, mode, emit)
+            task, use_tools, tools, opts, mem_block, mode, emit, user_text)
 
         final_text = await self._finalize_text(
             final_text, user_text, use_tools, generated_code, wrote_ok,
@@ -896,7 +897,8 @@ class AilaEngine:
 
         return await self._deliver_response(final_text, user_text, tools_used, emit)
 
-    async def _run_tool_loop(self, task, use_tools, tools, opts, mem_block, mode, emit):
+    async def _run_tool_loop(self, task, use_tools, tools, opts, mem_block, mode, emit,
+                             user_text: str):
         """Laço agêntico do turno (fase extraída na 2f): escolhe a cadeia de
         provedores, streama a resposta, executa ferramentas (leituras em paralelo,
         escritas em série com auto-verificação), aplica o orçamento anti-loop e o
@@ -1095,6 +1097,7 @@ class AilaEngine:
                         args = json.loads(args, strict=False)
                     except json.JSONDecodeError:
                         args = {}
+                name, args = normalize_user_write_call(name, args, user_text)
                 over = budget.check(name, args)   # anti-loop / orçamento do turno
                 if over is not None:
                     self.context.add_tool(name, over)   # o modelo vê e deve concluir
@@ -1137,6 +1140,7 @@ class AilaEngine:
                         log.warning(f"tool paralela falhou: {res!r}")
                         continue
                     name, result = res
+                    budget.record_result(name, result.ok, result.content)
                     await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                     self.context.add_tool(name, _safe_tool_context(name, result.content))
                     if (result.ok and name == "code.generate"
@@ -1158,6 +1162,7 @@ class AilaEngine:
                     continue
                 await emit("aila.state", {"status": _tool_status(name), "tool": name})
                 result = await self.agents.registry.execute(name, args)
+                budget.record_result(name, result.ok, result.content)
                 await emit("agent.result", {"tool": name, "ok": result.ok, "content": result.content[:2000]})
                 self.context.add_tool(name, _safe_tool_context(name, result.content))
                 if result.ok and name in _WRITE_OK_TOOLS:   # escrita que REALMENTE deu certo

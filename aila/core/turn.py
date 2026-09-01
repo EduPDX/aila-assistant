@@ -6,6 +6,7 @@ e chamadas existentes importam de aila.core.engine)."""
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from aila.llm.router import RouteTask
 
@@ -26,6 +27,42 @@ _CODE_ACTION_RX = re.compile(
     r"\b(salv\w*|salve|crie|criar|gere|gera|rod\w*|execut\w*|edit\w*|corrij\w*|"
     r"conserta|arruma|testa|teste[s]?\b|na pasta|no arquivo|no diret[óo]rio|"
     r"documentos?|desktop|downloads?)\b", re.IGNORECASE)
+
+
+def normalize_user_write_call(name: str, args: dict, user_text: str) -> tuple[str, dict]:
+    """Roteia escrita destinada a uma pasta pessoal para ``file.write``.
+
+    Modelos pequenos confundem ``code.write_file`` (autoedição/L5) com
+    ``file.write`` (arquivo do usuário/L2) e costumam enviar só o nome relativo.
+    A intenção explícita define o destino, sem ampliar as raízes do sandbox.
+    """
+    if name not in {"file.write", "code.write_file"} or not isinstance(args, dict):
+        return name, args
+    text = user_text or ""
+    low = text.casefold()
+    folder_kind = (
+        "desktop" if ("desktop" in low or "área de trabalho" in low or "area de trabalho" in low)
+        else "downloads" if "download" in low
+        else "documents" if ("documento" in low or "documents" in low) else None
+    )
+    if folder_kind is None:
+        return name, args
+    raw_path = str(args.get("path") or "").strip()
+    filename = Path(raw_path.replace("\\", "/")).name if raw_path else ""
+    if not filename or "." not in filename:
+        requested = re.search(r"\b([\w-]+\.[A-Za-z][A-Za-z0-9]{0,7})\b", text)
+        filename = requested.group(1) if requested else ""
+    if not filename and str(args.get("content") or ""):
+        public_class = re.search(r"\bpublic\s+class\s+([A-Za-z_$][\w$]*)", args["content"])
+        if public_class:
+            filename = public_class.group(1) + ".java"
+    if not filename:
+        return name, args
+    from aila.security.sandbox import user_folder
+
+    routed = dict(args)
+    routed["path"] = str(user_folder(folder_kind) / filename)
+    return "file.write", routed
 
 
 # Ordens ao avatar/corpo (gesto, pose, olhar) — curtas, mas são AÇÃO, não papo.

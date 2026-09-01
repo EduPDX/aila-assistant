@@ -34,6 +34,8 @@ class CallBudget:
         self.exhausted = False        # teto TOTAL batido → o engine encerra o turno
         self._counts: dict[str, int] = {}
         self._by_name: dict[str, int] = {}
+        self._failures: dict[str, int] = {}
+        self._blocked_names: dict[str, str] = {}
 
     @staticmethod
     def _sig(name: str, args: dict) -> str:
@@ -46,6 +48,11 @@ class CallBudget:
     def check(self, name: str, args: dict) -> str | None:
         """Registra a intenção de chamar ``name(args)``. Devolve mensagem de erro
         se o orçamento/repetição estourou; senão ``None``."""
+        if name in self._blocked_names:
+            return (
+                f"'{name}' foi bloqueada neste turno após falhar: "
+                f"{self._blocked_names[name]}. Use outra ferramenta ou conclua."
+            )
         if self.total >= self.max_total:
             self.exhausted = True
             return (
@@ -72,3 +79,17 @@ class CallBudget:
         self._by_name[name] = by_name + 1
         self.total += 1
         return None
+
+    def record_result(self, name: str, ok: bool, content: str = "") -> None:
+        """Bloqueia nova tentativa quando repetir não pode mudar o resultado."""
+        if ok:
+            self._failures.pop(name, None)
+            return
+        message = " ".join(str(content or "erro desconhecido").split())[:240]
+        permission_block = any(token in message.casefold() for token in (
+            "exige autonomia", "bloqueada", "blocked:", "permissiondenied",
+        ))
+        count = self._failures.get(name, 0) + 1
+        self._failures[name] = count
+        if permission_block or count >= 2:
+            self._blocked_names[name] = message

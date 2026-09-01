@@ -2158,6 +2158,47 @@ def test_call_budget_anti_loop():
     assert b2.check("z", {}) is not None                   # total estourado
 
 
+def test_call_budget_bloqueia_falha_de_permissao_sem_seis_tentativas():
+    from aila.security.limits import CallBudget
+
+    budget = CallBudget(max_total=20, max_repeat=3, max_per_tool=6)
+    args = {"path": "Jogo.java", "content": "public class Jogo {}"}
+    assert budget.check("code.write_file", args) is None
+    budget.record_result(
+        "code.write_file", False, "Ação 'code.write' exige autonomia nível 5",
+    )
+    assert "bloqueada neste turno" in budget.check(
+        "code.write_file", {"path": "test.py"},
+    )
+
+
+def test_pedido_em_documentos_redireciona_code_write_para_file_write(monkeypatch, tmp_path):
+    import aila.security.sandbox as sandbox_module
+    from aila.core.turn import normalize_user_write_call
+
+    monkeypatch.setattr(sandbox_module, "user_folder", lambda kind: tmp_path / kind)
+    name, args = normalize_user_write_call(
+        "code.write_file",
+        {"path": "JogoAdivinhacao.java", "content": "public class JogoAdivinhacao {}"},
+        "faça um jogo em Java e salve na minha pasta de Documentos",
+    )
+    assert name == "file.write"
+    assert Path(args["path"]) == tmp_path / "documents" / "JogoAdivinhacao.java"
+
+
+def test_redirecionamento_descobre_nome_da_classe_java(monkeypatch, tmp_path):
+    import aila.security.sandbox as sandbox_module
+    from aila.core.turn import normalize_user_write_call
+
+    monkeypatch.setattr(sandbox_module, "user_folder", lambda kind: tmp_path / kind)
+    name, args = normalize_user_write_call(
+        "code.write_file", {"path": "arquivo", "content": "public class SnakeGame {}"},
+        "crie um jogo em java e salve em Documentos",
+    )
+    assert name == "file.write"
+    assert Path(args["path"]).name == "SnakeGame.java"
+
+
 def test_injection_wrap_and_scan():
     """Conteúdo de fonte não-confiável é embrulhado e a injeção é detectada."""
     from aila.security.injection import is_untrusted_source, scan, wrap_external
