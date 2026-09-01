@@ -32,14 +32,14 @@ export class StageComposer {
     // monitor PRINCIPAL (grande): totalmente à ESQUERDA da Aila (borda direita
     // livre dela → ela não fica "em cima" da tela). Mesmo plano das duas telas.
     if (monitorGroup) {
-      monitorGroup.position.set(c.x - h * 1.18, eyeY - h * 0.04, c.z + h * 0.05);
+      monitorGroup.position.set(c.x - h * 1.30, eyeY - h * 0.025, c.z + h * 0.05);
       monitorGroup.rotation.set(0, 0.26, 0);
       monitorGroup.scale.setScalar(s);
     }
     // STATUS: à esquerda do monitor, MESMO plano/ângulo, com um pequeno ESPAÇO
     // (lado a lado, sem uma parecer em cima da outra na perspectiva).
     if (statusGroup) {
-      statusGroup.position.set(c.x - h * 2.55, eyeY - h * 0.04, c.z + h * 0.05);
+      statusGroup.position.set(c.x - h * 2.95, eyeY - h * 0.025, c.z + h * 0.05);
       statusGroup.rotation.set(0, 0.26, 0);
       statusGroup.scale.setScalar(s);
     }

@@ -20,27 +20,50 @@ function scanlineTexture() {
   return t;
 }
 
-export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
+function technicalTicks(w, h, mat) {
+  const pts = [];
+  for (let i = 0; i <= 20; i++) {
+    const x = -w / 2 + (w * i) / 20;
+    const len = i % 5 === 0 ? 0.035 : 0.018;
+    pts.push(x, h / 2, 0, x, h / 2 - len, 0, x, -h / 2, 0, x, -h / 2 + len, 0);
+  }
+  for (let i = 1; i < 10; i++) {
+    const y = -h / 2 + (h * i) / 10;
+    const len = i % 5 === 0 ? 0.035 : 0.018;
+    pts.push(-w / 2, y, 0, -w / 2 + len, y, 0, w / 2, y, 0, w / 2 - len, y, 0);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  return new THREE.LineSegments(geo, mat);
+}
+
+export function createMonitor({ width = 3.16, height = 1.78 } = {}) {
   const group = new THREE.Group();
   const anchors = new Map();
   const reg = (id, o) => { anchors.set(id, o); o.userData.anchorId = id; return o; };
   const at = (o, x, y, z = 0.006) => { o.position.set(x, y, z); group.add(o); return o; };
   const W = width, H = height, mx = W * 0.46;
 
-  // ---- base ----
+  // ---- base em camadas: vidro, moldura técnica e profundidade holográfica ----
+  at(new THREE.Mesh(new THREE.PlaneGeometry(W * 1.025, H * 1.045), fillMat(HOLO.dim, 0.055)), 0.018, -0.018, -0.018);
   at(new THREE.Mesh(new THREE.PlaneGeometry(W, H), fillMat(HOLO.dim, 0.17)), 0, 0, 0);
   at(grid(W * 0.96, H * 0.9, 20, 11, lineMat(HOLO.blue, 0.10)), 0, 0, 0.002);
   const scanTex = scanlineTexture();
   const scan = at(new THREE.Mesh(new THREE.PlaneGeometry(W * 0.96, H * 0.9),
     new THREE.MeshBasicMaterial({ map: scanTex, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false })), 0, 0, 0.004);
   group.add(frameLines(W, H, lineMat(HOLO.teal, 0.75)));
+  const outerFrame = frameLines(W * 1.025, H * 1.045, lineMat(HOLO.blue, 0.22));
+  outerFrame.position.set(0.018, -0.018, -0.012); group.add(outerFrame);
   group.add(corners(W, H, 0.11, lineMat(HOLO.teal, 0.95)));
+  group.add(technicalTicks(W * 0.985, H * 0.925, lineMat(HOLO.blue, 0.28)));
 
   // ---- cabeçalho: título (esq) + leituras numa linha (dir) + divisória ----
   const title = textPlane('AILA // COGNITIVE SCENE', { width: W * 0.42, px: 768, size: 40, color: HOLO.text });
   reg('title', at(title.mesh, -mx + W * 0.23, H * 0.42, 0.007));
   const readout = textPlane('', { width: W * 0.4, px: 1024, size: 28, align: 'right', color: HOLO.text });
   at(readout.mesh, mx - W * 0.23, H * 0.42, 0.007);   // right-align termina em x+larg/2 → recua p/ ficar dentro
+  const live = textPlane('●  LIVE FEED', { width: W * 0.13, px: 384, size: 27, align: 'right' });
+  at(live.mesh, mx - W * 0.07, H * 0.325, 0.008);
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(-mx, H * 0.35, 0.006), new THREE.Vector3(mx, H * 0.35, 0.006)]), lineMat(HOLO.teal, 0.4)));
 
@@ -72,11 +95,15 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
   const contentX = navX + navW * 0.5 + W * 0.03;
   const panel = (label, x, y, w, h, id, child) => {
     const p = new THREE.Group();
+    const depth = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.015, h * 1.025), fillMat(HOLO.dim, 0.08));
+    depth.position.set(0.012, -0.012, -0.004); p.add(depth);
     p.add(new THREE.Mesh(new THREE.PlaneGeometry(w, h), fillMat(HOLO.blue, 0.05)));
     p.add(frameLines(w, h, lineMat(HOLO.blue, 0.5)));
     p.add(corners(w, h, 0.05, lineMat(HOLO.teal, 0.6)));
     const t = textPlane(label, { width: w * 0.6, px: 320, size: 28, color: HOLO.text });
     t.mesh.position.set(-w * 0.5 + w * 0.30, h * 0.5 - 0.06, 0.003); p.add(t.mesh);
+    const statusLed = new THREE.Mesh(new THREE.CircleGeometry(0.008, 12), glowMat(HOLO.teal, 0.9));
+    statusLed.position.set(w * 0.5 - 0.035, h * 0.5 - 0.035, 0.004); p.add(statusLed);
     if (child) { child.position.z = 0.004; p.add(child); }
     p.position.set(x, y, 0.006); group.add(p);
     p.userData.rect = { x, y, w, h };
@@ -166,6 +193,7 @@ export function createMonitor({ width = 2.9, height = 1.66 } = {}) {
     const glow = sv ? sv.glow : 0.6;
     scanTex.offset.y = (scanTex.offset.y - dt * scanSpd) % 1;
     scan.material.opacity = (0.36 + Math.sin(t * 2.1) * 0.05) * (_intensity / 0.6) * glow;
+    live.mesh.material.opacity = 0.82 + Math.sin(t * 3.2) * 0.18;
     cluster.update(t);
     tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText((sv ? sv.verb : verb) + '.'.repeat(dots)); }
   }
