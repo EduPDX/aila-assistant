@@ -194,3 +194,34 @@ def test_vrma_library_caches_source_and_retargets_per_avatar():
         capture_output=True, text=True, timeout=10, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_avatar_load_guard_and_runtime_health():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js não disponível para testar runtime do avatar")
+    module_url = (ROOT / "ui/avatar/runtime-health.js").as_uri()
+    script = f"""
+      const {{ AvatarLoadGuard, AvatarRuntimeHealth }} = await import({module_url!r});
+      const guard = new AvatarLoadGuard();
+      const old = guard.begin('old.vrm'), current = guard.begin('current.vrm');
+      if (guard.isCurrent(old) || !guard.isCurrent(current)) throw new Error('corrida de load não bloqueada');
+      guard.invalidate(); if (guard.isCurrent(current)) throw new Error('invalidação falhou');
+      const health = new AvatarRuntimeHealth();
+      health.frame(0.016, {{stats:{{lastSteps:1}}}}); health.frame(0.04, {{stats:{{lastSteps:3}}}});
+      health.loaded({{name:'Aila',version:'1',capabilities:{{springBoneJoints:125}}}});
+      const snap = health.snapshot();
+      if (snap.loads!==1 || snap.model!=='Aila' || snap.springJoints!==125 || snap.slowFrames!==1)
+        throw new Error('telemetria incorreta');
+    """
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script], cwd=ROOT,
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_animation_controller_disposes_runtime_resources():
+    source = (ROOT / "ui/avatar/animation-controller.js").read_text(encoding="utf-8")
+    for contract in ("stopAllAction()", "uncacheRoot", "gazeTarget.removeFromParent()", "motionScheduler.cancelAll()"):
+        assert contract in source

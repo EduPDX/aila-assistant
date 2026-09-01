@@ -247,6 +247,19 @@ export class AnimationController {
   setEmotion(name) { const k = resolveEmotion(name); this.ctx.emotionKey = k; this.ctx.emotion = EMOTIONS[k]; }
   setVramState(state) { this.rig.secondaryMotion.setQuality(state); }
   setPaused(value) { this.rig.secondaryMotion.setPaused(value); }
+  dispose() {
+    this.motionScheduler.cancelAll();
+    this.attention.release();
+    this.rig.secondaryMotion.setPaused(true);
+    if (this._clipFinish) this.mixer?.removeEventListener('finished', this._clipFinish);
+    this._clipFinish = null; this._clipAction = null;
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer.uncacheRoot(this.rig.vrm.scene);
+    }
+    this.rig.gazeTarget.removeFromParent();
+    this._queue.length = 0;
+  }
   setMouth(v) { this.ctx.mouth = Math.max(0, Math.min(1, v || 0)); }
   setVisemes(values = null, ih = 0, ou = 0, ee = 0, oh = 0) {
     const v = this.ctx.visemes;

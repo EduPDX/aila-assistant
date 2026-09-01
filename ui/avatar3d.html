@@ -77,6 +77,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 import { AnimationController } from './avatar/animation-controller.js';
 import { VRMALibrary } from './avatar/vrma-library.js';
+import { AvatarLoadGuard, AvatarRuntimeHealth } from './avatar/runtime-health.js';
 import { AvatarDebug } from './avatar/debug.js';
 import { SceneManager } from './avatar/cognitive-scene/scene-manager.js';   // Cognitive Scene (Fase 1)
 import { loadSceneDef, applySceneDef } from './avatar/cognitive-scene/scene-loader.js';  // Fase 7: JSON declarativo
@@ -86,6 +87,9 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const MODEL_URL = params.get('model') || '/static/models/avatar.vrm';
 let currentModelUrl = MODEL_URL;   // p/ recarregar no restore do contexto WebGL
+const loadGuard = new AvatarLoadGuard();
+const avatarHealth = new AvatarRuntimeHealth();
+window.ailaAvatarHealth = avatarHealth;
 
 // ---------------- cena ----------------
 const renderer = new THREE.WebGLRenderer({ canvas: $('canvas'), antialias:true, alpha:true });
@@ -99,6 +103,7 @@ let _ctxLost = false;
 $('canvas').addEventListener('webglcontextlost', (e) => {
   e.preventDefault();                 // permite a restauração
   _ctxLost = true;
+  avatarHealth.contextLosses++;
   console.warn('WebGL context perdido (VRAM?) — aguardando restauração.');
 }, false);
 $('canvas').addEventListener('webglcontextrestored', () => {
@@ -256,21 +261,35 @@ function playGestureSequence(names, source = 'sequence') {
 window.ailaPlaySequence = playGestureSequence;   // teste no console
 
 function disposeVRM() {
-  if (!vrm) return;
   vrmaLibrary.clearTarget();
-  scene.remove(vrm.scene);
-  try { VRMUtils.deepDispose?.(vrm.scene); } catch(e){}
+  controller?.dispose?.();
+  sceneManager.setController(null);
+  if (vrm) {
+    scene.remove(vrm.scene);
+    try { VRMUtils.deepDispose?.(vrm.scene); } catch(e){}
+  }
   vrm = null; window.vrm = null;
+  controller = null; window.ailaAnim = null;
 }
 
 function loadVRM(url, revokeWhenDone = false) {
   currentModelUrl = url;
+  const ticket = loadGuard.begin(url);
+  const finishUrl = () => { if (revokeWhenDone) URL.revokeObjectURL(url); };
   $('err').classList.remove('show');
   $('loading').style.display = 'flex';
   loader.load(url, (gltf) => {
+    if (!loadGuard.isCurrent(ticket)) {
+      avatarHealth.staleLoads++;
+      try { VRMUtils.deepDispose?.(gltf.userData.vrm?.scene || gltf.scene); } catch (_) {}
+      finishUrl(); return;
+    }
     disposeVRM();
-    if (controller) { try { scene.remove(controller.rig.gazeTarget); } catch(e){} }  // limpa alvo antigo
     vrm = gltf.userData.vrm;
+    if (!vrm) {
+      avatarHealth.loadFailures++; $('loading').style.display = 'none'; $('err').classList.add('show');
+      $('errdetail').textContent = 'arquivo sem dados VRM compatíveis'; finishUrl(); return;
+    }
     if (vrm.meta?.metaVersion === '0') VRMUtils.rotateVRM0(vrm);  // VRM0 encara a câmera
     vrm.scene.traverse((o) => {
       o.frustumCulled = false;
@@ -289,6 +308,7 @@ function loadVRM(url, revokeWhenDone = false) {
     window.ailaRigProfile = controller.rig.profile;            // diagnóstico VRM 1 (somente leitura)
     window.ailaPhysics = controller.rig.secondaryMotion;       // SpringBone: qualidade/estatísticas/reset
     console.info('[avatar] rig profile', controller.rig.profile);
+    avatarHealth.loaded(controller.rig.profile);
     controller.clipFor = playGestureClip;                      // P7: gestos por clip (fallback procedural)
     controller.playTalkClip = playRandomTalkClip;              // gesticulação natural da fala por clips
     setTimeout(() => vrmaLibrary.preload(['wave', 'nod', 'point']), 250); // gestos frequentes sem atrasar o load
@@ -301,12 +321,14 @@ function loadVRM(url, revokeWhenDone = false) {
     sceneManager.setController(controller);                    // Fase 3: IK aponta p/ a cena
     sceneManager.compose(vrm);                                 // posiciona monitor + diagonal + enquadra o palco
     $('loading').style.display = 'none';
-    if (revokeWhenDone) URL.revokeObjectURL(url);
+    finishUrl();
   }, undefined, (e) => {
+    if (!loadGuard.isCurrent(ticket)) { avatarHealth.staleLoads++; finishUrl(); return; }
+    avatarHealth.loadFailures++;
     $('loading').style.display = 'none';
     $('err').classList.add('show');
     $('errdetail').textContent = 'tentei carregar: ' + url + '  ·  ' + (e?.message || e);
-    if (revokeWhenDone) URL.revokeObjectURL(url);
+    finishUrl();
   });
 }
 
@@ -326,6 +348,7 @@ function animate() {
   requestAnimationFrame(animate);
   if (paused || document.hidden || _ctxLost) { clock.getDelta(); return; }   // zera o dt e sai
   const dt = Math.min(clock.getDelta(), 0.05);   // limita o dt: molas não explodem
+  avatarHealth.frame(dt, controller?.rig?.secondaryMotion);
   if (controller) controller.update(dt);          // camadas → PoseBuffer → VRM
   sceneManager.update(dt);                         // Cognitive Scene (monitor/scanlines/anel)
   debug.update();                                 // helpers só quando ligado
