@@ -19,7 +19,8 @@ _CODE_RX = re.compile(
     r"(```|\b(c[óo]digo|program\w+|fun[çc][ãa]o|function|def |class |m[ée]todo|"
     r"bug|erro|exce[çc][ãa]o|traceback|compil\w+|refator\w+|implement\w+|corrig\w+|"
     r"depur\w+|debug|script|api\b|endpoint|reposit[óo]rio|commit|git\b|lint|"
-    r"testes?\b|pytest|npm\b|cargo\b|\.py\b|\.js\b|\.ts\b|\.go\b|\.rs\b))",
+    r"testes?\b|pytest|npm\b|cargo\b|\.py\b|\.js\b|\.ts\b|\.go\b|\.rs\b|"
+    r"\.java\b|\.kt\b|\.cs\b|\.cpp\b|\.c\b|\.php\b|\.rb\b))",
     re.IGNORECASE)
 
 
@@ -111,8 +112,16 @@ def _is_casual(t: str) -> bool:
 #: memória, PC). Sem nenhum deles, a pergunta é conhecimento puro — oferecer
 #: ferramentas só faz o modelo pequeno tatear (docs.read, web.fetch…) e ATRASAR.
 _PRECISA_FERRAMENTA_RX = re.compile(
-    r"\bpesquis\w+|\bbusc\w+|\bprocur\w+|\bgoogl\w+|na (web|internet)|\barquivo|\bpasta|\bdiret[óo]rio|\bdocumento|\bplanilha|\banexo|\bimagem|\bprint\b|\btela\b|\blembr\w+|\bguard\w+|\bsalv\w+|\banot\w+|\bhoje\b|\bhoras?\b|\bque horas|\bdata\b|\bagora\b|\batual\w*|\b[úu]ltim\w+|\bnot[íi]cia\w*|https?://|[A-Za-z]:\\\\|\b\w+\.(py|js|ts|md|txt|json|csv|pdf|docx?|xlsx?)\b|\[Anexo|\[Pasta anexada",
+    r"\bpesquis\w+|\bbusc\w+|\bprocur\w+|\bgoogl\w+|na (web|internet)|\barquivo|\bpasta|\bdiret[óo]rio|\bdocumento|\bplanilha|\banexo|\bimagem|\bprint\b|\btela\b|\blembr\w+|\bguard\w+|\bsalv\w+|\banot\w+|\bhoje\b|\bhoras?\b|\bque horas|\bdata\b|\bagora\b|\batual\w*|\b[úu]ltim\w+|\bnot[íi]cia\w*|https?://|[A-Za-z]:\\\\|\b\w+\.(py|js|ts|java|kt|cs|cpp|c|go|rs|php|rb|md|txt|json|csv|pdf|docx?|xlsx?)\b|\[Anexo|\[Pasta anexada",
     re.IGNORECASE)
+
+_PERSONAL_FOLDER_RX = re.compile(
+    r"\b(documentos?|documents?|desktop|downloads?|[áa]rea de trabalho)\b", re.IGNORECASE
+)
+_RESEARCH_RX = re.compile(
+    r"\b(pesquis\w+|busc\w+|procur\w+|not[íi]cia\w*|mais recente|atualizad\w*|"
+    r"fontes?\b|na (web|internet))\b", re.IGNORECASE
+)
 
 
 def _needs_tools(t: str) -> bool:
@@ -143,6 +152,8 @@ def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
         # fallback). NÃO forçamos mais local: as travadas na nuvem vinham do parser
         # de tool-call, que rejeitava código multi-linha (corrigido com strict=False).
         return RouteTask(kind="code", needs_tools=True), True
+    if _RESEARCH_RX.search(user_text or ""):
+        return RouteTask(kind="research", needs_tools=True), True
     # COMPLEXIDADE (Fase H): trivial → modelo pequeno/rápido; raciocínio PESADO →
     # cadeia 'reasoning' (ex.: Nemotron), só quando realmente vale a espera.
     from aila.mind.task_analyzer import analyze
@@ -155,6 +166,41 @@ def _classify_task(user_text: str, mode: str) -> tuple[RouteTask, bool]:
         # sabe. Ferramentas aqui só geram tentativas inúteis que atrasam.
         return RouteTask(kind=kind, needs_tools=False, complexity=comp), False
     return RouteTask(kind=kind, needs_tools=True, complexity=comp), True
+
+
+def select_tool_schemas(registry, task: RouteTask, user_text: str) -> list[dict]:
+    """Oferece somente as ferramentas plausíveis para o pedido atual.
+
+    É uma redução de contexto, não uma autorização: toda execução continua
+    passando pelas mesmas políticas, permissões e pelo sandbox.
+    """
+    text = user_text or ""
+    low = text.casefold()
+    exact: set[str] = set()
+
+    if task.kind == "research":
+        prefixes = ("web.",)
+    elif task.kind == "code":
+        prefixes = ("code.", "file.", "git.", "project.")
+        if _PERSONAL_FOLDER_RX.search(text) and re.search(
+            r"\b(salv\w*|cri\w*|escrev\w*|ger\w*)\b", text, re.IGNORECASE
+        ):
+            prefixes = ()
+            exact = {"file.write"}
+            if re.search(r"\b(execut\w*|rod\w*|test\w*)\b", text, re.IGNORECASE):
+                exact.add("code.run")
+    elif re.search(r"\b(list\w*|mostr\w*|o que tem)\b", low) and _PERSONAL_FOLDER_RX.search(text):
+        prefixes = ()
+        exact = {"file.list"}
+    elif any(word in low for word in ("arquivo", "pasta", "diretório", "diretorio")):
+        prefixes = ("file.",)
+    else:
+        return registry.schemas()
+
+    return [
+        tool.json_schema() for tool in registry.all()
+        if tool.name in exact or tool.name.startswith(prefixes)
+    ]
 
 
 def _tool_status(tool_name: str) -> str:

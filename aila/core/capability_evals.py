@@ -147,12 +147,14 @@ async def evaluate_suite(
     schemas: list[dict[str, Any]],
     registry: Any,
     cases: tuple[CapabilityEvalCase, ...] = DEFAULT_CASES,
+    schema_selector: Any | None = None,
 ) -> list[CapabilityEvalResult]:
     results: list[CapabilityEvalResult] = []
     for case in cases:
-        results.append(
-            await evaluate_case(backend, model, system_prompt, schemas, registry, case)
-        )
+        case_schemas = schema_selector(case.prompt) if schema_selector else schemas
+        results.append(await evaluate_case(
+            backend, model, system_prompt, case_schemas, registry, case
+        ))
     return results
 
 
@@ -167,12 +169,17 @@ async def _run_cli(model: str | None, as_json: bool) -> int:
     engine = build_engine(settings, backend)
     selected_model = model or settings.llm.model
     try:
+        from aila.core.turn import _classify_task, select_tool_schemas
+
         results = await evaluate_suite(
             backend,
             selected_model,
             engine._system_prompt(),
             engine.agents.registry.schemas(),
             engine.agents.registry,
+            schema_selector=lambda prompt: select_tool_schemas(
+                engine.agents.registry, _classify_task(prompt, "auto")[0], prompt
+            ),
         )
     finally:
         await backend.aclose()

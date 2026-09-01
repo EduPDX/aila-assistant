@@ -90,9 +90,16 @@ providers:
 #              rules: { reasoning: ["nvidia", "local"], code: ["gemini", "local"],
 #                       vision: ["gemini", "local"] } }
 routing:
-  enabled: false
+  enabled: true
   default: "local"
-  rules: {}
+  rules:
+    basic: ["local"]
+    chat: ["local"]
+    code: ["gemini", "nvidia", "local"]
+    research: ["gemini", "nvidia", "local"]
+    reasoning: ["nvidia", "gemini", "local"]
+    vision: ["gemini", "local"]
+    plan: ["nvidia", "gemini", "local"]
 
 security:
   read_only: false            # Aila PODE agir (rodar comandos, mexer no PC); a

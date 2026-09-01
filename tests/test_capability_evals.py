@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from aila.core.capability_evals import CapabilityEvalCase, evaluate_case
+from aila.core.turn import _classify_task, select_tool_schemas
 from aila.llm.base import ChatChunk, LLMBackend
 from aila.tools.registry import ToolRegistry
 from aila.tools.schema import Tool, ToolResult
@@ -91,3 +92,30 @@ def test_eval_rejects_tools_in_casual_chat():
     ))
     assert result.passed is False
     assert "conversa casual" in result.reason
+
+
+def test_tool_selector_removes_self_edit_for_personal_file():
+    registry = _registry()
+    prompt = "Crie um jogo em Java e salve em Documentos como Cobra.java"
+    task, use_tools = _classify_task(prompt, "auto")
+    schemas = select_tool_schemas(registry, task, prompt)
+    names = [schema["function"]["name"] for schema in schemas]
+    assert use_tools is True
+    assert names == ["file.write"]
+
+
+def test_tool_selector_limits_personal_folder_listing():
+    registry = _registry()
+    prompt = "Liste o que tem na pasta Documentos"
+    task, use_tools = _classify_task(prompt, "auto")
+    schemas = select_tool_schemas(registry, task, prompt)
+    assert use_tools is True
+    assert [schema["function"]["name"] for schema in schemas] == ["file.list"]
+
+
+def test_research_has_distinct_route_kind():
+    task, use_tools = _classify_task(
+        "Pesquise na web as notícias mais recentes sobre IA", "auto"
+    )
+    assert task.kind == "research"
+    assert use_tools is True

@@ -210,9 +210,17 @@ class RoutingConfig(BaseModel):
     provedor padrão local. Nomes desconhecidos/indisponíveis são pulados.
     """
 
-    enabled: bool = False
+    enabled: bool = True
     default: str = "local"
-    rules: dict[str, list[str]] = Field(default_factory=dict)
+    rules: dict[str, list[str]] = Field(default_factory=lambda: {
+        "basic": ["local"],
+        "chat": ["local"],
+        "code": ["gemini", "nvidia", "local"],
+        "research": ["gemini", "nvidia", "local"],
+        "reasoning": ["nvidia", "gemini", "local"],
+        "vision": ["gemini", "local"],
+        "plan": ["nvidia", "gemini", "local"],
+    })
 
 
 class ProviderConfig(BaseModel):

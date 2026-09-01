@@ -54,6 +54,7 @@ from aila.core.turn import (  # classificação de turno (extraída na Fase 2; r
     _classify_task,
     _tool_status,
     normalize_user_write_call,
+    select_tool_schemas,
 )
 from aila.core.verify import (  # auto-verificação/lint + conjuntos de escrita (Fase 2)
     _VERIFY_WRITE_TOOLS,
@@ -762,8 +763,12 @@ class AilaEngine:
         """Sub-modelo LOCAL p/ este turno: nome do rápido, ou None (=grande/padrão).
         Só se aplica a backend local; consciente de recurso (R5) — sob pressão de
         GPU, degrada p/ o pequeno. Nunca troca provedor nem sai p/ a nuvem."""
+        if not backend.capabilities().local:
+            return None
+        if task.kind == "code":
+            return (self.settings.llm.code_model or "").strip() or None
         fast = (self.settings.llm.fast_model or "").strip()
-        if not fast or not backend.capabilities().local:
+        if not fast:
             return None
         from aila.llm.model_policy import select_local_model
 
@@ -882,7 +887,7 @@ class AilaEngine:
             _trace("SELF", identity=self.self_model.identity.name,
                    emotion=self.self_model.experience.emotion,
                    activity=self.self_model.experience.activity)
-        tools = self.agents.registry.schemas() if use_tools else None
+        tools = select_tool_schemas(self.agents.registry, task, user_text) if use_tools else None
         await self._emit_decided_gestures(user_text, emit)
 
         opts = {"num_ctx": self.settings.llm.num_ctx}
