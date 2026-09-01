@@ -11,9 +11,11 @@ export const HOLO = {
   blue: 0x7ab8ff,     // linhas/dados
   amber: 0xffb15e,    // destaque/atenção (mais claro p/ ler no escuro)
   dim: 0x1b3a66,      // vidro/preenchimento sutil
-  text: '#dff3ee',    // texto principal (claro, alto contraste)
-  textDim: '#9fd0c6',   // texto secundário (ainda legível, nunca "preto")
-  amberText: '#ffcf9a', // texto de atenção
+  // Tipografia é deliberadamente independente do tema. Os painéis mudam de
+  // cor, mas letras e valores permanecem brancos e legíveis em qualquer fundo.
+  text: '#ffffff',
+  textDim: '#ffffff',
+  amberText: '#ffffff',
 };
 
 const COLOR_ROLES = ['teal', 'blue', 'amber', 'dim'];
@@ -31,9 +33,9 @@ export function applyHoloTheme(root, palette = {}) {
     blue: asHex(palette.accent2, HOLO.blue),
     amber: asHex(palette.warn, HOLO.amber),
     dim: asHex(palette.id === 'light' ? palette.accent2 : palette.panel, HOLO.dim),
-    text: palette.text || HOLO.text,
-    textDim: palette.muted || HOLO.textDim,
-    amberText: palette.warn || HOLO.amberText,
+    text: '#ffffff',
+    textDim: '#ffffff',
+    amberText: '#ffffff',
     surface: asHex(palette.bg2, HOLO.dim),
     surface2: asHex(palette.panel, HOLO.dim),
   };
@@ -128,11 +130,15 @@ export function textPlane(text, { width = 1, px = 256, align = 'left', color = H
   const ctx = cv.getContext('2d');
   const tex = new THREE.CanvasTexture(cv);
   tex.minFilter = THREE.LinearFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
   const tx = align === 'center' ? cv.width / 2 : align === 'right' ? cv.width - 8 : 8;
   const maxW = cv.width - 16;
   let _last = null;
   let _color = color;
-  const textRole = TEXT_ROLES.find((role) => HOLO[role] === color) || null;
+  // Todo texto do display usa o mesmo papel de alto contraste. Cores passadas
+  // por componentes antigos não podem voltar a enfraquecê-lo ao trocar tema.
+  const textRole = 'text';
+  _color = HOLO.text;
   function draw(str, force = false) {
     if (!force && str === _last) return; _last = str;
     ctx.clearRect(0, 0, cv.width, cv.height);
@@ -146,7 +152,9 @@ export function textPlane(text, { width = 1, px = 256, align = 'left', color = H
   draw(text);
   // TEXTO com blending NORMAL (não aditivo): fica CROCANTE e legível no fundo
   // escuro — o aditivo lavava a cor (o "texto quase preto" que o usuário viu).
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, depthWrite: false, toneMapped: false,
+  });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width * ratio), mat);
   mesh.userData._tex = tex;
   mesh.userData._holoTextRole = textRole;
@@ -190,7 +198,8 @@ export function dataStream(nRows, w, { color = HOLO.textDim, size = 28, rowH = 0
   for (let i = 0; i < nRows; i++) {
     const tp = textPlane('', { width: w, px: 640, size, align: 'left', color });
     tp.mesh.position.y = -i * rowH;
-    tp.mesh.material.opacity = 0.35 + 0.65 * (i / (nRows - 1));   // topo mais fraco (efeito de rolagem)
+    // Mantém hierarquia visual sem sacrificar leitura nos temas claros/escuros.
+    tp.mesh.material.opacity = 0.78 + 0.22 * (i / Math.max(1, nRows - 1));
     g.add(tp.mesh); rows.push(tp);
   }
   const texts = new Array(nRows).fill('');

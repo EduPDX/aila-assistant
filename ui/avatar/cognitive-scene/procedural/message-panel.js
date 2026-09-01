@@ -22,9 +22,13 @@ export function createMessagePanel({ width = 1.5, height = 0.62 } = {}) {
   const cv = document.createElement('canvas');
   cv.width = 1024; cv.height = Math.round(1024 * (height / width));
   const ctx = cv.getContext('2d');
-  const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.minFilter = THREE.LinearFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
   const textMesh = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.92, height * 0.92),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, depthWrite: false, toneMapped: false,
+    }));
   textMesh.position.z = 0.004;
   group.add(textMesh);
 
@@ -35,10 +39,10 @@ export function createMessagePanel({ width = 1.5, height = 0.62 } = {}) {
     ctx.clearRect(0, 0, cv.width, cv.height);
     const pad = 46, maxW = cv.width - pad * 2;
     // cabeçalho
-    ctx.fillStyle = '#7fe8d8'; ctx.font = '600 34px ui-monospace, monospace'; ctx.textBaseline = 'top';
+    ctx.fillStyle = '#ffffff'; ctx.font = '700 34px ui-monospace, monospace'; ctx.textBaseline = 'top';
     ctx.fillText('AILA', pad, 24);
     // corpo com quebra de linha
-    ctx.fillStyle = HOLO.text; ctx.font = '40px "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = '#ffffff'; ctx.font = '500 40px "Segoe UI", system-ui, sans-serif';
     const words = String(text).split(/\s+/);
     const lines = []; let line = '';
     for (const w of words) {
