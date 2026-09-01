@@ -674,6 +674,36 @@ def test_cena_define_a_atencao_e_aparece_no_bloco():
 
 # ------------------------------------------------- Fase N: observabilidade (log) #
 
+def test_log_de_arquivo_e_exclusivo_por_processo(tmp_path):
+    from aila.core.logging import _process_log_path
+
+    assert _process_log_path(tmp_path, 1234) == tmp_path / "aila-1234.log"
+    assert _process_log_path(tmp_path, 5678) != _process_log_path(tmp_path, 1234)
+
+
+def test_limpeza_de_logs_preserva_atuais_e_remove_apenas_expirados(tmp_path):
+    import os
+
+    from aila.core.logging import _LOG_RETENTION_SECONDS, _prune_stale_process_logs
+
+    now = 2_000_000_000.0
+    current = tmp_path / f"aila-{os.getpid()}.log"
+    recent = tmp_path / "aila-111.log"
+    expired = tmp_path / "aila-222.log"
+    unrelated = tmp_path / "outro.log"
+    for path in (current, recent, expired, unrelated):
+        path.write_text("log", encoding="utf-8")
+    os.utime(current, (now - _LOG_RETENTION_SECONDS - 1, now - _LOG_RETENTION_SECONDS - 1))
+    os.utime(recent, (now - 10, now - 10))
+    os.utime(expired, (now - _LOG_RETENTION_SECONDS - 1, now - _LOG_RETENTION_SECONDS - 1))
+
+    _prune_stale_process_logs(tmp_path, now=now)
+
+    assert current.exists()
+    assert recent.exists()
+    assert not expired.exists()
+    assert unrelated.exists()
+
 def test_trace_formata_no_padrao_do_item_32(capfd):
     """[SECTION] k=v k=v — só no log, nunca ao usuário. Captura via loguru→stderr."""
     from aila.core.logging import setup_logging
