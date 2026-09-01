@@ -13,7 +13,7 @@ import { INTERACTIONS, DEFAULT_INTERACTION } from './interaction-types.js';
 
 export function createInteractionManager({ resolveWorld, getController }) {
   const _t = new THREE.Vector3(), _s = new THREE.Vector3(), _d = new THREE.Vector3();
-  let active = null;   // { side, hold }
+  let active = null;   // { side, hold, attentionId }
 
   function interact({ type = 'point', target } = {}) {
     const c = getController();
@@ -31,8 +31,8 @@ export function createInteractionManager({ resolveWorld, getController }) {
     _d.multiplyScalar(cfg.reach / dist);              // direção do alvo, alcance do braço
     c.setHandTarget(side, shoulder.x + _d.x, shoulder.y + _d.y, shoulder.z + _d.z, 1);
     c.setHandPose(side, cfg.pose);
-    c.setGazeWorld?.(pos.x, pos.y, pos.z);            // Fase 4: olha p/ o que aponta
-    active = { side, hold: cfg.hold };
+    const attention = c.setGazeWorld?.(pos.x, pos.y, pos.z, { source: 'interaction', hold: cfg.hold });
+    active = { side, hold: cfg.hold, attentionId: attention?.id || 0 };
     return true;
   }
 
@@ -44,7 +44,10 @@ export function createInteractionManager({ resolveWorld, getController }) {
 
   function stop() {
     const c = getController();
-    if (c && active) { c.clearHandTarget?.(); c.setHandPose?.(active.side, 'relaxed'); c.clearGazeWorld?.(); }
+    if (c && active) {
+      c.clearHandTarget?.(); c.setHandPose?.(active.side, 'relaxed');
+      c.clearGazeWorld?.(active.attentionId, 'interaction');
+    }
     active = null;
   }
 

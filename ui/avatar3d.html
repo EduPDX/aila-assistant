@@ -306,6 +306,7 @@ function loadVRM(url, revokeWhenDone = false) {
     controller = new AnimationController(vrm, scene, camera);   // ← animação em camadas
     window.ailaAnim = controller;                              // debug/console
     window.ailaMotion = controller.motionScheduler;            // ownership/fila p/ diagnóstico
+    window.ailaAttention = controller.attention;                // foco visual p/ diagnóstico
     window.ailaRigProfile = controller.rig.profile;            // diagnóstico VRM 1 (somente leitura)
     console.info('[avatar] rig profile', controller.rig.profile);
     controller.clipFor = playGestureClip;                      // P7: gestos por clip (fallback procedural)

@@ -35,7 +35,10 @@ export function createLookAtLayer() {
       const mag = Math.min(1, Math.hypot(yaw / MAX_YAW, pitch / MAX_PITCH));
       const engage = 0.62 + 0.38 * mag;
       for (const [bone, w] of CHAIN) {
-        buf.addRot(bone, pitch * w * engage, yaw * w * engage, 0);
+        // Durante nod/shake o gesto é dono da cabeça. O olhar permanece vivo
+        // nos olhos e no tronco, mas não soma uma torção forte no mesmo osso.
+        const headScale = ctx.headGestureActive && (bone === 'head' || bone === 'neck') ? 0.2 : 1;
+        buf.addRot(bone, pitch * w * engage * headScale, yaw * w * engage * headScale, 0);
       }
     },
   };

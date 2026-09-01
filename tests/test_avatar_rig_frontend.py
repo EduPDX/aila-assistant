@@ -76,3 +76,31 @@ def test_motion_scheduler_deduplicates_and_respects_body_ownership():
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_attention_controller_prioritizes_and_releases_smoothly():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js não disponível para testar a atenção")
+    module_url = (ROOT / "ui/avatar/attention-controller.js").as_uri()
+    script = f"""
+      const {{ AttentionController }} = await import({module_url!r});
+      const a = new AttentionController();
+      const check = (v, msg) => {{ if (!v) throw new Error(msg); }};
+      const scene = a.focus(1, 2, 3, 0, {{ source:'interaction', hold:2 }});
+      check(scene.accepted, 'foco inicial rejeitado');
+      check(!a.focus(4, 5, 6, 0.1, {{ source:'behavior' }}).accepted, 'prioridade menor interrompeu');
+      const user = a.focus(7, 8, 9, 0.2, {{ source:'user' }});
+      check(user.accepted, 'usuário não interrompeu interação');
+      check(!a.release(scene.id), 'foco antigo liberou foco novo');
+      a.update(0.3, 0.1);
+      check(a.current.weight > 0, 'atenção não entrou suavemente');
+      check(a.release(user.id, 'user'), 'foco atual não foi liberado');
+      for (let i=0; i<30; i++) a.update(0.4+i/10, 0.1);
+      check(a.current.weight < 0.01, 'atenção não saiu suavemente');
+    """
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script], cwd=ROOT,
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    assert result.returncode == 0, result.stderr

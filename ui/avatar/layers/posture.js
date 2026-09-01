@@ -5,10 +5,20 @@
 import { DEG, damp } from '../rig-core.js';
 import { ARM_ELEVATION, CTRL_BONES, POSES, GESTURE_ALIASES } from '../profiles.js';
 
+const POSTURES = Object.freeze({
+  neutral:   { spine: 0, chest: 0, head: 0 },
+  open:      { spine: -1.5, chest: -2.0, head: -1.0 },
+  closed:    { spine: 3.0, chest: 2.0, head: 2.0 },
+  thinking:  { spine: 2.0, chest: 1.0, head: 3.0 },
+  attentive: { spine: -2.0, chest: -2.5, head: -1.5 },
+});
+
 export function createPostureLayer() {
   const cur = {};                     // rotação atual (rad) por osso, p/ suavizar
   for (const b of CTRL_BONES) cur[b] = [0, 0, 0];
   cur.spine = [0, 0, 0];
+  cur.chest = [0, 0, 0];
+  cur.postureHead = [0, 0, 0];
   const armTarget = [0, 0, 0];
 
   return {
@@ -66,9 +76,14 @@ export function createPostureLayer() {
         buf.addRot(bone, c[0], c[1], c[2]);
       }
       // inclinação base da coluna pela emoção (postura aberta/caída)
-      const cs = cur.spine;
-      cs[0] = damp(cs[0], emo.spine[0] * DEG, 4, dt);
+      const po = POSTURES[ctx.posture] || POSTURES.neutral;
+      const cs = cur.spine, cc = cur.chest, ch = cur.postureHead;
+      cs[0] = damp(cs[0], (emo.spine[0] + po.spine) * DEG, 4, dt);
+      cc[0] = damp(cc[0], po.chest * DEG, 4, dt);
+      ch[0] = damp(ch[0], po.head * DEG, 4, dt);
       buf.addRot('spine', cs[0], 0, 0);
+      buf.addRot('chest', cc[0], 0, 0);
+      buf.addRot('head', ch[0], 0, 0);
     },
   };
 }

@@ -35,13 +35,21 @@ export function createEyeLayer() {
           _dir.set(gw.x - hp.x, gw.y - hp.y, gw.z - hp.z).normalize();
           rig.vrm.scene.getWorldQuaternion(_q).invert();   // → frame local do avatar
           _dir.applyQuaternion(_q);
-          g.tYaw = _clamp(Math.atan2(_dir.x, _dir.z), -0.9, 0.9);
-          g.tPitch = _clamp(-Math.asin(_clamp(_dir.y, -1, 1)), -0.5, 0.5);
+          const weight = gw.weight ?? 1;
+          g.tYaw = _clamp(Math.atan2(_dir.x, _dir.z), -0.9, 0.9) * weight;
+          g.tPitch = _clamp(-Math.asin(_clamp(_dir.y, -1, 1)), -0.5, 0.5) * weight;
         }
         const k = Math.min(1, dt * 7);
         g.yaw += (g.tYaw - g.yaw) * k;
         g.pitch += (g.tPitch - g.pitch) * k;
-        buf.setGaze(gw.x, gw.y, gw.z);                 // olhos exatamente no alvo real
+        // O alvo VRM também entra/sai pelo mesmo peso; caso contrário apenas a
+        // cabeça suavizava e os olhos ainda saltavam instantaneamente.
+        const cam = ctx.camera, weight = gw.weight ?? 1;
+        buf.setGaze(
+          cam.position.x + (gw.x - cam.position.x) * weight,
+          cam.position.y + (gw.y - cam.position.y) * weight,
+          cam.position.z + (gw.z - cam.position.z) * weight,
+        );
         ctx.gaze.yaw = g.yaw; ctx.gaze.pitch = g.pitch;
         return;
       }

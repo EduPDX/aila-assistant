@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Rig, damp } from './rig-core.js';
 import { EMOTIONS, STATES, resolveEmotion } from './profiles.js';
 import { MotionScheduler } from './motion-scheduler.js';
+import { AttentionController } from './attention-controller.js';
 
 import { createPostureLayer } from './layers/posture.js';
 import { createBreathLayer } from './layers/breath.js';
@@ -36,6 +37,7 @@ export class AnimationController {
   constructor(vrm, scene, camera) {
     this.rig = new Rig(vrm, scene);
     this.motionScheduler = new MotionScheduler();
+    this.attention = new AttentionController();
     // ordem de composição: base → offsets → olhar → face/fala → blink
     this.layers = [
       createPostureLayer(),
@@ -65,6 +67,8 @@ export class AnimationController {
       gazeMode: 'soft',
       gaze: { yaw: 0, pitch: 0 },               // EyeLayer escreve, LookAt lê
       gazeWorld: null,                          // {x,y,z} p/ olhar um ponto do mundo (Fase 4); null = comportamento normal
+      posture: 'neutral',
+      headGestureActive: false,
       blinkRange: [2.4, 6.0],
       mouth: 0,                                 // alvo instantâneo da boca (lip-sync)
       speech: 0,                                // envelope 0..1 "está falando"
@@ -160,6 +164,7 @@ export class AnimationController {
     const m = spec.motion || {};
     this._behavior = {
       gaze: spec.gaze || null,
+      posture: spec.posture || 'neutral',
       amp: m.amplitude ?? 1, speed: m.speed ?? 1, breath: m.breath ?? 1,
       timer: (spec.est_speech_seconds || 2) + 1.2,   // renovado enquanto fala
     };
@@ -205,8 +210,10 @@ export class AnimationController {
 
   /** olha para um PONTO do mundo (Fase 4): a EyeLayer converte em yaw/pitch e o
    *  corpo acompanha pela cadeia existente (sem "colar" a cabeça). null → normal. */
-  setGazeWorld(x, y, z) { this.ctx.gazeWorld = { x, y, z }; }
-  clearGazeWorld() { this.ctx.gazeWorld = null; }
+  setGazeWorld(x, y, z, options = {}) {
+    return this.attention.focus(x, y, z, this.ctx.t, options);
+  }
+  clearGazeWorld(id = 0, source = '') { return this.attention.release(id, source); }
 
   // -------- API pública (a UI / WS chamam isto) -------- //
   setStatus(status) { if (STATES[status]) this.ctx.status = status; }
@@ -223,6 +230,8 @@ export class AnimationController {
     const ctx = this.ctx;
     ctx.t += dt;
     this.motionScheduler.tick(ctx.t);
+    ctx.gazeWorld = this.attention.update(ctx.t, dt);
+    ctx.headGestureActive = this.motionScheduler.owns('head');
 
     // gesto volta ao rest sozinho
     if (this._gestureTimer > 0) {
@@ -278,6 +287,7 @@ export class AnimationController {
       if (b.timer <= 0) this._behavior = null;
     }
     const bb = this._behavior;
+    ctx.posture = bb?.posture || 'neutral';
 
     // ritmo-alvo (amplitude/velocidade/respiração), suavizado
     ctx.motion.amp = damp(ctx.motion.amp, bb ? bb.amp : st.amp * em.amp, 2.5, dt);
