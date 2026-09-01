@@ -244,6 +244,95 @@ export function nodeCluster(nCount, radius, ptMat, lnMat) {
   return { group: g, update };
 }
 
+/** Grafo de conhecimento real para o painel do subconsciente.
+ * O layout é determinístico e agrupado por comunidade, sem física por frame. */
+export function knowledgeGraph() {
+  const group = new THREE.Group();
+  const palette = [0x6ea8fe, 0xf0a35e, 0xe06c75, 0x57c7b8, 0x98c379, 0xe5c07b, 0xc678dd, 0xf2809b];
+  const edgeMat = new THREE.LineBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.38,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const pointMat = new THREE.PointsMaterial({
+    size: 0.075, vertexColors: true, transparent: true, opacity: 0.96,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+  });
+  const pulseMat = glowMat(HOLO.text, 0.9); pulseMat.toneMapped = false;
+  const pulse = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.095, 20), pulseMat);
+  pulse.visible = false; pulse.position.z = 0.015; group.add(pulse);
+  let points = null, edges = null, positions = [], elapsed = 0, pulseIndex = 0;
+  const hash = (value) => {
+    let h = 2166136261;
+    for (const ch of String(value)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  };
+  function clearData() {
+    for (const object of [points, edges]) if (object) {
+      group.remove(object); object.geometry.dispose();
+    }
+    points = null; edges = null; positions = []; pulse.visible = false;
+  }
+  function setData(data = {}) {
+    clearData();
+    const nodes = (data.nodes || []).slice(0, 160);
+    if (!nodes.length) return;
+    const communities = [...new Set(nodes.map((n) => String(n.community ?? '0')))];
+    const communityIndex = new Map(communities.map((id, i) => [id, i]));
+    const byCommunity = new Map(communities.map((id) => [id, []]));
+    nodes.forEach((node) => byCommunity.get(String(node.community ?? '0')).push(node));
+    const byId = new Map(), colors = [];
+    for (const [community, members] of byCommunity) {
+      const ci = communityIndex.get(community);
+      const ca = communities.length === 1 ? 0 : (ci / communities.length) * Math.PI * 2 - Math.PI / 2;
+      const cr = communities.length === 1 ? 0 : 0.52;
+      const cx = Math.cos(ca) * cr, cy = Math.sin(ca) * cr;
+      members.forEach((node, i) => {
+        const seed = hash(node.id ?? node.label ?? i);
+        const a = ((seed % 10000) / 10000) * Math.PI * 2 + i * 2.39996;
+        const r = 0.10 + 0.34 * Math.sqrt((i + 1) / Math.max(1, members.length));
+        const p = new THREE.Vector3(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 0);
+        positions.push(p); byId.set(String(node.id), { p, ci });
+        const color = new THREE.Color(palette[ci % palette.length]);
+        colors.push(color.r, color.g, color.b);
+      });
+    }
+    const pointGeo = new THREE.BufferGeometry().setFromPoints(positions);
+    pointGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    points = new THREE.Points(pointGeo, pointMat); group.add(points);
+    const edgePos = [], edgeColors = [];
+    for (const edge of (data.edges || []).slice(0, 420)) {
+      const source = byId.get(String(edge.source)), target = byId.get(String(edge.target));
+      if (!source || !target) continue;
+      edgePos.push(source.p.x, source.p.y, 0, target.p.x, target.p.y, 0);
+      const c = new THREE.Color(palette[source.ci % palette.length]);
+      edgeColors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+    }
+    const edgeGeo = new THREE.BufferGeometry();
+    edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePos, 3));
+    edgeGeo.setAttribute('color', new THREE.Float32BufferAttribute(edgeColors, 3));
+    edges = new THREE.LineSegments(edgeGeo, edgeMat); group.add(edges);
+    group.remove(pulse); group.add(pulse);
+    pulseIndex = hash(nodes.length + ':' + edgePos.length) % positions.length;
+  }
+  function update(dt) {
+    if (!positions.length) return;
+    elapsed += dt;
+    if (elapsed >= 2.6) {
+      elapsed = 0; pulseIndex = (pulseIndex + 17) % positions.length;
+      pulse.position.copy(positions[pulseIndex]); pulse.position.z = 0.015; pulse.visible = true;
+    }
+    if (pulse.visible) {
+      const phase = elapsed / 2.6;
+      pulse.scale.setScalar(0.8 + phase * 1.8);
+      pulse.material.opacity = Math.max(0, 0.9 - phase);
+    }
+  }
+  function dispose() {
+    clearData(); edgeMat.dispose(); pointMat.dispose(); pulse.geometry.dispose(); pulseMat.dispose();
+  }
+  return { group, setData, update, dispose };
+}
+
 /** libera geometrias/materiais/texturas de um Object3D (evita vazamento). */
 export function disposeObject(obj) {
   obj.traverse((o) => {

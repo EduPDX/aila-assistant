@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import {
   HOLO, lineMat, fillMat, glowMat, frameLines, grid, corners, textPlane,
-  lineGraph, barMeter, nodeCluster, dataStream, disposeObject,
+  lineGraph, barMeter, knowledgeGraph, dataStream, disposeObject,
 } from './primitives.js';
 
 function scanlineTexture() {
@@ -110,19 +110,22 @@ export function createMonitor({ width = 3.16, height = 1.78 } = {}) {
     return reg(id, p);
   };
 
-  // ZONA SUPERIOR: MEMORY (mini-grafo) + ANALYSIS (waveform)
-  const cluster = nodeCluster(20, H * 0.12, new THREE.PointsMaterial({ color: HOLO.teal, size: 0.02, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }), lineMat(HOLO.blue, 0.3));
-  cluster.group.position.y = -0.04;
-  panel('MEMORY', contentX + W * 0.17, H * 0.11, W * 0.28, H * 0.38, 'panel_memory', cluster.group);
+  // ZONA SUPERIOR: SUBCONSCIENTE real (grafo do backend) + análise.
+  const subconscious = knowledgeGraph();
+  subconscious.group.position.y = -0.04;
+  subconscious.group.scale.set(W * 0.145, H * 0.145, 1);
+  panel('SUBCONSCIOUS', contentX + W * 0.19, H * 0.11, W * 0.34, H * 0.38, 'panel_memory', subconscious.group);
+  const graphStats = textPlane('0 NODES  //  0 LINKS', { width: W * 0.19, px: 512, size: 23, align: 'right' });
+  at(graphStats.mesh, contentX + W * 0.25, H * 0.205, 0.011);
 
   const wave = lineGraph(W * 0.32, H * 0.18, 60, lineMat(HOLO.teal, 0.9));
   wave.line.position.y = -0.04;
-  const analysis = panel('ANALYSIS', contentX + W * 0.55, H * 0.11, W * 0.40, H * 0.38, 'panel_analysis', wave.line);
+  const analysis = panel('ANALYSIS', contentX + W * 0.56, H * 0.11, W * 0.36, H * 0.38, 'panel_analysis', wave.line);
   analysis.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(-W * 0.17, -0.04, 0.003), new THREE.Vector3(W * 0.17, -0.04, 0.003)]), lineMat(HOLO.blue, 0.25)));
 
   group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([   // seta MEMORY → ANALYSIS
-    new THREE.Vector3(contentX + W * 0.32, H * 0.11, 0.007), new THREE.Vector3(contentX + W * 0.35, H * 0.11, 0.007)]), lineMat(HOLO.teal, 0.8)));
+    new THREE.Vector3(contentX + W * 0.37, H * 0.11, 0.007), new THREE.Vector3(contentX + W * 0.39, H * 0.11, 0.007)]), lineMat(HOLO.teal, 0.8)));
 
   // ZONA INFERIOR: DATA STREAM (esq) · PROCESSING + barras + CONFIDENCE (dir)
   const stream = dataStream(4, W * 0.26, { size: 24, rowH: H * 0.05 });
@@ -174,6 +177,10 @@ export function createMonitor({ width = 3.16, height = 1.78 } = {}) {
     setConfidence(1 - Math.max(cpu, gpu, ram, vram));
     readout.setText(`MEM ${telemetry.memories || 0}    MODELS ${telemetry.models || 0}    TPS ${Number(telemetry.tps || 0).toFixed(1)}`);
   }
+  function setKnowledgeGraph(data) {
+    subconscious.setData(data);
+    graphStats.setText(`${data?.nodes?.length || 0} NODES  //  ${data?.edges?.length || 0} LINKS`);
+  }
   let _intensity = 0.6;
   let _stateVisual = null;
   function setMode(intent) {
@@ -194,10 +201,10 @@ export function createMonitor({ width = 3.16, height = 1.78 } = {}) {
     scanTex.offset.y = (scanTex.offset.y - dt * scanSpd) % 1;
     scan.material.opacity = (0.36 + Math.sin(t * 2.1) * 0.05) * (_intensity / 0.6) * glow;
     live.mesh.material.opacity = 0.82 + Math.sin(t * 3.2) * 0.18;
-    cluster.update(t);
+    subconscious.update(dt);
     tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText((sv ? sv.verb : verb) + '.'.repeat(dots)); }
   }
 
-  function dispose() { disposeObject(group); scanTex.dispose(); }
-  return { group, anchors, update, dispose, setConfidence, setTelemetry, setMode, setIntensity, applyStateVisuals };
+  function dispose() { subconscious.dispose(); disposeObject(group); scanTex.dispose(); }
+  return { group, anchors, update, dispose, setConfidence, setTelemetry, setKnowledgeGraph, setMode, setIntensity, applyStateVisuals };
 }
