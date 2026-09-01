@@ -226,7 +226,10 @@ export class Rig {
   /** FASE 2 do commit: blendshapes, alvo do olhar e física secundária. */
   finalize(dt) {
     const buf = this.buffer;
-    if (this.expr) { for (const [name, value] of buf.expr) this.expr.setValue(name, value); }
+    if (this.expr) {
+      const expressionMap = this.profile.capabilities.expressionMap || {};
+      for (const [name, value] of buf.expr) this.expr.setValue(expressionMap[name] || name, value);
+    }
     if (buf.gaze.active) this.gazeTarget.position.set(buf.gaze.x, buf.gaze.y, buf.gaze.z);
     this.vrm.update(dt);   // spring bones (cabelo/saia) + lookAt applier
   }

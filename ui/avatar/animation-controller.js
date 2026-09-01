@@ -32,6 +32,7 @@ const GESTURE_HOLD = 1.6;   // seg que um gesto de pose fica antes de voltar ao 
                             //  (curto de propósito: gesto é PONTUAÇÃO; entre eles
                             //   a gesticulação ambiente da fala assume as mãos)
 const ANIM_GESTURES = new Set(['nod', 'shake']);   // gestos ANIMADOS (cabeça)
+const VISEME_NAMES = ['aa', 'ih', 'ou', 'ee', 'oh'];
 
 export class AnimationController {
   constructor(vrm, scene, camera) {
@@ -71,6 +72,7 @@ export class AnimationController {
       headGestureActive: false,
       blinkRange: [2.4, 6.0],
       mouth: 0,                                 // alvo instantâneo da boca (lip-sync)
+      visemes: { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 },
       speech: 0,                                // envelope 0..1 "está falando"
       gesture: 'rest',
       handPose: { left: 'relaxed', right: 'relaxed' },   // pose dos dedos por lado (Fase B)
@@ -219,6 +221,18 @@ export class AnimationController {
   setStatus(status) { if (STATES[status]) this.ctx.status = status; }
   setEmotion(name) { const k = resolveEmotion(name); this.ctx.emotionKey = k; this.ctx.emotion = EMOTIONS[k]; }
   setMouth(v) { this.ctx.mouth = Math.max(0, Math.min(1, v || 0)); }
+  setVisemes(values = null, ih = 0, ou = 0, ee = 0, oh = 0) {
+    const v = this.ctx.visemes;
+    if (typeof values === 'number') {
+      v.aa = values; v.ih = ih; v.ou = ou; v.ee = ee; v.oh = oh;
+    } else {
+      v.aa = values?.aa || 0; v.ih = values?.ih || 0; v.ou = values?.ou || 0;
+      v.ee = values?.ee || 0; v.oh = values?.oh || 0;
+    }
+    for (const name of VISEME_NAMES) {
+      v[name] = Math.max(0, Math.min(1, Number(v[name]) || 0));
+    }
+  }
   /** pose dos dedos por lado. side='left'|'right'|'both'. Ex.: setHandPose('both','open') */
   setHandPose(side, name) {
     if (side === 'both' || !side) { this.ctx.handPose.left = name; this.ctx.handPose.right = name; }

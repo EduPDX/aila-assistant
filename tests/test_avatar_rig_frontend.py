@@ -104,3 +104,30 @@ def test_attention_controller_prioritizes_and_releases_smoothly():
         capture_output=True, text=True, timeout=10, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_expression_profile_normalizes_vrm0_and_vrm1_names():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js não disponível para testar expressões VRM")
+    module_url = (ROOT / "ui/avatar/rig-profile.js").as_uri()
+    script = f"""
+      const {{ createExpressionMap }} = await import({module_url!r});
+      const v1 = createExpressionMap(['happy','sad','aa','ih','ou','ee','oh','blinkLeft']);
+      const v0 = createExpressionMap(['joy','sorrow','a','i','u','e','o','blink_l']);
+      if (v1.aa !== 'aa' || v1.blinkLeft !== 'blinkLeft') throw new Error('VRM1 incorreto');
+      if (v0.happy !== 'joy' || v0.sad !== 'sorrow' || v0.aa !== 'a' || v0.oh !== 'o')
+        throw new Error('fallback VRM0 incorreto');
+    """
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script], cwd=ROOT,
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_lipsync_uses_all_vrm1_visemes_and_closes_persistent_weights():
+    source = (ROOT / "ui/avatar/layers/lipsync.js").read_text(encoding="utf-8")
+    for viseme in ("aa", "ih", "ou", "ee", "oh"):
+        assert f"'{viseme}'" in source
+    assert "buf.setExpr(name, cur[name] < 0.001 ? 0 : cur[name])" in source

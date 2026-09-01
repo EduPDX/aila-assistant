@@ -436,7 +436,7 @@ function applyVramPressure(state) {
 }
 
 // ---------------- Aila: WebSocket (standalone) ----------------
-let ws, ttsAudio, ttsObjectUrl, lipCtx, lipAnalyser, lipBuf;
+let ws, ttsAudio, ttsObjectUrl, lipCtx, lipAnalyser, lipBuf, lipFreq;
 function connect() {
   ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onmessage = (ev) => {
@@ -499,10 +499,11 @@ async function speak(text) {
     const src = lipCtx.createMediaElementSource(ttsAudio);
     lipAnalyser = lipCtx.createAnalyser(); lipAnalyser.fftSize = 1024;
     lipBuf = new Uint8Array(lipAnalyser.fftSize);
+    lipFreq = new Uint8Array(lipAnalyser.frequencyBinCount);
     src.connect(lipAnalyser); lipAnalyser.connect(lipCtx.destination);
     driveMouth();
     ttsAudio.onended = () => {
-      controller?.setMouth(0); lipAnalyser = null;
+      controller?.setMouth(0); controller?.setVisemes(null); lipAnalyser = null;
       if (ttsObjectUrl) { URL.revokeObjectURL(ttsObjectUrl); ttsObjectUrl = null; }
     };
     await ttsAudio.play();
@@ -512,8 +513,26 @@ function driveMouth() {
   if (!lipAnalyser) return;
   lipAnalyser.getByteTimeDomainData(lipBuf);
   let sum=0; for (let i=0;i<lipBuf.length;i++){ const v=(lipBuf[i]-128)/128; sum+=v*v; }
-  controller?.setMouth(Math.min(1, Math.sqrt(sum/lipBuf.length) * 4.5));
+  const mouth = Math.min(1, Math.sqrt(sum/lipBuf.length) * 4.5);
+  lipAnalyser.getByteFrequencyData(lipFreq);
+  const hz = (lipCtx?.sampleRate || 48000) / lipAnalyser.fftSize;
+  const low = audioBand(lipFreq, hz, 100, 550);
+  const mid = audioBand(lipFreq, hz, 550, 1800);
+  const high = audioBand(lipFreq, hz, 1800, 4200);
+  const total = low + mid + high + 1e-5;
+  controller?.setMouth(mouth);
+  controller?.setVisemes(
+    mouth * (0.25 + 0.75 * mid / total), mouth * high / total, mouth * low / total,
+    mouth * (0.65 * high + 0.35 * mid) / total,
+    mouth * (0.65 * low + 0.35 * mid) / total,
+  );
   requestAnimationFrame(driveMouth);
+}
+
+function audioBand(freq, hz, lo, hi) {
+  const a = Math.max(1, Math.floor(lo / hz)), b = Math.min(freq.length, Math.ceil(hi / hz));
+  let total = 0; for (let i = a; i < b; i++) total += freq[i];
+  return b > a ? total / (b - a) / 255 : 0;
 }
 
 // ---------------- trocar VRM (botão) ----------------
