@@ -61,6 +61,7 @@ export function createRigProfile(vrm) {
       expressions: Object.freeze(expressions),
       expressionMap,
       springBone: Boolean(vrm?.springBoneManager),
+      springBoneJoints: vrm?.springBoneManager?.joints?.size || 0,
       nodeConstraints: Boolean(vrm?.nodeConstraintManager),
     }),
   });

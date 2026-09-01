@@ -220,6 +220,8 @@ export class AnimationController {
   // -------- API pública (a UI / WS chamam isto) -------- //
   setStatus(status) { if (STATES[status]) this.ctx.status = status; }
   setEmotion(name) { const k = resolveEmotion(name); this.ctx.emotionKey = k; this.ctx.emotion = EMOTIONS[k]; }
+  setVramState(state) { this.rig.secondaryMotion.setQuality(state); }
+  setPaused(value) { this.rig.secondaryMotion.setPaused(value); }
   setMouth(v) { this.ctx.mouth = Math.max(0, Math.min(1, v || 0)); }
   setVisemes(values = null, ih = 0, ou = 0, ee = 0, oh = 0) {
     const v = this.ctx.visemes;

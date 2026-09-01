@@ -10,6 +10,7 @@
 // ============================================================
 import * as THREE from 'three';
 import { createRigProfile } from './rig-profile.js';
+import { SecondaryMotionController } from './secondary-motion.js';
 
 const _poseEuler = new THREE.Euler(0, 0, 0, 'XYZ');
 
@@ -83,6 +84,7 @@ export class Rig {
     this._v = new THREE.Vector3();    // reuso p/ math (0 GC)
     this._qDelta = new THREE.Quaternion();
     this.profile = createRigProfile(vrm);
+    this.secondaryMotion = new SecondaryMotionController(vrm);
     this._captureRestPose();
     // sinal de rotação dos braços, MEDIDO no modelo (ver calibrateArms)
     this.armZSign = 1;
@@ -231,6 +233,6 @@ export class Rig {
       for (const [name, value] of buf.expr) this.expr.setValue(expressionMap[name] || name, value);
     }
     if (buf.gaze.active) this.gazeTarget.position.set(buf.gaze.x, buf.gaze.y, buf.gaze.z);
-    this.vrm.update(dt);   // spring bones (cabelo/saia) + lookAt applier
+    this.secondaryMotion.advance(this.vrm, dt); // lookAt/expressões + SpringBone em subpassos adaptativos
   }
 }

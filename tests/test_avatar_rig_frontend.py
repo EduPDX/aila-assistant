@@ -131,3 +131,30 @@ def test_lipsync_uses_all_vrm1_visemes_and_closes_persistent_weights():
     for viseme in ("aa", "ih", "ou", "ee", "oh"):
         assert f"'{viseme}'" in source
     assert "buf.setExpr(name, cur[name] < 0.001 ? 0 : cur[name])" in source
+
+
+def test_secondary_motion_substeps_long_frames_and_resets_after_pause():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js não disponível para testar SpringBone")
+    module_url = (ROOT / "ui/avatar/secondary-motion.js").as_uri()
+    script = f"""
+      const {{ SecondaryMotionController }} = await import({module_url!r});
+      let resets = 0, updates = [];
+      const joint = {{ settings: {{ dragForce: 2, stiffness: -1, gravityPower: NaN, hitRadius: -2 }} }};
+      const manager = {{ joints:new Set([joint]), reset:()=>resets++ }};
+      const vrm = {{ springBoneManager:manager, update:(dt)=>updates.push(dt) }};
+      const s = new SecondaryMotionController(vrm);
+      if (s.stats.corrected !== 4 || joint.settings.dragForce !== 1) throw new Error('saneamento incorreto');
+      s.advance(vrm, 0.05);
+      if (updates.length !== 3) throw new Error('frame longo não subdividido');
+      s.setPaused(true); s.setPaused(false); s.advance(vrm, 0.016);
+      if (resets !== 1) throw new Error('retomada sem reset');
+      s.setQuality('red'); updates = []; s.advance(vrm, 0.05);
+      if (updates.length !== 1) throw new Error('pressão VRAM ignorada');
+    """
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script], cwd=ROOT,
+        capture_output=True, text=True, timeout=10, check=False,
+    )
+    assert result.returncode == 0, result.stderr
