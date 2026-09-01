@@ -197,6 +197,10 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                             interaction_target=alvo,
                             interaction_action=(readable_action(body.get("interaction_action"))
                                                 if alvo else ""),
+                            motion_id=body.get("motion_id"),
+                            motion_status=body.get("motion_status"),
+                            motion_source=body.get("motion_source"),
+                            confidence=body.get("confidence"),
                         )
                         if alvo:                       # a cena vira o FOCO de atenção
                             engine.self_model.update_experience(attention=alvo)
@@ -204,7 +208,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
                         b = engine.self_model.body
                         _trace("BODY", left=b.hands.get("left"), right=b.hands.get("right"),
-                               gaze=b.gaze_target, interaction=b.interaction_target)
+                               gaze=b.gaze_target, interaction=b.interaction_target,
+                               motion=b.motion_status, confidence=b.confidence)
                         await session.emit("aila.state",
                                            engine.self_model.state().to_event_payload())
                 except Exception as exc:  # noqa: BLE001 - relato é informativo

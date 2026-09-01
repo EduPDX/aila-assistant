@@ -389,11 +389,14 @@ function readBodyState() {
     // Mão na ALTURA do ombro (ou acima) = levantada. Medido no modelo real:
     // em repouso a mão fica ~0.36 abaixo do ombro; com o braço erguido chega à
     // altura dele. Exigir "acima do ombro" nunca disparava.
-    hands[side] = (hand != null && sh != null && hand > sh - 0.10)
-      ? 'raised'
-      : (ctx.handPose && ctx.handPose[side] === 'point' ? 'pointing' : 'rest');
+    hands[side] = (ctx.handPose && ctx.handPose[side] === 'point')
+      ? 'pointing'
+      : ((hand != null && sh != null && hand > sh - 0.10) ? 'raised' : 'rest');
   }
   const inter = sceneManager.lastInteraction || null;
+  const motions = controller.motionScheduler?.snapshot?.() || [];
+  const motion = motions.length ? motions.reduce((a, b) => a.id > b.id ? a : b) : null;
+  const measured = ['left', 'right'].filter((side) => wy(side + 'Hand') != null).length;
   return {
     posture: ctx.status === 'THINKING' ? 'thinking' : 'standing',
     gesture: ctx.gesture || 'rest',
@@ -401,6 +404,10 @@ function readBodyState() {
     gaze_target: ctx.gazeWorld ? (inter && inter.target ? inter.target : 'a tela') : '',
     interaction_target: inter ? (inter.target || '') : '',
     interaction_action: inter ? (inter.type || '') : '',
+    motion_id: motion ? motion.id : 0,
+    motion_status: motion ? 'active' : 'idle',
+    motion_source: motion ? (motion.source || '') : '',
+    confidence: measured / 2,
   };
 }
 document.addEventListener('visibilitychange', () => {

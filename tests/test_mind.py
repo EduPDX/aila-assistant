@@ -238,6 +238,8 @@ def test_ciclo_completo_report_ate_o_prompt():
         "posture": "standing", "gesture": "raise_right",
         "hands": {"left": "rest", "right": "raised"},
         "gaze_target": "", "interaction_target": "", "interaction_action": "",
+        "motion_id": 7, "motion_status": "active", "motion_source": "user",
+        "confidence": 1.0,
     }
     e.self_model.update_body(**report)
     bloco = e._body_block()
@@ -245,6 +247,8 @@ def test_ciclo_completo_report_ate_o_prompt():
     assert "o avatar está" not in bloco.lower()        # jamais 3ª pessoa
     st = e.self_model.state()
     assert st.body.hands["right"] == "raised" and st.body.gesture == "raise_right"
+    assert st.body.motion_id == 7 and st.body.motion_status == "active"
+    assert st.body.motion_source == "user" and st.body.confidence == 1.0
 
 
 def test_report_de_interacao_vira_primeira_pessoa():

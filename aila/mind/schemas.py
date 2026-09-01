@@ -85,6 +85,10 @@ class BodyState(BaseModel):
     gesture: str = "rest"
     interaction_target: str = ""
     interaction_action: str = ""
+    motion_id: int = 0                       # token do scheduler; 0 = sem movimento ativo
+    motion_status: str = "idle"              # idle|active|completed|rejected
+    motion_source: str = ""                  # user|behavior|sequence|debug
+    confidence: float = Field(1.0, ge=0.0, le=1.0)
     updated_at: float = 0.0               # epoch (frescor do dado)
 
     def describe(self) -> str:
