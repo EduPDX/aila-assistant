@@ -9,9 +9,10 @@ export const avatarEmotion = (emotion, state, gesture) =>
   toAvatar({ type: 'aila:emotion', value: emotion, state, gesture });
 export const avatarStatus = (status) => toAvatar({ type: 'aila:status', value: status });
 export const avatarBehavior = (spec) => toAvatar({ type: 'aila:behavior', spec });
-export const avatarGesture = (name) => toAvatar({ type: 'aila:gesture', value: name });
+export const avatarGesture = (name, source = 'user') => toAvatar({ type: 'aila:gesture', value: name, source });
 // série de movimentos (demonstração): o iframe toca um a um, com pausa
-export const avatarGestureSequence = (names) => toAvatar({ type: 'aila:gesture_seq', values: names });
+export const avatarGestureSequence = (names, source = 'sequence') =>
+  toAvatar({ type: 'aila:gesture_seq', values: names, source });
 export const avatarMouth = (v) => toAvatar({ type: 'aila:mouth', value: v });
 export const avatarReload = () => toAvatar({ type: 'aila:reloadVRM' });
 export const avatarTheme = (payload) => toAvatar({ type: 'aila:theme', payload });

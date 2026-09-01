@@ -264,15 +264,15 @@ window.ailaPlayClip = (name = 'wave') => playGestureClip(name) || (controller &&
 // eles, espaçado por tempo — INDEPENDENTE da fala (a timeline de gestos da fala
 // pararia se a frase acabasse antes da série). Cancela uma série anterior.
 let _seqTimers = [];
-function playGestureSequence(names) {
+function playGestureSequence(names, source = 'sequence') {
   _seqTimers.forEach(clearTimeout); _seqTimers = [];
   if (!controller || !Array.isArray(names) || !names.length) return;
   const HOLD = 1500, GAP = 600;   // ms segurando o gesto + pausa em repouso
   controller.ctx._seqActive = true;              // fala não gesticula durante a série
   let t = 0;
   for (const name of names) {
-    _seqTimers.push(setTimeout(() => controller.triggerGesture(name), t));
-    _seqTimers.push(setTimeout(() => controller.triggerGesture('rest'), t + HOLD));
+    _seqTimers.push(setTimeout(() => controller.triggerGesture(name, { source }), t));
+    _seqTimers.push(setTimeout(() => controller.triggerGesture('rest', { source }), t + HOLD));
     t += HOLD + GAP;
   }
   _seqTimers.push(setTimeout(() => { controller.ctx._seqActive = false; }, t + 200));
@@ -305,6 +305,7 @@ function loadVRM(url, revokeWhenDone = false) {
     window.vrm = vrm;
     controller = new AnimationController(vrm, scene, camera);   // ← animação em camadas
     window.ailaAnim = controller;                              // debug/console
+    window.ailaMotion = controller.motionScheduler;            // ownership/fila p/ diagnóstico
     window.ailaRigProfile = controller.rig.profile;            // diagnóstico VRM 1 (somente leitura)
     console.info('[avatar] rig profile', controller.rig.profile);
     controller.clipFor = playGestureClip;                      // P7: gestos por clip (fallback procedural)
@@ -441,7 +442,8 @@ function connect() {
     const m = JSON.parse(ev.data);
     if (m.type === 'avatar.behavior') { controller?.applyBehavior(m); $('emotion').textContent = m.emotion || 'neutral'; sceneManager.setState(m.cognitive_ui || m.intent, m.interaction); }
     else if (m.type === 'avatar.state') applyEmotion(m.emotion, m.gesture);
-    else if (m.type === 'avatar.gesture') controller?.triggerGesture(m.value);
+    else if (m.type === 'avatar.gesture') controller?.triggerGesture(m.value, { source:m.source || 'user' });
+    else if (m.type === 'avatar.gesture_sequence') playGestureSequence(m.values, m.source || 'sequence');
     else if (m.type === 'aila.state') applyStatus(m.status);
     else if (m.type === 'assistant.message' && m.text && !EMBEDDED) speak(m.text);  // standalone only
     else if (m.type === 'thinking.step') sceneManager.showThinking(m.text || '...');
@@ -466,8 +468,8 @@ addEventListener('message', (e) => {
     case 'aila:show':      paused = false; clock.getDelta(); sceneManager.setPaused(false); break;   // volta ao palco → retoma
     case 'aila:hide':      paused = true; sceneManager.setPaused(true); break;                       // saiu do palco → pausa render
     case 'aila:mouth':     controller?.setMouth(d.value); break;
-    case 'aila:gesture':   controller?.triggerGesture(d.value); break;
-    case 'aila:gesture_seq': playGestureSequence(d.values); break;
+    case 'aila:gesture':   controller?.triggerGesture(d.value, { source:d.source || 'user' }); break;
+    case 'aila:gesture_seq': playGestureSequence(d.values, d.source || 'sequence'); break;
     case 'aila:vram-pressure': applyVramPressure(d.state); break;
     case 'aila:metrics':   sceneManager.setMetrics(d.payload); break;   // dados reais → tela de STATUS
     case 'aila:telemetry': sceneManager.setTelemetry(d.payload); break; // dados reais → tela PRINCIPAL

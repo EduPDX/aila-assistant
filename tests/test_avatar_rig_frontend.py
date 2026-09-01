@@ -1,6 +1,10 @@
 """Contratos de regressão do rig VRM executado no frontend."""
 
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,3 +46,33 @@ def test_self_collision_keeps_hands_on_their_body_side():
     source = (ROOT / "ui/avatar/solvers/self-collision.js").read_text(encoding="utf-8")
     assert "minLateral = sw * 0.08" in source
     assert "bodyRight" in source
+
+
+def test_motion_scheduler_deduplicates_and_respects_body_ownership():
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js não disponível para testar o scheduler ES module")
+    module_url = (ROOT / "ui/avatar/motion-scheduler.js").as_uri()
+    script = f"""
+      const {{ MotionScheduler }} = await import({module_url!r});
+      const s = new MotionScheduler();
+      const check = (v, msg) => {{ if (!v) throw new Error(msg); }};
+      const first = s.request('raise_right', 0, {{ source:'user' }});
+      check(first.accepted, 'primeiro gesto rejeitado');
+      check(!s.request('raise_right', 0.2, {{ source:'user' }}).accepted, 'duplicata aceita');
+      check(!s.request('raise_left', 0.3, {{ source:'behavior' }}).accepted, 'pose inferior interrompeu usuário');
+      check(s.request('nod', 0.3, {{ source:'behavior' }}).accepted, 'cabeça não coexistiu com braço');
+      check(s.request('raise_both', 0.4, {{ source:'debug' }}).accepted, 'prioridade superior não interrompeu');
+      check(!s.request('rest', 0.5, {{ source:'sequence' }}).accepted, 'repouso antigo cancelou gesto novo');
+      s.tick(3);
+      check(!s.owns('pose') && !s.owns('head'), 'ownership não expirou');
+    """
+    result = subprocess.run(
+        [node, "--input-type=module", "--eval", script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

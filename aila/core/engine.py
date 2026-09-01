@@ -1206,9 +1206,9 @@ class AilaEngine:
                 # parado até a resposta terminar ("travada") e depois movimento e
                 # fala saem juntos e brigam pelos braços.
                 if len(decided_actions) > 1:
-                    await emit("avatar.gesture_sequence", {"values": decided_actions})
+                    await emit("avatar.gesture_sequence", {"values": decided_actions, "source": "user"})
                 else:
-                    await emit("avatar.gesture", {"value": decided_actions[0]})
+                    await emit("avatar.gesture", {"value": decided_actions[0], "source": "user"})
                 self.self_model.update_experience(activity="gesturing")
                 from aila.mind.observability import trace as _trace
 
@@ -1307,10 +1307,10 @@ class AilaEngine:
         await emit("assistant.message", {"text": final_text})
         # gesto explícito pedido pela IA (via AvatarAgent) tem prioridade
         if self.pending_gesture:
-            await emit("avatar.gesture", {"value": self.pending_gesture})
+            await emit("avatar.gesture", {"value": self.pending_gesture, "source": "user"})
             self.pending_gesture = None
         if self.pending_gesture_sequence:
-            await emit("avatar.gesture_sequence", {"values": self.pending_gesture_sequence})
+            await emit("avatar.gesture_sequence", {"values": self.pending_gesture_sequence, "source": "sequence"})
             self.pending_gesture_sequence = None
         await emit("aila.state", {"status": "IDLE"})
         # O áudio/lip-sync continua no frontend; semanticamente o turno acabou.

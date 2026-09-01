@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { Rig, damp } from './rig-core.js';
 import { EMOTIONS, STATES, resolveEmotion } from './profiles.js';
+import { MotionScheduler } from './motion-scheduler.js';
 
 import { createPostureLayer } from './layers/posture.js';
 import { createBreathLayer } from './layers/breath.js';
@@ -34,6 +35,7 @@ const ANIM_GESTURES = new Set(['nod', 'shake']);   // gestos ANIMADOS (cabeça)
 export class AnimationController {
   constructor(vrm, scene, camera) {
     this.rig = new Rig(vrm, scene);
+    this.motionScheduler = new MotionScheduler();
     // ordem de composição: base → offsets → olhar → face/fala → blink
     this.layers = [
       createPostureLayer(),
@@ -73,6 +75,8 @@ export class AnimationController {
       intensity: 1,                             // reservado (força de expressão)
     };
     this._gestureTimer = 0;
+    this._poseMotionId = 0;
+    this._clipMotionId = 0;
     this._behavior = null;                      // overlay do BehaviorSpec (F4)
     this._queue = [];                           // timeline de gestos (F5)
     this._clock = 0;                            // relógio da fala (p/ a timeline)
@@ -104,7 +108,13 @@ export class AnimationController {
         if (e.action !== action) return;
         this.mixer.removeEventListener('finished', onFin);
         action.fadeOut(fade);                                   // blend de volta às camadas
-        setTimeout(() => { if (this._clipAction === action) { action.stop(); this._clipAction = null; } }, fade * 1000 + 80);
+        setTimeout(() => {
+          if (this._clipAction === action) {
+            action.stop(); this._clipAction = null;
+            this.motionScheduler.release(this._clipMotionId);
+            this._clipMotionId = 0;
+          }
+        }, fade * 1000 + 80);
       };
       this.mixer.addEventListener('finished', onFin);
     }
@@ -116,7 +126,9 @@ export class AnimationController {
     if (!a) return;
     a.fadeOut(fade);
     this._clipAction = null;
-    setTimeout(() => a.stop(), fade * 1000 + 80);
+    const motionId = this._clipMotionId;
+    this._clipMotionId = 0;
+    setTimeout(() => { a.stop(); this.motionScheduler.release(motionId); }, fade * 1000 + 80);
   }
 
   /** faz uma CAMADA inteira aparecer/sumir suavemente (peso alvo 0..1) sem "pop".
@@ -158,17 +170,31 @@ export class AnimationController {
     this._clock = 0;
   }
 
-  triggerGesture(name) {
+  triggerGesture(name, options = {}) {
     if (!name) return;
+    const req = this.motionScheduler.request(name, this.ctx.t, options);
+    this.lastMotionDecision = { name, at: this.ctx.t, ...req };
+    if (!req.accepted) {
+      console.debug(`[avatar/motion] rejeitado ${name}: ${req.reason}`);
+      return false;
+    }
+    if (name === 'rest' || name === 'none') {
+      this.ctx.gesture = 'rest'; this._gestureTimer = 0;
+      this.ctx.anim = null; this.stopClip(0.25);
+      this._poseMotionId = 0; this._clipMotionId = 0;
+      return true;
+    }
     // P7: se houver um CLIP VRMA para esta intenção, ele cobre o gesto (autoral);
     // senão, cai no gesto PROCEDURAL de sempre (fallback gracioso).
-    if (name !== 'rest' && name !== 'none' && this.clipFor && this.clipFor(name)) return;
+    if (this.clipFor && this.clipFor(name)) { this._clipMotionId = req.id; return true; }
     if (ANIM_GESTURES.has(name)) {          // gesto animado (cabeça): nod/shake
-      this.ctx.anim = { type: name, t: 0, dur: name === 'shake' ? 0.9 : 0.8 };
-      return;
+      this.ctx.anim = { type: name, t: 0, dur: name === 'shake' ? 0.9 : 0.8, motionId: req.id };
+      return true;
     }
     this.ctx.gesture = name;                // gesto de pose (braço): wave/point/…
-    this._gestureTimer = name === 'rest' || name === 'none' ? 0 : GESTURE_HOLD;
+    this._gestureTimer = req.duration || GESTURE_HOLD;
+    this._poseMotionId = req.id;
+    return true;
   }
 
   /** move só a MÃO (mundo); o IK resolve o braço. null desliga. */
@@ -196,11 +222,16 @@ export class AnimationController {
   update(dt) {
     const ctx = this.ctx;
     ctx.t += dt;
+    this.motionScheduler.tick(ctx.t);
 
     // gesto volta ao rest sozinho
     if (this._gestureTimer > 0) {
       this._gestureTimer -= dt;
-      if (this._gestureTimer <= 0) ctx.gesture = 'rest';
+      if (this._gestureTimer <= 0) {
+        ctx.gesture = 'rest';
+        this.motionScheduler.release(this._poseMotionId);
+        this._poseMotionId = 0;
+      }
     }
 
     // timeline de gestos (F5): dispara cada gesto no seu at_time (relativo à fala).
@@ -210,7 +241,7 @@ export class AnimationController {
     if (this._queue.length && (this._clock > 0 || ctx.speech > 0.06)) {
       this._clock += dt;
       while (this._queue.length && this._queue[0].at <= this._clock) {
-        this.triggerGesture(this._queue.shift().type);
+        this.triggerGesture(this._queue.shift().type, { source: 'behavior' });
       }
     }
 
@@ -220,7 +251,8 @@ export class AnimationController {
     // quieta. Sem clips de conversa disponíveis → cai no procedural (fallback).
     // durante uma SÉRIE de movimentos (demonstração), a gesticulação da fala
     // fica quieta — senão os dois disputam os braços e o movimento 'borra'.
-    const speaking = ctx.speech > 0.25 && ctx.gesture === 'rest' && !ctx._seqActive;
+    const speaking = ctx.speech > 0.25 && ctx.gesture === 'rest' && !ctx._seqActive && !ctx.handTarget
+      && !this.motionScheduler.owns('rightArm') && !this.motionScheduler.owns('leftArm');
     if (speaking && this.playTalkClip && this._talkAvail !== false) {
       if (!this._clipAction) {
         this._talkT -= dt;
