@@ -292,6 +292,15 @@ ollama serve                                  # em outro terminal
 
 Abra o endereço mostrado no terminal (porta livre a partir de `8770`).
 
+Se algo não funcionar, execute o diagnóstico sem expor chaves de API:
+
+```powershell
+.\.venv\Scripts\python.exe -m aila.core.doctor
+```
+
+Ele verifica Python, Ollama, modelos necessários, GPU/VRAM, espaço em disco,
+permissões das pastas, isolamento do sandbox e integridade dos bancos SQLite.
+
 ### 4. Avatar 3D (opcional)
 
 O chat, os agentes e a cognição funcionam **sem nenhum modelo de avatar** — só com o
