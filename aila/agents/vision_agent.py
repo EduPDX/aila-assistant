@@ -172,4 +172,5 @@ class VisionAgent(BaseAgent):
         result = await self._describe(b64, prompt)
         if result.data is None:
             result.data = {}
+        result.data["path"] = str(dest)
         return result

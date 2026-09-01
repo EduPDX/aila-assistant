@@ -8,6 +8,7 @@ PROJECT_ROOT (o repo), não no sandbox do workspace. Leituras são SAFE; escrita
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 
 from aila.agents.base import BaseAgent
@@ -23,6 +24,11 @@ def _git(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
         ["git", *args], cwd=str(PROJECT_ROOT),
         capture_output=True, text=True, timeout=timeout,
     )
+
+
+async def _git_async(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
+    """Git sem bloquear o WebSocket/avatar durante operações lentas."""
+    return await asyncio.to_thread(_git, *args, timeout=timeout)
 
 
 class GitAgent(BaseAgent):
@@ -58,32 +64,40 @@ class GitAgent(BaseAgent):
     # -------------------- leitura (SAFE) -------------------- #
     async def _status(self, args: dict) -> ToolResult:
         await self.authorize("git.status.get", args)
-        p = _git("status", "--short", "--branch")
+        p = await _git_async("status", "--short", "--branch")
+        if p.returncode != 0:
+            return ToolResult.error((p.stderr or p.stdout).strip() or "git status falhou")
         return ToolResult.success(p.stdout.strip() or "(árvore limpa)")
 
     async def _diff(self, args: dict) -> ToolResult:
         await self.authorize("git.diff.get", args)
         extra = [args["path"]] if args.get("path") else []
-        p = _git("diff", *extra)
+        p = await _git_async("diff", "--", *extra) if extra else await _git_async("diff")
+        if p.returncode != 0:
+            return ToolResult.error((p.stderr or p.stdout).strip() or "git diff falhou")
         out = p.stdout.strip()
         return ToolResult.success(out[:6000] or "(sem mudanças)")
 
     async def _log(self, args: dict) -> ToolResult:
         await self.authorize("git.log.get", args)
-        n = str(int(args.get("n", 10)))
-        p = _git("log", f"-{n}", "--oneline")
+        n = str(max(1, min(100, int(args.get("n", 10)))))
+        p = await _git_async("log", f"-{n}", "--oneline")
+        if p.returncode != 0:
+            return ToolResult.error((p.stderr or p.stdout).strip() or "git log falhou")
         return ToolResult.success(p.stdout.strip() or "(sem commits)")
 
     async def _current(self, args: dict) -> ToolResult:
         await self.authorize("git.branch.get", args)
-        p = _git("rev-parse", "--abbrev-ref", "HEAD")
+        p = await _git_async("rev-parse", "--abbrev-ref", "HEAD")
+        if p.returncode != 0:
+            return ToolResult.error((p.stderr or p.stdout).strip() or "git rev-parse falhou")
         return ToolResult.success(p.stdout.strip() or "(desconhecida)")
 
     # -------------------- escrita (gated) -------------------- #
     async def _branch_create(self, args: dict) -> ToolResult:
         await self.authorize("git.branch.create", args)
         name = str(args["name"]).strip()
-        p = _git("checkout", "-b", name)
+        p = await _git_async("checkout", "-b", name)
         if p.returncode != 0:
             return ToolResult.error(f"falha ao criar branch: {(p.stderr or p.stdout).strip()}")
         return ToolResult.success(f"Branch '{name}' criada e ativa.")
@@ -91,15 +105,18 @@ class GitAgent(BaseAgent):
     async def _checkout(self, args: dict) -> ToolResult:
         await self.authorize("git.checkout", args)
         ref = str(args["ref"]).strip()
-        p = _git("checkout", ref)
+        p = await _git_async("checkout", ref)
         if p.returncode != 0:
             return ToolResult.error(f"falha no checkout: {(p.stderr or p.stdout).strip()}")
         return ToolResult.success(f"Agora em '{ref}'.")
 
     async def _commit(self, args: dict) -> ToolResult:
         await self.authorize("git.commit", args)
-        _git("add", "-A")
-        p = _git("commit", "-m", str(args["message"]))
+        staged = await _git_async("add", "-A")
+        if staged.returncode != 0:
+            out = (staged.stderr or staged.stdout).strip()
+            return ToolResult.error(f"falha ao preparar o commit: {out}")
+        p = await _git_async("commit", "-m", str(args["message"]))
         out = (p.stdout or p.stderr).strip()
         if p.returncode != 0:
             return ToolResult.error(f"falha no commit: {out}")

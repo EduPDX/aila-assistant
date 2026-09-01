@@ -252,8 +252,16 @@ class ComputerAgent(BaseAgent):
         # pyautogui.typewrite só suporta ASCII; para texto com acentos (pt-BR),
         # usamos clipboard + Ctrl+V que funciona com qualquer Unicode.
         if any(ord(c) > 127 for c in text):
-            import pyperclip
-            pyperclip.copy(text)
+            try:
+                import pyperclip
+            except ImportError:
+                return ToolResult.error(
+                    'Clipboard Unicode indisponível. Instale: pip install "pyperclip"'
+                )
+            try:
+                pyperclip.copy(text)
+            except pyperclip.PyperclipException as exc:
+                return ToolResult.error(f"Clipboard Unicode indisponível: {exc}")
             pyautogui.hotkey("ctrl", "v")
         else:
             pyautogui.typewrite(text, interval=0.02)
@@ -280,7 +288,10 @@ class ComputerAgent(BaseAgent):
                 f"App bloqueado pelo CommandGuard: {app}. "
                 "Use run_command() para executar comandos."
             )
-        subprocess.Popen(["cmd", "/c", "start", "", app], shell=False)
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "", app], shell=False)
+        except OSError as exc:
+            return ToolResult.error(f"Falha ao abrir '{app}': {exc}")
         return ToolResult.success(f"Solicitado abrir: {app}")
 
     async def _run_command(self, args: dict) -> ToolResult:
@@ -314,4 +325,9 @@ class ComputerAgent(BaseAgent):
         except subprocess.TimeoutExpired:
             return ToolResult.error("Comando excedeu o tempo limite (60s).")
         out = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode != 0:
+            return ToolResult.error(
+                f"Comando falhou (código {proc.returncode}): "
+                f"{out.strip()[:4000] or '(sem saída)'}"
+            )
         return ToolResult.success(out.strip() or "(sem saída)", returncode=proc.returncode)

@@ -155,11 +155,17 @@ class DocumentAgent(BaseAgent):
 
     # ------------------------------ criação ---------------------------- #
     async def _create(self, args: dict) -> ToolResult:
-        await self.authorize("docs.create", args)        # escrita → REVIEW/L2
         path = self.sandbox.resolve(args["path"])
         content = args.get("content") or ""
         title = args.get("title") or ""
         ext = path.suffix.lower()
+        if ext not in (".txt", ".md", ".markdown", ".docx", ".pdf"):
+            return ToolResult.error(
+                f"Não sei criar '{ext or '?'}'. Use .pdf, .docx, .md ou .txt."
+            )
+        await self.authorize(
+            "file.overwrite" if path.exists() else "docs.create", args
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             if ext in (".txt", ".md", ".markdown"):
@@ -169,10 +175,6 @@ class DocumentAgent(BaseAgent):
                 self._create_docx(path, title, content)
             elif ext == ".pdf":
                 self._create_pdf(path, title, content)
-            else:
-                return ToolResult.error(
-                    f"Não sei criar '{ext or '?'}'. Use .pdf, .docx, .md ou .txt."
-                )
         except RuntimeError as exc:
             return ToolResult.error(str(exc))
         except Exception as exc:  # noqa: BLE001

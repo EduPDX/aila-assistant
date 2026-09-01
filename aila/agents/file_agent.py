@@ -305,12 +305,26 @@ class FileAgent(BaseAgent):
         if not path.exists():
             return ToolResult.error(f"Não existe: {args['path']}")
         if path.is_dir():
-            # Profundidade máxima: evita deletar árvores inteiras acidentalmente
-            depth = sum(1 for _ in path.rglob("*") if _.is_dir())
-            if depth > 10:
+            # Limites de forma e volume: a implementação antiga chamava a
+            # QUANTIDADE de subpastas de "profundidade" e deixava passar árvores
+            # rasas com dezenas de milhares de arquivos.
+            max_depth = 0
+            item_count = 0
+            for child in path.rglob("*"):
+                item_count += 1
+                if item_count > 5_000:
+                    return ToolResult.error(
+                        "Diretório muito grande (>5.000 itens). Use exclusão manual "
+                        "para confirmar explicitamente uma remoção desse porte."
+                    )
+                try:
+                    max_depth = max(max_depth, len(child.relative_to(path).parts))
+                except ValueError:
+                    return ToolResult.error("Estrutura de diretório inválida para exclusão.")
+            if max_depth > 20:
                 return ToolResult.error(
-                    f"Diretório muito profundo ({depth} subdiretórios). "
-                    "Máximo seguro: 10. Use file.move ou delete manual."
+                    f"Diretório muito profundo ({max_depth} níveis). "
+                    "Máximo seguro: 20. Use exclusão manual."
                 )
             shutil.rmtree(path)
         else:
@@ -320,25 +334,39 @@ class FileAgent(BaseAgent):
     async def _move(self, args: dict) -> ToolResult:
         src = self.sandbox.resolve(args["src"])
         dst = self.sandbox.resolve(args["dst"])
-        action = "file.overwrite" if dst.exists() else "file.write"
+        if not src.exists():
+            return ToolResult.error(f"Origem não existe: {args['src']}")
+        # shutil.move(src, pasta_existente) move para pasta/src.name. Calcular o
+        # destino real ANTES da autorização evita auditar/relatar o caminho errado.
+        actual_dst = dst / src.name if dst.is_dir() else dst
+        action = "file.overwrite" if actual_dst.exists() else "file.write"
         await self.authorize(action, args)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dst))
-        return ToolResult.success(f"Movido: {args['src']} -> {args['dst']}")
+        actual_dst.parent.mkdir(parents=True, exist_ok=True)
+        if actual_dst.exists():
+            return ToolResult.error(
+                f"Destino já existe: {actual_dst}. Apague-o explicitamente antes de mover."
+            )
+        shutil.move(str(src), str(actual_dst))
+        return ToolResult.success(
+            f"Movido: {src} -> {actual_dst}", path=str(actual_dst)
+        )
 
     async def _copy(self, args: dict) -> ToolResult:
         src = self.sandbox.resolve(args["src"], read=True)   # ler a origem
         dst = self.sandbox.resolve(args["dst"])              # escrever no destino
-        action = "file.overwrite" if dst.exists() else "file.write"
-        await self.authorize(action, args)
         if not src.exists():
             return ToolResult.error(f"Origem não existe: {args['src']}")
-        dst.parent.mkdir(parents=True, exist_ok=True)
+        actual_dst = dst / src.name if dst.is_dir() else dst
+        action = "file.overwrite" if actual_dst.exists() else "file.write"
+        await self.authorize(action, args)
+        actual_dst.parent.mkdir(parents=True, exist_ok=True)
         if src.is_dir():
-            shutil.copytree(src, dst, dirs_exist_ok=True)
+            shutil.copytree(src, actual_dst, dirs_exist_ok=True)
         else:
-            shutil.copy2(src, dst)
-        return ToolResult.success(f"Copiado: {args['src']} -> {args['dst']}")
+            shutil.copy2(src, actual_dst)
+        return ToolResult.success(
+            f"Copiado: {src} -> {actual_dst}", path=str(actual_dst)
+        )
 
     async def _mkdir(self, args: dict) -> ToolResult:
         path = self.sandbox.resolve(args["path"])

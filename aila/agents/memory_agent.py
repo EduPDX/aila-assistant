@@ -59,14 +59,21 @@ class MemoryAgent(BaseAgent):
         return self.deps.memory
 
     async def _save(self, args: dict) -> ToolResult:
-        # A memória é estado interno da IA (não é o sistema do usuário), então
-        # não é bloqueada pelo modo somente-leitura — apenas auditada.
+        # É estado persistente: passa pelo mesmo gate L2 das demais escritas.
+        # A recordação automática da engine continua independente desta tool.
+        await self.authorize("memory.save", args)
         if self._store() is None:
             return ToolResult.error("Memória de longo prazo desabilitada.")
+        text = str(args.get("text", "")).strip()
+        if len(text) < 3:
+            return ToolResult.error("Memória curta/vazia demais para ser útil.")
+        if len(text) > 4_000:
+            return ToolResult.error("Memória muito longa (>4.000 caracteres). Resuma o fato.")
         kind = normalize_kind(args.get("kind"))
-        mid = await self._store().add(args["text"], kind=kind)
+        mid = await self._store().add(text, kind=kind)
+        audit_args = {**args, "text": text}
         self.deps.permissions.audit.record(
-            "memory.save", self.name, args, f"saved:#{mid}:{kind}", allowed=True
+            "memory.save", self.name, audit_args, f"saved:#{mid}:{kind}", allowed=True
         )
         return ToolResult.success(f"Memória salva (#{mid}, {kind}).", id=mid, kind=kind)
 

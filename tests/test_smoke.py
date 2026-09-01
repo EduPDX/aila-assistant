@@ -3016,6 +3016,64 @@ def test_boot_benchmark_caches_and_skips_when_fresh(monkeypatch, tmp_path):
     asyncio.run(go())
 
 
+def test_agent_hardening_regressions(tmp_path: Path, monkeypatch):
+    """Regressões dos agentes: SSRF, destino real, docs sem lixo e exit code."""
+    import subprocess
+
+    from aila.agents.base import AgentDeps
+    from aila.agents.computer_agent import ComputerAgent
+    from aila.agents.document_agent import DocumentAgent
+    from aila.agents.file_agent import FileAgent
+    from aila.agents.web_agent import _public_url_error
+
+    async def check_urls():
+        assert await _public_url_error("http://127.0.0.1:11434/api/tags")
+        assert await _public_url_error("http://localhost/admin")
+        assert await _public_url_error("http://192.168.1.10/private")
+
+    asyncio.run(check_urls())
+
+    s = get_settings()
+    s.security.read_only = False
+    s.security.confirm_review = False
+    s.security.confirm_destructive = False
+    root = tmp_path / "ws"
+    root.mkdir()
+    deps = AgentDeps(
+        settings=s,
+        permissions=PermissionManager(s.security, AuditLog(tmp_path / "a.jsonl")),
+        sandbox=PathSandbox(root), llm=None,
+    )
+
+    async def check_files():
+        # Formato inválido é recusado antes de criar diretórios residuais.
+        bad = await DocumentAgent(deps)._create(
+            {"path": "lixo/sub/x.zip", "content": "y"}
+        )
+        assert not bad.ok and not (root / "lixo").exists()
+
+        # Destino-pasta é expandido para destino/nome e relatado corretamente.
+        (root / "origem.txt").write_text("x", encoding="utf-8")
+        (root / "destino").mkdir()
+        moved = await FileAgent(deps)._move({"src": "origem.txt", "dst": "destino"})
+        expected = (root / "destino" / "origem.txt").resolve()
+        assert moved.ok and expected.is_file()
+        assert moved.data and moved.data["path"] == str(expected)
+
+    asyncio.run(check_files())
+
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 7, "", "comando inválido"),
+    )
+
+    async def check_command():
+        result = await ComputerAgent(deps)._run_command({"command": "comando-inofensivo"})
+        assert not result.ok and "código 7" in result.content
+
+    asyncio.run(check_command())
+
+
 def test_websocket_origin_is_restricted_to_local_same_port():
     """Uma página externa não pode assumir o WebSocket local da Aila."""
     from types import SimpleNamespace

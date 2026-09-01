@@ -12,9 +12,12 @@ funcionam mesmo no modo somente-leitura. A busca não usa chaves nem contas.
 
 from __future__ import annotations
 
+import asyncio
 import html as _html
+import ipaddress
 import re
-from urllib.parse import parse_qs, unquote, urlparse
+import socket
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import httpx
 
@@ -71,6 +74,35 @@ def _real_url(href: str) -> str:
         if uddg:
             return unquote(uddg[0])
     return href
+
+
+def _unsafe_address(value: str) -> bool:
+    """Bloqueia loopback/rede privada/link-local/reservada (anti-SSRF)."""
+    try:
+        addr = ipaddress.ip_address(value.split("%", 1)[0])
+    except ValueError:
+        return False
+    return any((addr.is_private, addr.is_loopback, addr.is_link_local,
+                addr.is_reserved, addr.is_multicast, addr.is_unspecified))
+
+
+async def _public_url_error(url: str) -> str | None:
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        return "URL inválida — use http:// ou https://."
+    host = parsed.hostname.rstrip(".").lower()
+    if host == "localhost" or host.endswith(".localhost") or _unsafe_address(host):
+        return "URL bloqueada: web.fetch não acessa localhost ou redes privadas."
+    try:
+        infos = await asyncio.to_thread(
+            socket.getaddrinfo, host, parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror:
+        return f"Não foi possível resolver o host: {host}"
+    if any(_unsafe_address(info[4][0]) for info in infos):
+        return "URL bloqueada: o host resolve para uma rede local/privada."
+    return None
 
 
 class WebAgent(BaseAgent):
@@ -194,13 +226,26 @@ class WebAgent(BaseAgent):
         if blocked := self._offline_block():
             return blocked
         url = (args.get("url") or "").strip()
-        if not re.match(r"^https?://", url, re.I):
-            return ToolResult.error("URL inválida — use http:// ou https://.")
+        if error := await _public_url_error(url):
+            return ToolResult.error(error)
         try:
             async with httpx.AsyncClient(
-                timeout=20, headers={"User-Agent": _UA}, follow_redirects=True
+                timeout=20, headers={"User-Agent": _UA}, follow_redirects=False
             ) as client:
-                resp = await client.get(url)
+                current = url
+                for _ in range(6):
+                    if error := await _public_url_error(current):
+                        return ToolResult.error(error)
+                    resp = await client.get(current)
+                    if resp.is_redirect:
+                        location = resp.headers.get("location")
+                        if not location:
+                            return ToolResult.error("Redirecionamento sem destino.")
+                        current = urljoin(str(resp.url), location)
+                        continue
+                    break
+                else:
+                    return ToolResult.error("Muitos redirecionamentos (>5).")
                 resp.raise_for_status()
                 ctype = resp.headers.get("content-type", "")
                 if "html" not in ctype and "text" not in ctype and ctype:

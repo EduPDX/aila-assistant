@@ -9,6 +9,7 @@ Todas as operações são **leitura** (funcionam em modo somente-leitura).
 
 from __future__ import annotations
 
+import asyncio
 import math
 import string
 import struct
@@ -101,7 +102,7 @@ class BinaryAgent(BaseAgent):
 
     # ------------------------------------------------------------------ #
     def _resolve_file(self, rel: str) -> tuple[Path | None, str | None]:
-        path = self.deps.sandbox.resolve(rel)
+        path = self.deps.sandbox.resolve(rel, read=True)
         if not path.is_file():
             return None, f"Arquivo não encontrado: {rel}"
         return path, None
@@ -125,7 +126,10 @@ class BinaryAgent(BaseAgent):
         path, err = self._resolve_file(args["path"])
         if err:
             return ToolResult.error(err)
-        min_len = int(args.get("min_len", 4))
+        try:
+            min_len = max(1, min(256, int(args.get("min_len", 4))))
+        except (TypeError, ValueError):
+            return ToolResult.error("min_len deve ser um número inteiro entre 1 e 256.")
         data = path.read_bytes()[:5_000_000]
         printable = set(bytes(string.printable[:-5], "ascii"))
         out: list[str] = []
@@ -179,7 +183,7 @@ class BinaryAgent(BaseAgent):
             if data[e_lfanew : e_lfanew + 4] != b"PE\x00\x00":
                 return ToolResult.error("Assinatura PE não encontrada.")
             coff = e_lfanew + 4
-            machine, n_sections, timestamp = struct.unpack_from("<HHI", data, coff)
+            machine, n_sections, _timestamp = struct.unpack_from("<HHI", data, coff)
             opt_size = struct.unpack_from("<H", data, coff + 16)[0]
             magic = struct.unpack_from("<H", data, coff + 20)[0]
             bits = {0x10B: "PE32", 0x20B: "PE32+ (64-bit)"}.get(magic, f"0x{magic:x}")
@@ -230,18 +234,21 @@ class BinaryAgent(BaseAgent):
                 cmd.append(str(args["function"]))
             cmd.append("-deleteProject")
             try:
-                proc = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=self.timeout
+                proc = await asyncio.to_thread(
+                    subprocess.run, cmd, capture_output=True, text=True,
+                    timeout=self.timeout,
                 )
             except subprocess.TimeoutExpired:
                 return ToolResult.error(
                     f"Ghidra excedeu o tempo limite ({self.timeout}s). "
                     f"Aumente 'binary.analysis_timeout' para binários grandes."
                 )
+            except OSError as exc:
+                return ToolResult.error(f"Falha ao iniciar o Ghidra: {exc}")
 
         out = proc.stdout or ""
         begin, end = out.find("AILA_GHIDRA_BEGIN"), out.find("AILA_GHIDRA_END")
-        if begin == -1:
+        if proc.returncode != 0 or begin == -1 or end <= begin:
             tail = (proc.stderr or out)[-800:]
             return ToolResult.error(f"Ghidra não produziu saída esperada.\n{tail}")
         result = out[begin + len("AILA_GHIDRA_BEGIN") : end].strip()
