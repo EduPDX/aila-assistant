@@ -1,7 +1,7 @@
 // ============================================================
 //  MONITOR — tela holográfica PRINCIPAL, maior e mais detalhada.
 //  Zonas: nav rail (GRAPH/DATA/SEARCH/CONTEXT) · cabeçalho c/ status ·
-//  CONTEXT (MEMORY mini-grafo → ANALYSIS waveform) · DATA STREAM (log) ·
+//  CONTEXT (estado ativo → ANALYSIS waveform) · DATA STREAM (log) ·
 //  rodapé (barras · PROCESSING · CONFIDENCE) · leituras numéricas.
 //  Tudo procedural, materiais compartilhados, buffers/textos atualizados (0 GC).
 //  Conteúdo da Fase 1 é representativo; a Fase 2 troca por estado (intent).
@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import {
   HOLO, lineMat, fillMat, glowMat, frameLines, grid, corners, textPlane,
-  lineGraph, barMeter, knowledgeGraph, dataStream, disposeObject,
+  lineGraph, barMeter, dataStream, disposeObject,
 } from './primitives.js';
 
 function scanlineTexture() {
@@ -110,13 +110,28 @@ export function createMonitor({ width = 3.16, height = 1.78 } = {}) {
     return reg(id, p);
   };
 
-  // ZONA SUPERIOR: SUBCONSCIENTE real (grafo do backend) + análise.
-  const subconscious = knowledgeGraph();
-  subconscious.group.position.y = -0.04;
-  subconscious.group.scale.set(W * 0.145, H * 0.145, 1);
-  panel('SUBCONSCIOUS', contentX + W * 0.19, H * 0.11, W * 0.34, H * 0.38, 'panel_memory', subconscious.group);
-  const graphStats = textPlane('0 NODES  //  0 LINKS', { width: W * 0.19, px: 512, size: 23, align: 'right' });
-  at(graphStats.mesh, contentX + W * 0.25, H * 0.205, 0.011);
+  // ZONA SUPERIOR: contexto ativo real + análise.
+  const activeContext = new THREE.Group();
+  const contextCell = (label, x, y) => {
+    const key = textPlane(label, { width: W * 0.13, px: 384, size: 23, align: 'center' });
+    key.mesh.position.set(x, y + H * 0.045, 0.004); activeContext.add(key.mesh);
+    const value = textPlane('—', { width: W * 0.13, px: 384, size: 42, align: 'center' });
+    value.mesh.position.set(x, y - H * 0.025, 0.005); activeContext.add(value.mesh);
+    return value.setText;
+  };
+  const dividerV = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, -H * 0.105, 0.003), new THREE.Vector3(0, H * 0.105, 0.003),
+  ]), lineMat(HOLO.blue, 0.24));
+  const dividerH = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-W * 0.145, 0, 0.003), new THREE.Vector3(W * 0.145, 0, 0.003),
+  ]), lineMat(HOLO.blue, 0.24));
+  activeContext.add(dividerV, dividerH); activeContext.position.y = -H * 0.035;
+  const ctxMode = contextCell('MODE', -W * 0.075, H * 0.065);
+  const ctxMem = contextCell('MEMORY', W * 0.075, H * 0.065);
+  const ctxModels = contextCell('MODELS', -W * 0.075, -H * 0.075);
+  const ctxPressure = contextCell('PRESSURE', W * 0.075, -H * 0.075);
+  ctxMode('CONVERSATION'); ctxMem('0'); ctxModels('0'); ctxPressure('GREEN');
+  panel('ACTIVE CONTEXT', contentX + W * 0.19, H * 0.11, W * 0.34, H * 0.38, 'panel_memory', activeContext);
 
   const wave = lineGraph(W * 0.32, H * 0.18, 60, lineMat(HOLO.teal, 0.9));
   wave.line.position.y = -0.04;
@@ -174,12 +189,11 @@ export function createMonitor({ width = 3.16, height = 1.78 } = {}) {
     stream.setLines(telemetry.lines || []);
     const pressure = String(telemetry.pressure || 'green').toUpperCase();
     pressureText.setText(`PRESSURE ${pressure}`);
+    ctxMem(String(telemetry.memories || 0));
+    ctxModels(String(telemetry.models || 0));
+    ctxPressure(pressure);
     setConfidence(1 - Math.max(cpu, gpu, ram, vram));
     readout.setText(`MEM ${telemetry.memories || 0}    MODELS ${telemetry.models || 0}    TPS ${Number(telemetry.tps || 0).toFixed(1)}`);
-  }
-  function setKnowledgeGraph(data) {
-    subconscious.setData(data);
-    graphStats.setText(`${data?.nodes?.length || 0} NODES  //  ${data?.edges?.length || 0} LINKS`);
   }
   let _intensity = 0.6;
   let _stateVisual = null;
@@ -187,6 +201,7 @@ export function createMonitor({ width = 3.16, height = 1.78 } = {}) {
     const m = MODES[intent] || MODES.conversation;
     setActiveNav(m.nav);
     verb = m.verb;
+    ctxMode(String(intent || 'conversation').toUpperCase());
   }
   function setIntensity(v) { _intensity = Math.max(0, Math.min(1, v ?? 0.6)); }
   function applyStateVisuals(sv) { _stateVisual = sv; }
@@ -201,10 +216,9 @@ export function createMonitor({ width = 3.16, height = 1.78 } = {}) {
     scanTex.offset.y = (scanTex.offset.y - dt * scanSpd) % 1;
     scan.material.opacity = (0.36 + Math.sin(t * 2.1) * 0.05) * (_intensity / 0.6) * glow;
     live.mesh.material.opacity = 0.82 + Math.sin(t * 3.2) * 0.18;
-    subconscious.update(dt);
     tDots += dt; if (tDots > 0.4) { tDots = 0; dots = (dots + 1) % 4; status.setText((sv ? sv.verb : verb) + '.'.repeat(dots)); }
   }
 
-  function dispose() { subconscious.dispose(); disposeObject(group); scanTex.dispose(); }
-  return { group, anchors, update, dispose, setConfidence, setTelemetry, setKnowledgeGraph, setMode, setIntensity, applyStateVisuals };
+  function dispose() { disposeObject(group); scanTex.dispose(); }
+  return { group, anchors, update, dispose, setConfidence, setTelemetry, setMode, setIntensity, applyStateVisuals };
 }

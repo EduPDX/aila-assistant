@@ -38,8 +38,6 @@ export class SceneManager {
     this.monitor = null;
     this.controller = null;      // AnimationController do avatar (p/ IK/pose) — avatar3d o injeta
     this._pointCooldown = 0;
-    this._knowledgePoll = 0;
-    this._knowledgeLoading = false;
     this.composer = new StageComposer(camera, controls);
     this.interactions = createInteractionManager({
       resolveWorld: (id, out) => this.resolveWorld(id, out),
@@ -74,7 +72,6 @@ export class SceneManager {
     // monitor holográfico principal (cognitivo)
     this.monitor = createMonitor();   // usa o tamanho padrão (grande) do módulo
     this.root.add(this.monitor.group);
-    this._refreshKnowledgeGraph();
 
     // segunda tela: STATUS do sistema (dados reais via setMetrics)
     this.status = createStatusPanel();
@@ -133,22 +130,6 @@ export class SceneManager {
 
   /** Inventário seguro de modelos locais e APIs configuradas. */
   setInfrastructure(payload) { this.infrastructure?.setData(payload); }
-
-  /** Alimenta SUBCONSCIOUS com a mesma fonte real do antigo mini-grafo. */
-  async _refreshKnowledgeGraph() {
-    if (this._knowledgeLoading || !this.monitor) return;
-    this._knowledgeLoading = true;
-    try {
-      let response = await fetch('/api/graph?kind=knowledge&limit=160');
-      let data = response.ok ? await response.json() : null;
-      if (!data?.nodes?.length) {
-        response = await fetch('/api/graph?kind=code&limit=120');
-        data = response.ok ? await response.json() : null;
-      }
-      if (data?.nodes?.length) this.monitor.setKnowledgeGraph?.(data);
-    } catch (_) { /* offline: preserva o último grafo válido */ }
-    finally { this._knowledgeLoading = false; }
-  }
 
   /** mostra o RESUMO curto da resposta da Aila no balão holográfico (Jarvis). */
   showMessage(text) { this.message?.show(text); }
@@ -278,8 +259,6 @@ export class SceneManager {
     this.message?.update(dt);
     this.thinking?.update(dt);
     this.infrastructure?.update(dt);
-    this._knowledgePoll += dt;
-    if (this._knowledgePoll >= 20) { this._knowledgePoll = 0; this._refreshKnowledgeGraph(); }
     this.interactions.update(dt);
     if (this._pointCooldown > 0) this._pointCooldown -= dt;
     if (this._ring) this._ring.rotation.z += dt * this._ringSpeed;   // giro lento do anel

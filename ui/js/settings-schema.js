@@ -32,6 +32,8 @@ export const CATEGORIES = [
         label: 'Arrastar nós com o mouse', hint: 'Desligue se o grafo se mexe demais ao arrastar.' },
       { key: 'aila.graph.spin', type: 'toggle', default: false,
         label: 'Movimento contínuo (respira/gira)', hint: 'Deixa o grafo em leve movimento, como se estivesse pensando.' },
+      { key: 'aila.subc.mini', type: 'toggle', default: true,
+        label: 'Mostrar o mini-subconsciente no palco', hint: 'O grafo pequeno no canto do avatar.' },
     ] },
   ] },
 
