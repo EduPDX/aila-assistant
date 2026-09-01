@@ -211,7 +211,7 @@ function control(f) {
     return t;
   }
   if (f.type === 'select') {
-    const s = el('select', { class: 'cfg-input' });
+    const s = el('select', { class: 'cfg-input', 'aria-label': f.label, name: f.path });
     (f.options || []).forEach((o) => s.append(el('option', { value: o }, o)));
     s.value = v ?? (f.options?.[0] ?? '');
     s.onchange = () => onChange(s.value);
@@ -220,7 +220,7 @@ function control(f) {
   if (f.type === 'slider') {
     const fmt = (n) => (f.signed && n >= 0 ? '+' : '') + n + (f.unit || '');
     const num = f.str ? (parseFloat(String(v ?? '').replace(/[^\d.-]/g, '')) || 0) : (v ?? f.min ?? 0);
-    const range = el('input', { type: 'range', class: 'cfg-range', min: f.min, max: f.max, step: f.step || 1 });
+    const range = el('input', { type: 'range', class: 'cfg-range', min: f.min, max: f.max, step: f.step || 1, 'aria-label': f.label, name: f.path });
     range.value = num;
     const out = el('span', { class: 'cfg-val' }, fmt(num));
     range.oninput = () => { out.textContent = fmt(Number(range.value)); };
@@ -228,17 +228,17 @@ function control(f) {
     return el('div', { class: 'cfg-slider' }, range, out);
   }
   if (f.type === 'textarea') {
-    const a = el('textarea', { class: 'cfg-input cfg-area', rows: 3 }); a.value = v ?? '';
+    const a = el('textarea', { class: 'cfg-input cfg-area', rows: 3, 'aria-label': f.label, name: f.path }); a.value = v ?? '';
     a.onchange = () => onChange(a.value);
     return a;
   }
   if (f.type === 'tags') {
-    const i = el('input', { class: 'cfg-input', type: 'text' }); i.value = Array.isArray(v) ? v.join(', ') : (v ?? '');
+    const i = el('input', { class: 'cfg-input', type: 'text', 'aria-label': f.label, name: f.path }); i.value = Array.isArray(v) ? v.join(', ') : (v ?? '');
     i.onchange = () => onChange(i.value.split(',').map((x) => x.trim()).filter(Boolean));
     return i;
   }
   // number | text
-  const i = el('input', { class: 'cfg-input', type: f.type === 'number' ? 'number' : 'text' });
+  const i = el('input', { class: 'cfg-input', type: f.type === 'number' ? 'number' : 'text', 'aria-label': f.label, name: f.path });
   if (f.min != null) i.min = f.min; if (f.max != null) i.max = f.max; if (f.step != null) i.step = f.step;
   i.value = v ?? '';
   i.onchange = () => onChange(f.type === 'number' ? Number(i.value) : i.value);

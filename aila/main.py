@@ -201,7 +201,8 @@ def create_app() -> FastAPI:
             "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; "
             "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: blob:; media-src 'self' blob:; "
-            "connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-src 'self'",
+            "connect-src 'self' data: blob: ws://127.0.0.1:* ws://localhost:* "
+            "wss://127.0.0.1:* wss://localhost:*; frame-src 'self'",
         )
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("Referrer-Policy", "no-referrer")
