@@ -1313,6 +1313,10 @@ class AilaEngine:
             await emit("avatar.gesture_sequence", {"values": self.pending_gesture_sequence})
             self.pending_gesture_sequence = None
         await emit("aila.state", {"status": "IDLE"})
+        # O áudio/lip-sync continua no frontend; semanticamente o turno acabou.
+        # Não deixe "talking" contaminar o prompt da próxima mensagem.
+        if getattr(self, "self_model", None) is not None:
+            self.self_model.update_experience(activity="idle")
         return final_text
 
     # ======================= Plan/Execute ============================== #

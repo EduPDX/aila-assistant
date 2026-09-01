@@ -422,10 +422,12 @@ function applyVramPressure(state) {
   if (state === vramState) return;
   vramState = state || 'green';
   const cap = Math.min(window.devicePixelRatio, 2);
-  const ratio = vramState === 'red' ? 0.6 : vramState === 'yellow' ? 1.0 : cap;
+  // 0.6 deixava rosto e contornos visivelmente borrados. 0.85 ainda reduz
+  // bastante o framebuffer, especialmente em telas HiDPI, preservando nitidez.
+  const ratio = vramState === 'red' ? 0.85 : vramState === 'yellow' ? 1.0 : cap;
   renderer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight);   // realoca o drawing buffer no novo ratio
-  sceneManager.setVramState(vramState);        // 🔴 esconde a cena cognitiva (prioriza o avatar)
+  sceneManager.setVramState(vramState);        // degrada efeitos, mantém a cena viva
   console.info(`[avatar] pressão de VRAM: ${vramState} → pixelRatio ${ratio.toFixed(2)}`);
 }
 

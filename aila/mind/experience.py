@@ -76,7 +76,13 @@ def activity_for_tools(tools: list[str] | tuple[str, ...]) -> str:
 
 def describe(activity: str, attention: str = "") -> str:
     """Frase em 1ª pessoa ('' quando não há nada a dizer)."""
+    # "talking" é transitório e circular: informar ao modelo "estou conversando"
+    # no turno seguinte fazia modelos pequenos copiarem o estado literalmente.
+    if activity in {"idle", "talking"}:
+        return ""
     pt = _EM_PORTUGUES.get(activity or "idle", "")
     if not pt:
         return ""
-    return f"estou {pt}" + (f" ({attention})" if attention else "")
+    if attention and activity in {"searching", "reading", "analyzing", "looking"}:
+        return f"estou {pt} {attention}"
+    return f"estou {pt}"

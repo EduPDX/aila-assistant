@@ -51,6 +51,11 @@ _NEGA_CORPO = re.compile(
     r"|sou\s+(apenas\s+|s[óo]\s+)?(um|uma)\s+(modelo|intelig[êe]ncia|ia|assistente)"
     r"\s+(de\s+)?(linguagem|texto|basead\w+\s+em\s+texto))", re.IGNORECASE)
 
+_STATE_ECHO = re.compile(
+    r"(?:^|\s+)(?:eu\s+)?estou\s+conversando\s*\([^\n)]{1,80}\)\s*[.!?]?\s*$",
+    re.IGNORECASE,
+)
+
 
 class Violation(BaseModel):
     kind: str
@@ -99,7 +104,9 @@ def validate(
     aí falar em Behavior Planner/BodyState é legítimo.
     """
     original = text or ""
-    corrigido, violacoes = _fix_terceira_pessoa(original)
+    # Remove somente no final: é um vazamento do contexto interno, não fala.
+    sem_echo = _STATE_ECHO.sub("", original).rstrip()
+    corrigido, violacoes = _fix_terceira_pessoa(sem_echo)
 
     if not allow_technical:
         achado = _SISTEMA.search(corrigido)

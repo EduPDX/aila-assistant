@@ -3,6 +3,7 @@ import { byId } from './dom.js';
 import { avatarMouth } from './avatar.js';
 
 let ttsAudio, ttsObjectUrl, lipCtx, lipAnalyser, lipBuf;
+let lipLastFrame = 0, lipLastValue = -1;
 let _onTranscript = () => {};
 export function setTranscriptHandler(fn) { _onTranscript = fn; }
 
@@ -21,11 +22,16 @@ export async function speak(text) {
     lipCtx = lipCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (lipCtx.state === 'suspended') await lipCtx.resume();
     const src = lipCtx.createMediaElementSource(ttsAudio);
-    lipAnalyser = lipCtx.createAnalyser(); lipAnalyser.fftSize = 1024;
+    // Envelope de boca não precisa de 1024 amostras a 60 fps. Reduz CPU e
+    // postMessages concorrendo com o renderer Three.js durante a fala.
+    lipAnalyser = lipCtx.createAnalyser(); lipAnalyser.fftSize = 256;
     lipBuf = new Uint8Array(lipAnalyser.fftSize);
     src.connect(lipAnalyser); lipAnalyser.connect(lipCtx.destination);
     _driveMouth();
-    ttsAudio.onended = () => { lipAnalyser = null; avatarMouth(0); _speaking(false); releaseAudioUrl(); };
+    ttsAudio.onended = () => {
+      lipAnalyser = null; lipLastValue = -1;
+      avatarMouth(0); _speaking(false); releaseAudioUrl();
+    };
     _speaking(true);
     await ttsAudio.play();
   } catch (e) { _speaking(false); /* voz indisponível: silencioso */ }
@@ -35,6 +41,7 @@ export async function speak(text) {
 export function stopSpeaking() {
   if (ttsAudio) { try { ttsAudio.pause(); ttsAudio.currentTime = 0; } catch (e) {} }
   lipAnalyser = null;
+  lipLastValue = -1;
   avatarMouth(0);
   _speaking(false);
   releaseAudioUrl();
@@ -47,10 +54,14 @@ function releaseAudioUrl() {
 function _speaking(on) { byId('btn-stop')?.classList.toggle('show', on); }
 function _driveMouth() {
   if (!lipAnalyser) return;
+  const now = performance.now();
+  if (now - lipLastFrame < 32) { requestAnimationFrame(_driveMouth); return; }
+  lipLastFrame = now;
   lipAnalyser.getByteTimeDomainData(lipBuf);
   let sum = 0;
   for (let i = 0; i < lipBuf.length; i++) { const v = (lipBuf[i] - 128) / 128; sum += v * v; }
-  avatarMouth(Math.min(1, Math.sqrt(sum / lipBuf.length) * 4.5));
+  const value = Math.min(1, Math.sqrt(sum / lipBuf.length) * 4.5);
+  if (Math.abs(value - lipLastValue) > 0.015) { avatarMouth(value); lipLastValue = value; }
   requestAnimationFrame(_driveMouth);
 }
 

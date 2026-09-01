@@ -224,9 +224,9 @@ export class SceneManager {
   setVramState(state) {
     this.vramState = state || 'green';
     if (!this.root) return;
-    // 🔴 vermelho: esconde a cena inteira (prioriza o avatar); 🟡 mantém, sem extras.
-    this.root.visible = this.enabled && state !== 'red';
-    // sob pressão Vermelha, disposing texturas/buffers auxiliares libera VRAM.
+    // Ocultar meshes não libera geometrias/texturas já alocadas e parecia um
+    // congelamento. O renderer reduz o framebuffer; aqui acalmamos a animação.
+    this.root.visible = this.enabled;
     if (state === 'red' && this.monitor) {
       this.monitor.setMode?.('conversation');   // reseta animações
     }

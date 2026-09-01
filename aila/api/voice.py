@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -81,7 +82,9 @@ async def speak(request: Request, body: SpeakBody) -> FileResponse:
     if not text:
         raise HTTPException(status_code=400, detail="Texto vazio.")
     try:
-        audio = voice.speak_to_file(text)
+        # SAPI/Piper/Edge fazem síntese síncrona. Rodar em thread mantém
+        # WebSocket, telemetria e comandos do avatar responsivos durante a fala.
+        audio = await asyncio.to_thread(voice.speak_to_file, text)
     except Exception as exc:  # noqa: BLE001
         log.exception("falha na síntese")
         raise HTTPException(status_code=500, detail=f"Falha na síntese: {exc}") from exc

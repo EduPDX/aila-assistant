@@ -342,6 +342,14 @@ def test_validator_nao_estraga_resposta_boa():
         assert r.text == boa and not r.changed, boa
 
 
+def test_validator_remove_vazamento_do_estado_conversando():
+    from aila.mind.response_validator import validate
+
+    r = validate("Claro, posso ajudar com isso. Estou conversando (o gráfico).")
+    assert r.text == "Claro, posso ajudar com isso."
+    assert r.changed
+
+
 # ------------------------------------------- Fase E: experiência atual (o agora) #
 
 def test_atividade_vem_da_ferramenta_usada():
@@ -363,7 +371,8 @@ def test_experiencia_descreve_em_primeira_pessoa():
     from aila.mind.experience import describe
 
     assert describe("searching") == "estou pesquisando"
-    assert describe("analyzing", "o gráfico") == "estou analisando (o gráfico)"
+    assert describe("analyzing", "o gráfico") == "estou analisando o gráfico"
+    assert describe("talking", "o gráfico") == ""       # não vaza no próximo turno
     assert describe("idle") == ""                      # nada a dizer não polui o prompt
     assert "avatar" not in describe("coding").lower()
 
