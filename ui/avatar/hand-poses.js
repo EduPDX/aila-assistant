@@ -33,7 +33,7 @@ const THUMB_MAX = [26, 42, 42];        // polegar: metacarpal, proximal, distal
 const ADDUCT_MAX = [40, 12, 0];        // adução do polegar por segmento (graus)
 
 export function createHandPoseLayer() {
-  const qFlex = new THREE.Quaternion(), qAdd = new THREE.Quaternion(), eul = new THREE.Euler();
+  const qFlex = new THREE.Quaternion(), qAdd = new THREE.Quaternion(), qTest = new THREE.Quaternion(), eul = new THREE.Euler();
   const axF = new THREE.Vector3(), axA = new THREE.Vector3();
   const pA = new THREE.Vector3(), pB = new THREE.Vector3(), pC = new THREE.Vector3();
   const knuckle = new THREE.Vector3(), midDir = new THREE.Vector3(), palmN = new THREE.Vector3();
@@ -51,8 +51,8 @@ export function createHandPoseLayer() {
   // sinal que curva p/ a palma: reduz a distância ponta→mão
   function detectSign(prox, tip, flexWorld, handP) {
     const la = localAxisOf(prox, flexWorld, pC), saved = prox.quaternion.clone();
-    prox.quaternion.setFromAxisAngle(la, 0.6); const dP = wp(tip, pA).distanceTo(handP);
-    prox.quaternion.setFromAxisAngle(la, -0.6); const dM = wp(tip, pA).distanceTo(handP);
+    qTest.setFromAxisAngle(la, 0.6).multiply(saved); prox.quaternion.copy(qTest); const dP = wp(tip, pA).distanceTo(handP);
+    qTest.setFromAxisAngle(la, -0.6).multiply(saved); prox.quaternion.copy(qTest); const dM = wp(tip, pA).distanceTo(handP);
     prox.quaternion.copy(saved); prox.updateWorldMatrix(false, true);
     return dP < dM ? 1 : -1;
   }
@@ -60,8 +60,8 @@ export function createHandPoseLayer() {
   function detectAdductSign(meta, thumbTip, adductWorld, idxP) {
     const idxW = wp(idxP, pB).clone();
     const la = localAxisOf(meta, adductWorld, pC), saved = meta.quaternion.clone();
-    meta.quaternion.setFromAxisAngle(la, 0.5); const dP = wp(thumbTip, pA).distanceTo(idxW);
-    meta.quaternion.setFromAxisAngle(la, -0.5); const dM = wp(thumbTip, pA).distanceTo(idxW);
+    qTest.setFromAxisAngle(la, 0.5).multiply(saved); meta.quaternion.copy(qTest); const dP = wp(thumbTip, pA).distanceTo(idxW);
+    qTest.setFromAxisAngle(la, -0.5).multiply(saved); meta.quaternion.copy(qTest); const dM = wp(thumbTip, pA).distanceTo(idxW);
     meta.quaternion.copy(saved); meta.updateWorldMatrix(false, true);
     return dP < dM ? 1 : -1;
   }

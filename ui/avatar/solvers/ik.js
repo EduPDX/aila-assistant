@@ -15,6 +15,11 @@ export function createArmIK() {
   const S = new THREE.Vector3(), E = new THREE.Vector3(), H = new THREE.Vector3();
   const T = new THREE.Vector3(), axis = new THREE.Vector3(), foot = new THREE.Vector3();
   const pole = new THREE.Vector3(), proj = new THREE.Vector3(), elbow = new THREE.Vector3();
+  const bodyRight = new THREE.Vector3(), bodyUp = new THREE.Vector3(), bodyFwd = new THREE.Vector3();
+  const lShoulder = new THREE.Vector3(), rShoulder = new THREE.Vector3();
+  const hips = new THREE.Vector3(), neck = new THREE.Vector3();
+  const poleState = { left: new THREE.Vector3(), right: new THREE.Vector3() };
+  const poleReady = { left: false, right: false };
   const dCur = new THREE.Vector3(), dWant = new THREE.Vector3();
   const na = new THREE.Vector3(), nb = new THREE.Vector3();
   const qDelta = new THREE.Quaternion(), qWorld = new THREE.Quaternion(), qPar = new THREE.Quaternion();
@@ -73,7 +78,11 @@ export function createArmIK() {
     if (rp.lengthSq() < 1e-8 || dp.lengthSq() < 1e-8) return;
     rp.normalize(); dp.normalize();
     cw.crossVectors(rp, dp);
-    const angle = Math.atan2(cw.dot(axisW), rp.dot(dp)) * (orient.weight ?? 1);
+    // A solução de roll possui duas respostas equivalentes perto de 180°.
+    // Limitar a correção evita que a palma dê uma volta completa entre frames.
+    const raw = Math.atan2(cw.dot(axisW), rp.dot(dp));
+    const maxRoll = THREE.MathUtils.degToRad(110);
+    const angle = THREE.MathUtils.clamp(raw, -maxRoll, maxRoll) * (orient.weight ?? 1);
     qDelta.setFromAxisAngle(axisW, angle);
     hand.getWorldQuaternion(qWorld);
     qWorld.premultiply(qDelta);
@@ -85,12 +94,38 @@ export function createArmIK() {
 
   return {
     name: 'ik-arm',
-    solve(rig, buf) {
+    solve(rig, buf, ctx = null, dt = 1 / 60) {
+      // Frame corporal medido no próprio VRM: direita, cima e frente.
+      const l = rig.bone('leftUpperArm'), r = rig.bone('rightUpperArm');
+      const hp = rig.bone('hips'), nk = rig.bone('neck');
+      if (l && r && hp && nk) {
+        lShoulder.setFromMatrixPosition(l.matrixWorld);
+        rShoulder.setFromMatrixPosition(r.matrixWorld);
+        hips.setFromMatrixPosition(hp.matrixWorld);
+        neck.setFromMatrixPosition(nk.matrixWorld);
+        bodyRight.copy(rShoulder).sub(lShoulder).normalize();
+        bodyUp.copy(neck).sub(hips).normalize();
+        bodyFwd.copy(bodyUp).cross(bodyRight).normalize();
+      } else {
+        bodyRight.set(1, 0, 0); bodyUp.set(0, 1, 0); bodyFwd.set(0, 0, 1);
+      }
+
       for (const [side, tgt] of buf.ik) {
+        const shoulder = rig.bone(side + 'Shoulder');
         const upper = rig.bone(side + 'UpperArm');
         const lower = rig.bone(side + 'LowerArm');
         const hand = rig.bone(side + 'Hand');
         if (!upper || !lower || !hand) continue;
+
+        // Clavícula acompanha discretamente a direção da mão. Isso amplia o
+        // alcance alto sem deformar o upperArm nem criar um ombro rígido.
+        if (shoulder) {
+          shoulder.getWorldPosition(S);
+          upper.getWorldPosition(E);
+          T.set(tgt.x, tgt.y, tgt.z);
+          const assist = Math.min(0.18, (tgt.weight ?? 1) * 0.18);
+          align(shoulder, dCur.copy(E).sub(S), dWant.copy(T).sub(S), assist);
+        }
 
         S.setFromMatrixPosition(upper.matrixWorld);
         E.setFromMatrixPosition(lower.matrixWorld);
@@ -102,7 +137,9 @@ export function createArmIK() {
         T.set(tgt.x, tgt.y, tgt.z);
         axis.copy(T).sub(S);
         let d = axis.length();
-        const dMax = (L1 + L2) * 0.995, dMin = Math.abs(L1 - L2) * 1.02;
+        const armLen = L1 + L2;
+        const dMax = armLen * 0.97;
+        const dMin = Math.max(Math.abs(L1 - L2) * 1.02, armLen * 0.16);
         d = Math.max(dMin, Math.min(dMax, d));
         axis.normalize();
 
@@ -110,12 +147,24 @@ export function createArmIK() {
         const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d);
         const h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
         foot.copy(S).addScaledVector(axis, a);
-        // pólo: cotovelo aponta p/ baixo e levemente p/ trás (natural)
-        pole.set(0, -1, -0.35);
+        // Pólo ESPELHADO no frame corporal: cotovelo abre para fora, desce um
+        // pouco e recua. O vetor anterior era igual nos dois lados e podia
+        // escolher o lado errado do plano, especialmente em VRM 1 estreitos.
+        const mir = side === 'left' ? -1 : 1;
+        pole.set(0, 0, 0)
+          .addScaledVector(bodyRight, mir * 0.82)
+          .addScaledVector(bodyUp, -0.34)
+          .addScaledVector(bodyFwd, -0.24);
         proj.copy(pole).addScaledVector(axis, -pole.dot(axis));  // perpendicular ao eixo
         if (proj.lengthSq() < 1e-6) proj.set(side === 'left' ? 1 : -1, 0, 0);
         proj.normalize();
-        elbow.copy(foot).addScaledVector(proj, h);
+        // Continuidade temporal impede o pole de trocar de hemisfério quando o
+        // braço passa perto de uma singularidade (esticado quase por completo).
+        const ps = poleState[side];
+        if (!poleReady[side]) { ps.copy(proj); poleReady[side] = true; }
+        if (ps.dot(proj) < 0) proj.negate();
+        ps.lerp(proj, Math.min(1, Math.max(0.05, dt * 12))).normalize();
+        elbow.copy(foot).addScaledVector(ps, h);
 
         const w = tgt.weight ?? 1;
         // 1) upperArm: direção atual (S->E) -> desejada (S->cotovelo)

@@ -305,6 +305,8 @@ function loadVRM(url, revokeWhenDone = false) {
     window.vrm = vrm;
     controller = new AnimationController(vrm, scene, camera);   // ← animação em camadas
     window.ailaAnim = controller;                              // debug/console
+    window.ailaRigProfile = controller.rig.profile;            // diagnóstico VRM 1 (somente leitura)
+    console.info('[avatar] rig profile', controller.rig.profile);
     controller.clipFor = playGestureClip;                      // P7: gestos por clip (fallback procedural)
     controller.playTalkClip = playRandomTalkClip;              // gesticulação natural da fala por clips
     probeGestureClips();                                       // sabe quais .vrma existem

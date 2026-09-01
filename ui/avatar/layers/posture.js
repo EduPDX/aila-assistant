@@ -9,6 +9,7 @@ export function createPostureLayer() {
   const cur = {};                     // rotação atual (rad) por osso, p/ suavizar
   for (const b of CTRL_BONES) cur[b] = [0, 0, 0];
   cur.spine = [0, 0, 0];
+  const armTarget = [0, 0, 0];
 
   return {
     name: 'posture',
@@ -37,6 +38,8 @@ export function createPostureLayer() {
         // BRAÇO (upperArm): o alvo vem da ELEVAÇÃO do gesto convertida para os
         // graus DESTE modelo — assim a mão nunca cruza para o lado errado.
         // Demais ossos (antebraço etc.): ângulo direto, só com o sinal medido.
+        let alvoX = (t[0] + dx) * DEG;
+        let alvoY = (t[1] + dy) * DEG;
         let alvoZ;
         if (bone.endsWith('UpperArm')) {
           const lado = bone.startsWith('left') ? 'left' : 'right';
@@ -44,14 +47,21 @@ export function createPostureLayer() {
           const elev = elevGesto[lado] !== undefined
             ? elevGesto[lado]
             : (ARM_ELEVATION.rest[lado] ?? -0.8);
-          alvoZ = (rig.armAngle ? rig.armAngle(lado, elev) : t[2]) * DEG
-                + dz * DEG * (lado === 'left' ? -1 : 1);
+          if (rig.armRotation) {
+            rig.armRotation(lado, elev, dz * (lado === 'left' ? -1 : 1), armTarget);
+            alvoX += armTarget[0] * DEG;
+            alvoY += armTarget[1] * DEG;
+            alvoZ = armTarget[2] * DEG;
+          } else {
+            alvoZ = (rig.armAngle ? rig.armAngle(lado, elev) : t[2]) * DEG
+                  + dz * DEG * (lado === 'left' ? -1 : 1);
+          }
         } else {
           const sz = bone.endsWith('LowerArm') ? (rig.armZSign || 1) : 1;
           alvoZ = (t[2] + dz) * DEG * sz;
         }
-        c[0] = damp(c[0], (t[0] + dx) * DEG, k, dt);
-        c[1] = damp(c[1], (t[1] + dy) * DEG, k, dt);
+        c[0] = damp(c[0], alvoX, k, dt);
+        c[1] = damp(c[1], alvoY, k, dt);
         c[2] = damp(c[2], alvoZ, k, dt);
         buf.addRot(bone, c[0], c[1], c[2]);
       }

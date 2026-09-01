@@ -13,7 +13,7 @@ import { damp } from '../rig-core.js';
 export function createSelfCollision() {
   const V = () => new THREE.Vector3();
   const hips = V(), neck = V(), head = V(), lLeg = V(), lKnee = V(), rLeg = V(), rKnee = V();
-  const lU = V(), rU = V();
+  const lU = V(), rU = V(), center = V(), bodyRight = V();
   const cp = V(), d = V(), ab = V(), ap = V(), P = V();
   // pool de colliders reusado (type 0=esfera[a,r], 1=cápsula[a,b,r])
   const pool = []; for (let i = 0; i < 6; i++) pool.push({ type: 0, a: V(), b: V(), r: 0 });
@@ -27,7 +27,12 @@ export function createSelfCollision() {
   // empurra P p/ fora de uma esfera (C,r); devolve profundidade (>0 se empurrou)
   function pushSphere(p, C, r) {
     d.copy(p).sub(C); const len = d.length();
-    if (len >= r || len < 1e-6) return 0;
+    if (len >= r) return 0;
+    if (len < 1e-6) {
+      d.copy(bodyRight); if (d.lengthSq() < 1e-8) d.set(1, 0, 0);
+      p.copy(C).addScaledVector(d.normalize(), r);
+      return r;
+    }
     p.copy(C).addScaledVector(d, r / len);
     return r - len;
   }
@@ -53,6 +58,8 @@ export function createSelfCollision() {
     if (!wpos(rig, 'hips', hips) || !wpos(rig, 'leftUpperArm', lU) || !wpos(rig, 'rightUpperArm', rU)) return false;
     sw = lU.distanceTo(rU);                  // largura de ombros → escala do corpo
     if (sw < 1e-4) return false;
+    center.copy(lU).add(rU).multiplyScalar(0.5);
+    bodyRight.copy(rU).sub(lU).normalize();
     wpos(rig, 'neck', neck); wpos(rig, 'head', head);
     const legs = wpos(rig, 'leftUpperLeg', lLeg) && wpos(rig, 'leftLowerLeg', lKnee)
               && wpos(rig, 'rightUpperLeg', rLeg) && wpos(rig, 'rightLowerLeg', rKnee);
@@ -76,7 +83,14 @@ export function createSelfCollision() {
       // Damp + histerese p/ estabilidade (converge, sem loop IK↔colisão).
       for (const [side, tgt] of buf.ik) {
         P.set(tgt.x, tgt.y, tgt.z);
-        const pushed = resolve(P);                    // empurra o alvo p/ fora dos colliders
+        // Não deixa a mão atravessar o plano central do tronco. Uma margem
+        // pequena mantém gestos próximos ao rosto possíveis sem inverter lado.
+        const mir = side === 'left' ? -1 : 1;
+        const lateral = d.copy(P).sub(center).dot(bodyRight) * mir;
+        const minLateral = sw * 0.08;
+        const planePush = lateral < minLateral ? minLateral - lateral : 0;
+        if (planePush) P.addScaledVector(bodyRight, planePush * mir);
+        const pushed = planePush + resolve(P);        // empurra o alvo p/ fora dos colliders
         const st = state[side];
         if (pushed > 0.0005) {
           if (!st.on) { st.on = true; st.t.set(tgt.x, tgt.y, tgt.z); }   // parte do alvo (sem pulo)

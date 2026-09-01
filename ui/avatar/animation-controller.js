@@ -286,7 +286,7 @@ export class AnimationController {
       // 3) colisão PROATIVA: constrange o alvo p/ fora do corpo (antes do IK)
       this.collision.solve(this.rig, buf, ctx, dt);
       // 4) IK resolve o braço UMA vez p/ o alvo já seguro (cotovelo + orientação)
-      this.ikSolver.solve(this.rig, buf);
+      this.ikSolver.solve(this.rig, buf, ctx, dt);
     }
     // 5) CLIP VRMA (P6): sobrepõe o corpo com blend (peso da action). Roda DEPOIS
     //    da pose aditiva e ANTES do finalize → expressões/olhar seguem por cima.
