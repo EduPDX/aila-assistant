@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
+from dataclasses import asdict
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
@@ -15,6 +17,7 @@ _IMG_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 _MAX_UPLOAD_MB = 10   # limite de upload (MB) — previne OOM
 _MAX_FILE_MB = 50
 _MAX_VRM_MB = 100
+_evaluation_lock = asyncio.Lock()
 
 
 @router.get("/status")
@@ -497,6 +500,75 @@ async def resources(request: Request) -> dict:
         "perf": engine.telemetry.snapshot(),
         "benchmark": load_cached(),   # escada medida (R12), se já rodou; senão None
     }
+
+
+@router.get("/diagnostics")
+async def diagnostics(request: Request) -> dict:
+    """Saúde operacional sanitizada para a central de Configurações."""
+    from aila.core.doctor import run_doctor
+
+    engine = request.app.state.engine
+    checks = await run_doctor(engine.settings, engine.llm)
+    counts = {
+        status: sum(check.status == status for check in checks)
+        for status in ("ok", "warn", "fail")
+    }
+    overall = "fail" if counts["fail"] else ("warn" if counts["warn"] else "ok")
+    return {
+        "overall": overall,
+        "counts": counts,
+        "checks": [asdict(check) for check in checks],
+        "generated_at": time.time(),
+    }
+
+
+class EvaluationBody(BaseModel):
+    provider: str = "local"
+    runs: int = 1
+    timeout_s: float = 15.0
+
+
+@router.post("/evaluations")
+async def evaluations(request: Request, body: EvaluationBody) -> dict:
+    """Avalia seleção de ferramentas sem executar qualquer ação escolhida."""
+    from aila.core.capability_evals import EVAL_SYSTEM_PROMPT, evaluate_provider
+    from aila.core.turn import _classify_task, select_tool_schemas
+
+    if body.provider not in {"local", "gemini", "nvidia", "all"}:
+        raise HTTPException(400, "provedor inválido")
+    if not 1 <= body.runs <= 3:
+        raise HTTPException(400, "runs deve estar entre 1 e 3")
+    if not 3 <= body.timeout_s <= 30:
+        raise HTTPException(400, "timeout_s deve estar entre 3 e 30")
+    if _evaluation_lock.locked():
+        raise HTTPException(409, "uma avaliação já está em andamento")
+
+    engine = request.app.state.engine
+    available = {"local": engine.llm}
+    available.update({
+        name: backend for name, backend in engine.router.providers.items()
+        if backend is not engine.llm and name in {"gemini", "nvidia"}
+    })
+    requested = list(available) if body.provider == "all" else [body.provider]
+    missing = [name for name in requested if name not in available]
+    if missing:
+        raise HTTPException(400, f"provedor indisponível: {', '.join(missing)}")
+
+    def schemas_for(prompt: str) -> list[dict]:
+        task, use_tools = _classify_task(prompt, "auto")
+        return select_tool_schemas(engine.agents.registry, task, prompt) if use_tools else []
+
+    reports = []
+    async with _evaluation_lock:
+        for name in requested:
+            backend = available[name]
+            report = await evaluate_provider(
+                name, backend, backend.default_model, EVAL_SYSTEM_PROMPT,
+                engine.agents.registry.schemas(), engine.agents.registry,
+                runs=body.runs, schema_selector=schemas_for, timeout_s=body.timeout_s,
+            )
+            reports.append(asdict(report))
+    return {"runs": body.runs, "providers": reports}
 
 
 @router.get("/cognitive-infrastructure")

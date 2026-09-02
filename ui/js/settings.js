@@ -86,8 +86,68 @@ export const closeSettings = () => {
 const CUSTOM_RENDER = {
   providers: renderProviders, memory: renderMemory, autonomy: renderAutonomy,
   permissions: renderPermissions, network: renderNetwork, system: loadStatus,
+  diagnostics: renderDiagnostics, evaluations: renderEvaluations,
   agents: renderAgents, reset: renderReset, rebuild: renderRebuild,
 };
+
+const DIAG_LABELS = {
+  python: 'Python', disco: 'Armazenamento', sandbox: 'Segurança de arquivos',
+  ollama: 'Ollama', modelos: 'Modelos locais', gpu: 'GPU', provedores: 'Provedores',
+};
+const diagLabel = (name) => name.startsWith('db:') ? `Banco · ${name.slice(3)}`
+  : name.startsWith('pasta:') ? `Pasta · ${name.slice(6)}` : (DIAG_LABELS[name] || name);
+
+async function renderDiagnostics() {
+  const overview = byId('diag-overview'); const grid = byId('diag-grid');
+  if (!overview || !grid) return;
+  overview.dataset.status = 'loading'; overview.textContent = 'Verificando os componentes…';
+  try {
+    const data = await api.diagnostics();
+    const labels = { ok: 'Saudável', warn: 'Requer atenção', fail: 'Falha detectada' };
+    overview.dataset.status = data.overall;
+    overview.innerHTML = `<strong>${labels[data.overall]}</strong><span>${data.counts.ok} ok · ${data.counts.warn} avisos · ${data.counts.fail} falhas</span>`;
+    grid.innerHTML = '';
+    data.checks.forEach((check) => grid.append(el('article', { class: 'diag-card', 'data-status': check.status },
+      el('div', { class: 'diag-card-head' },
+        el('span', { class: 'diag-state', 'aria-label': check.status }),
+        el('strong', {}, diagLabel(check.name))),
+      el('div', { class: 'diag-detail' }, check.detail),
+      check.action ? el('div', { class: 'diag-action' }, `Ação: ${check.action}`) : null,
+    )));
+  } catch {
+    overview.dataset.status = 'fail'; overview.textContent = 'Não foi possível carregar o diagnóstico.';
+    grid.innerHTML = '';
+  }
+}
+
+function renderEvaluations() {
+  const button = byId('eval-run'); if (!button || button._wired) return;
+  button._wired = true;
+  byId('diag-refresh')?.addEventListener('click', renderDiagnostics);
+  button.onclick = async () => {
+    const provider = byId('eval-provider').value;
+    const results = byId('eval-results');
+    button.disabled = true; button.textContent = 'Avaliando…';
+    results.innerHTML = '<span class="muted">Executando 4 casos seguros por provedor…</span>';
+    try {
+      const data = await api.evaluateModels({ provider, runs: 1, timeout_s: 15 });
+      results.innerHTML = '';
+      data.providers.forEach((report) => {
+        const perfect = report.passed === report.total;
+        const failures = Object.entries(report.failure_reasons || {}).map(([k, v]) => `${k}: ${v}`).join(' · ');
+        results.append(el('article', { class: 'eval-card', 'data-status': perfect ? 'ok' : 'warn' },
+          el('div', { class: 'eval-head' }, el('strong', {}, report.provider), el('span', { class: 'eval-score' }, `${report.passed}/${report.total}`)),
+          el('div', { class: 'eval-model muted' }, report.model),
+          el('div', { class: 'eval-metrics' },
+            el('span', {}, `Latência média ${report.average_latency_ms} ms`),
+            el('span', {}, perfect ? 'Decisões consistentes' : (failures || 'Há decisões incorretas'))),
+        ));
+      });
+    } catch (error) {
+      results.innerHTML = `<span class="diag-error">Avaliação indisponível: ${esc(error.message)}</span>`;
+    } finally { button.disabled = false; button.textContent = 'Executar 1 rodada'; }
+  };
+}
 
 /* ---------- Reconstruir grafo de Conhecimento (backfill) ---------- */
 function renderRebuild() {

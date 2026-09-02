@@ -152,7 +152,11 @@ export const CATEGORIES = [
     { note: 'As tarefas em andamento aparecem no painel de Atividade → Tarefas (botão ▤).' },
   ] },
 
-  { id: 'sistema', icon: '📊', label: 'Sistema', blocks: [{ custom: 'system' }] },
+  { id: 'sistema', icon: '📊', label: 'Sistema', blocks: [
+    { custom: 'system' },
+    { title: 'Diagnóstico operacional', custom: 'diagnostics' },
+    { title: 'Avaliação dos modelos', custom: 'evaluations' },
+  ] },
 
   { id: 'dev', icon: '🛠', label: 'Desenvolvedor', blocks: [
     { fields: [
@@ -181,6 +185,14 @@ export const CUSTOM_HTML = {
     + '<div class="row"><span>Voz</span><span id="s-voice" class="muted">—</span></div>'
     + '<div class="row"><span>🧠 Memórias</span><span id="s-mem" class="muted">—</span></div></div>'
     + '<p class="muted" style="margin-top:12px">Métricas ao vivo (CPU/GPU/VRAM/uptime) no painel de Atividade → Sistema.</p>',
+  diagnostics: '<div id="diag-overview" class="diag-overview" data-status="loading">Carregando diagnóstico…</div>'
+    + '<div id="diag-grid" class="diag-grid"></div>'
+    + '<button class="btn diag-refresh" id="diag-refresh">Atualizar diagnóstico</button>',
+  evaluations: '<p class="muted diag-help">Testa decisões representativas sem criar, editar ou apagar arquivos. Provedores externos podem consumir cota.</p>'
+    + '<div class="eval-controls"><select id="eval-provider" class="cfg-input" aria-label="Provedor para avaliação">'
+    + '<option value="local">Modelo local</option><option value="gemini">Gemini</option><option value="nvidia">NVIDIA</option><option value="all">Todos</option>'
+    + '</select><button class="btn accent" id="eval-run">Executar 1 rodada</button></div>'
+    + '<div id="eval-results" class="eval-results"><span class="muted">Nenhuma avaliação executada nesta sessão.</span></div>',
   vrm: '<button class="btn accent" id="pickvrm" style="max-width:260px">📁 Escolher modelo VRM</button>'
     + '<input type="file" id="vrmfile" accept=".vrm" style="display:none" /><div id="vrmnote" class="muted" style="margin-top:8px"></div>',
   voicetoggle: '<div class="toggle on" id="tg-voice"><div class="sw"></div><span>Aila fala as respostas (agora)</span></div>',
