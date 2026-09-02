@@ -95,8 +95,10 @@ routing:
   rules:
     basic: ["local"]
     chat: ["local"]
-    code: ["gemini", "nvidia", "local"]
-    research: ["gemini", "nvidia", "local"]
+    # Se Gemini estiver indisponível/quota, o local responde em segundos. O
+    # Nemotron fica reservado para raciocínio pesado, não no caminho crítico.
+    code: ["gemini", "local", "nvidia"]
+    research: ["gemini", "local", "nvidia"]
     reasoning: ["nvidia", "gemini", "local"]
     vision: ["gemini", "local"]
     plan: ["nvidia", "gemini", "local"]

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from aila.core.capability_evals import CapabilityEvalCase, evaluate_case
+from aila.core.capability_evals import (
+    EVAL_SYSTEM_PROMPT,
+    CapabilityEvalCase,
+    evaluate_case,
+    evaluate_provider,
+)
 from aila.core.turn import (
     _classify_task,
     requires_concrete_tool_action,
@@ -48,6 +53,12 @@ class _TextToolBackend(_NativeToolBackend):
             content='```json\n{"name":"code.write_file","arguments":{}}\n```',
             done=True,
         )
+
+
+class _SlowBackend(_NativeToolBackend):
+    async def chat(self, messages, **kwargs):
+        await asyncio.sleep(0.05)
+        yield ChatChunk(content="tarde demais", done=True)
 
 
 def test_eval_accepts_expected_native_tool_without_executing_it():
@@ -139,3 +150,52 @@ def test_research_has_distinct_route_kind():
     )
     assert task.kind == "research"
     assert use_tools is True
+
+
+def test_provider_report_aggregates_runs_and_consistency():
+    registry = _registry()
+
+    async def go():
+        # O backend sempre escolhe file.write: acerta apenas o caso Java em cada
+        # rodada. O objetivo aqui é validar agregação, não a qualidade do fake.
+        report = await evaluate_provider(
+            "local",
+            _NativeToolBackend(),
+            "fake",
+            "system",
+            registry.schemas(),
+            registry,
+            runs=2,
+        )
+        assert report.runs == 2
+        assert report.total == 8
+        assert report.passed == 2
+        assert report.consistency["java_em_documentos"] == "2/2"
+        assert report.average_latency_ms >= 0
+        assert report.failure_reasons == {"wrong_decision": 6}
+
+    asyncio.run(go())
+
+
+def test_external_eval_prompt_is_sanitized():
+    low = EVAL_SYSTEM_PROMPT.casefold()
+    assert "api_key" not in low
+    assert "c:\\" not in low
+    assert "e:\\" not in low
+    assert "memória" in low
+
+
+def test_eval_marks_provider_timeout():
+    registry = _registry()
+    result = asyncio.run(evaluate_case(
+        _SlowBackend(),
+        "fake",
+        "system",
+        [],
+        registry,
+        CapabilityEvalCase("slow", "oi", expect_no_tool=True),
+        timeout_s=0.01,
+    ))
+
+    assert result.passed is False
+    assert "timeout" in result.reason

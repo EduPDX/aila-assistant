@@ -298,6 +298,14 @@ Se algo não funcionar, execute o diagnóstico sem expor chaves de API:
 .\.venv\Scripts\python.exe -m aila.core.doctor
 ```
 
+Para comparar a seleção de ferramentas dos modelos sem executar nenhuma ação,
+use o avaliador sanitizado. Ele não envia memórias, caminhos locais, configuração
+ou chaves aos provedores externos:
+
+```powershell
+.\.venv\Scripts\python.exe -m aila.core.capability_evals --provider all --runs 3 --timeout 15
+```
+
 Ele verifica Python, Ollama, modelos necessários, GPU/VRAM, espaço em disco,
 permissões das pastas, isolamento do sandbox e integridade dos bancos SQLite.
 
